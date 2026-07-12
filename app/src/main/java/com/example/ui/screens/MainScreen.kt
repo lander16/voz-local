@@ -1,0 +1,2387 @@
+package com.example.ui.screens
+
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import android.content.pm.PackageManager
+import android.content.ComponentName
+import android.text.TextUtils
+import android.widget.Toast
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.DictationModel
+import com.example.data.model.DictionaryWord
+import com.example.data.model.TranscriptionHistory
+import com.example.ui.theme.*
+import com.example.ui.viewmodel.MainViewModel
+import java.text.SimpleDateFormat
+import java.util.*
+
+enum class Tab {
+    DICTATE, STATS, MODELS, DICTIONARY, HISTORY, SHARED
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MainScreen(
+    viewModel: MainViewModel,
+    initialTab: Tab = Tab.DICTATE
+) {
+    val context = LocalContext.current
+    var activeTab by remember { mutableStateOf(initialTab) }
+
+    // Observe shared audio loaded intent to automatically navigate to the SHARED tab
+    val sharedUri by viewModel.sharedAudioUri.collectAsStateWithLifecycle()
+    LaunchedEffect(sharedUri) {
+        if (sharedUri != null) {
+            activeTab = Tab.SHARED
+        }
+    }
+
+    // Permission check & tracking state
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    var hasMicPermission by remember { mutableStateOf(false) }
+    var hasAccessibilityEnabled by remember { mutableStateOf(false) }
+    var hasOverlayPermission by remember { mutableStateOf(false) }
+    var bypassSetup by remember { mutableStateOf(false) }
+
+    fun checkAllPermissions() {
+        hasMicPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.RECORD_AUDIO
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        hasAccessibilityEnabled = isAccessibilityServiceEnabled(
+            context,
+            com.example.service.DictationAccessibilityService::class.java
+        )
+
+        hasOverlayPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            android.provider.Settings.canDrawOverlays(context)
+        } else {
+            true
+        }
+    }
+
+    // Check permissions on start and whenever the app resumes
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                checkAllPermissions()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // Mic permission request launcher
+    val micPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        hasMicPermission = isGranted
+        if (isGranted) {
+            Toast.makeText(context, "Microphone permission granted!", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Microphone permission is required for voice dictation.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    val isSetupComplete = hasMicPermission && hasAccessibilityEnabled && hasOverlayPermission
+    val showSetupWizard = !isSetupComplete && !bypassSetup
+
+    if (showSetupWizard) {
+        SetupWizardScreen(
+            hasMicPermission = hasMicPermission,
+            hasAccessibilityEnabled = hasAccessibilityEnabled,
+            hasOverlayPermission = hasOverlayPermission,
+            onRequestMicPermission = {
+                micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+            },
+            onEnableAccessibility = {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                    context.startActivity(intent)
+                    Toast.makeText(context, "Locate 'VozLocal Floating Dictation' and toggle ON", Toast.LENGTH_LONG).show()
+                } catch (e: Exception) {
+                    Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
+                }
+            },
+            onEnableOverlay = {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    try {
+                        val intent = Intent(
+                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                        context.startActivity(intent)
+                        Toast.makeText(context, "Enable 'Display over other apps' for VozLocal", Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Could not open Overlay settings", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onSkip = {
+                bypassSetup = true
+                Toast.makeText(context, "Welcome! You can configure permissions later in settings.", Toast.LENGTH_SHORT).show()
+            },
+            onDone = {
+                bypassSetup = true
+                Toast.makeText(context, "Setup completed successfully! Enjoy VozLocal!", Toast.LENGTH_SHORT).show()
+            }
+        )
+    } else {
+        Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Brush.linearGradient(listOf(PrimaryColor, SecondaryColor)))
+                                .padding(6.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Hearing,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                        Text(
+                            text = "VozLocal",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 22.sp,
+                            color = TextPrimary,
+                            letterSpacing = 0.5.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(PrimaryColor.copy(alpha = 0.15f), RoundedCornerShape(100.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "OFFLINE",
+                                color = PrimaryColor,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                    }
+                },
+                actions = {
+                    var showSettings by remember { mutableStateOf(false) }
+                    IconButton(
+                        onClick = { showSettings = true },
+                        modifier = Modifier.testTag("settings_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Open App Settings",
+                            tint = TextPrimary
+                        )
+                    }
+                    if (showSettings) {
+                        SettingsDialog(viewModel = viewModel, onDismiss = { showSettings = false })
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = BackgroundDark,
+                    titleContentColor = TextPrimary
+                )
+            )
+        },
+        bottomBar = {
+            NavigationBar(
+                containerColor = SurfaceDark,
+                tonalElevation = 8.dp,
+                windowInsets = WindowInsets.navigationBars
+            ) {
+                val tabs = listOf(
+                    Triple(Tab.DICTATE, "Dictate", Icons.Default.KeyboardVoice),
+                    Triple(Tab.STATS, "Stats", Icons.Default.BarChart),
+                    Triple(Tab.MODELS, "Models", Icons.Default.Analytics),
+                    Triple(Tab.DICTIONARY, "Dictionary", Icons.Default.Spellcheck),
+                    Triple(Tab.HISTORY, "History", Icons.Default.History)
+                )
+
+                tabs.forEach { (tab, label, icon) ->
+                    NavigationBarItem(
+                        selected = activeTab == tab,
+                        onClick = { activeTab = tab },
+                        icon = { Icon(imageVector = icon, contentDescription = label) },
+                        label = { Text(text = label, fontWeight = FontWeight.SemiBold) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color.White,
+                            selectedTextColor = PrimaryColor,
+                            indicatorColor = PrimaryColor.copy(alpha = 0.4f),
+                            unselectedIconColor = TextSecondary,
+                            unselectedTextColor = TextSecondary
+                        )
+                    )
+                }
+
+                // Show Shared Tab in navigation only if a file is currently active/selected
+                if (sharedUri != null) {
+                    NavigationBarItem(
+                        selected = activeTab == Tab.SHARED,
+                        onClick = { activeTab = Tab.SHARED },
+                        icon = { Icon(imageVector = Icons.Default.AudioFile, contentDescription = "Shared") },
+                        label = { Text(text = "Shared", fontWeight = FontWeight.SemiBold) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Color.White,
+                            selectedTextColor = PrimaryColor,
+                            indicatorColor = PrimaryColor.copy(alpha = 0.4f),
+                            unselectedIconColor = TextSecondary,
+                            unselectedTextColor = TextSecondary
+                        )
+                    )
+                }
+            }
+        },
+        containerColor = BackgroundDark
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            when (activeTab) {
+                Tab.DICTATE -> DictateTab(viewModel)
+                Tab.STATS -> StatsTab(viewModel)
+                Tab.MODELS -> ModelsTab(viewModel)
+                Tab.DICTIONARY -> DictionaryTab(viewModel)
+                Tab.HISTORY -> HistoryTab(viewModel)
+                Tab.SHARED -> SharedAudioTab(viewModel)
+            }
+        }
+    }
+}
+}
+
+// ==================== DICTATE TAB ====================
+@Composable
+fun DictateTab(viewModel: MainViewModel) {
+    val context = LocalContext.current
+    val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
+    val recordDurationSec by viewModel.recordDurationSec.collectAsStateWithLifecycle()
+    val liveWaveform by viewModel.liveWaveform.collectAsStateWithLifecycle()
+    val liveText by viewModel.currentLiveTranscription.collectAsStateWithLifecycle()
+    val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
+
+    // Modifier Switches
+    val smartPunctuation by viewModel.smartPunctuation.collectAsStateWithLifecycle()
+    val autoCapitalization by viewModel.autoCapitalization.collectAsStateWithLifecycle()
+    val applyDictionary by viewModel.applyDictionary.collectAsStateWithLifecycle()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        item { Spacer(modifier = Modifier.height(10.dp)) }
+
+        // Floating Dictation Onboarding Banner
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("accessibility_card"),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp),
+                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(SecondaryColor.copy(alpha = 0.5f), Color.Transparent)))
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Launch,
+                            contentDescription = null,
+                            tint = PrimaryColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Global Floating Assistant",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = TextPrimary
+                        )
+                    }
+                    Text(
+                        text = "VozLocal dictation can float over ANY app (independent of your keyboard). Click below to enable our custom accessibility feature.",
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        lineHeight = 18.sp
+                    )
+                    Button(
+                        onClick = {
+                            try {
+                                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                context.startActivity(intent)
+                                Toast.makeText(context, "Locate 'VozLocal Floating Dictation' and toggle ON", Toast.LENGTH_LONG).show()
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.align(Alignment.End)
+                    ) {
+                        Text(
+                            text = "Enable Floating Button",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            color = Color.Black
+                        )
+                    }
+                }
+            }
+        }
+
+        // Active Model Indicator Info
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SurfaceDark)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SettingsSystemDaydream, // hardware setting
+                        contentDescription = null,
+                        tint = SecondaryColor,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Column {
+                        Text(
+                            text = "Active Local Model",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary
+                        )
+                        Text(
+                            text = selectedModel?.name ?: "No model selected",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = TextPrimary
+                        )
+                    }
+                }
+                Box(
+                    modifier = Modifier
+                        .background(SecondaryColor.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "${selectedModel?.sizeMb?.toInt() ?: 0} MB",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SecondaryColor
+                    )
+                }
+            }
+        }
+
+        // Transcription Display / Feedback Box
+        item {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SurfaceDark)
+                    .padding(16.dp)
+            ) {
+                if (liveText.isNotEmpty() || isRecording) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = liveText,
+                            fontSize = 15.sp,
+                            color = TextPrimary,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 22.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        if (isRecording) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(TertiaryColor)
+                                )
+                                Text(
+                                    text = "Live Transcription Feed...",
+                                    fontSize = 11.sp,
+                                    color = TertiaryColor,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Gesture,
+                            contentDescription = null,
+                            tint = TextSecondary.copy(alpha = 0.4f),
+                            modifier = Modifier.size(40.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Your voice dictates here locally.",
+                            fontSize = 14.sp,
+                            color = TextSecondary,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = "Press the mic button below to speak.",
+                            fontSize = 12.sp,
+                            color = TextSecondary.copy(alpha = 0.7f)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Live Audio Waveform (Jetpack Compose Canvas)
+        item {
+            if (isRecording && liveWaveform.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceLightDark)
+                        .padding(horizontal = 16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val spacing = size.width / (liveWaveform.size - 1)
+                        val centerY = size.height / 2
+                        for (i in liveWaveform.indices) {
+                            val x = i * spacing
+                            val amp = liveWaveform[i]
+                            val barHeight = size.height * amp * 0.9f
+                            drawLine(
+                                color = TertiaryColor,
+                                start = Offset(x, centerY - barHeight / 2),
+                                end = Offset(x, centerY + barHeight / 2),
+                                strokeWidth = 5.dp.toPx(),
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
+                }
+            } else {
+                Spacer(modifier = Modifier.height(56.dp))
+            }
+        }
+
+        // Massive Pulse Voice Button
+        item {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                val pulseScale by infiniteTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = if (isRecording) 1.25f else 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(800, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "pulse_anim"
+                )
+
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .shadow(
+                            elevation = 12.dp,
+                            shape = CircleShape,
+                            ambientColor = if (isRecording) TertiaryColor else PrimaryColor,
+                            spotColor = if (isRecording) TertiaryColor else PrimaryColor
+                        )
+                        .clip(CircleShape)
+                        .clickable { viewModel.toggleRecording() }
+                        .background(
+                            Brush.radialGradient(
+                                colors = if (isRecording) {
+                                    listOf(TertiaryColor, TertiaryColor.copy(alpha = 0.7f))
+                                } else {
+                                    listOf(PrimaryColor, PrimaryColor.copy(alpha = 0.7f))
+                                }
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Pulsing Ring under the mic button
+                    if (isRecording) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .background(TertiaryColor.copy(alpha = 0.15f * pulseScale))
+                        )
+                    }
+
+                    Icon(
+                        imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
+                        contentDescription = "Voice dictation action button",
+                        tint = Color.Black,
+                        modifier = Modifier.size(44.dp)
+                    )
+                }
+
+                Text(
+                    text = if (isRecording) {
+                        val min = recordDurationSec / 60
+                        val sec = recordDurationSec % 60
+                        String.format(Locale.US, "RECORDING  %02d:%02d", min, sec)
+                    } else {
+                        "TAP TO DICTATE"
+                    },
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 12.sp,
+                    letterSpacing = 1.5.sp,
+                    color = if (isRecording) TertiaryColor else PrimaryColor
+                )
+            }
+        }
+
+        // Post-Processing Modifiers Configuration
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SurfaceDark)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "Local Post-Processing Filters",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = TextPrimary
+                )
+
+                // Modifier 1: Smart Punctuation
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                        Column {
+                            Text(text = "Smart Pause Correction", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = "Fuses long speech pauses into logical punctuation.", fontSize = 11.sp, color = TextSecondary)
+                        }
+                    }
+                    Switch(
+                        checked = smartPunctuation,
+                        onCheckedChange = { viewModel.smartPunctuation.value = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
+
+                HorizontalDivider(color = BackgroundDark)
+
+                // Modifier 2: Auto capitalization
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.FormatSize, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                        Column {
+                            Text(text = "Auto-Capitalization", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = "Starts sentences with uppercase automatically.", fontSize = 11.sp, color = TextSecondary)
+                        }
+                    }
+                    Switch(
+                        checked = autoCapitalization,
+                        onCheckedChange = { viewModel.autoCapitalization.value = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
+
+                HorizontalDivider(color = BackgroundDark)
+
+                // Modifier 3: Dictionary replacements
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.BookmarkBorder, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                        Column {
+                            Text(text = "Apply Local Dictionary", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = "Corrects common misspellings with custom words.", fontSize = 11.sp, color = TextSecondary)
+                        }
+                    }
+                    Switch(
+                        checked = applyDictionary,
+                        onCheckedChange = { viewModel.applyDictionary.value = it },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(20.dp)) }
+    }
+}
+
+// ==================== MODELS TAB ====================
+@Composable
+fun ModelsTab(viewModel: MainViewModel) {
+    val models by viewModel.modelsList.collectAsStateWithLifecycle()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        item {
+            Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Local Speech Models",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Download and activate GGUF/bin Whisper models directly onto your internal storage. Runs 100% offline.",
+                    fontSize = 13.sp,
+                    color = TextSecondary
+                )
+            }
+        }
+
+        items(models) { model ->
+            ModelCard(
+                model = model,
+                onSelect = { viewModel.selectModel(model.id) },
+                onDownload = { viewModel.downloadModel(model.id) },
+                onDelete = { viewModel.deleteModel(model.id) }
+            )
+        }
+
+        item { Spacer(modifier = Modifier.height(20.dp)) }
+    }
+}
+
+@Composable
+fun ModelCard(
+    model: DictationModel,
+    onSelect: () -> Unit,
+    onDownload: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = model.isDownloaded) { onSelect() },
+        colors = CardDefaults.cardColors(
+            containerColor = if (model.isSelected) SurfaceLightDark else SurfaceDark
+        ),
+        shape = RoundedCornerShape(16.dp),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.linearGradient(
+                listOf(
+                    if (model.isSelected) PrimaryColor else SecondaryColor.copy(alpha = 0.2f),
+                    Color.Transparent
+                )
+            )
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Title & Selected Indicator
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = if (model.isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                        contentDescription = null,
+                        tint = if (model.isSelected) PrimaryColor else TextSecondary
+                    )
+                    Text(
+                        text = model.name,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = TextPrimary
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .background(SurfaceLightDark, RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "${model.sizeMb.toInt()} MB",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SecondaryColor
+                    )
+                }
+            }
+
+            // Accuracy and Speed Ratings Layout
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Spanish accuracy
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "SPANISH ACCURACY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        LinearProgressIndicator(
+                            progress = { model.accuracySpanish / 100f },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(4.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = PrimaryColor,
+                            trackColor = Color.DarkGray
+                        )
+                        Text(text = "${model.accuracySpanish}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    }
+                }
+
+                // Speed factor
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "MOBILE DECODING SPEED", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "${model.speedMultiplier}x",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (model.speedMultiplier > 4f) PrimaryColor else SecondaryColor
+                        )
+                        Text(text = "multiplier", fontSize = 10.sp, color = TextSecondary)
+                    }
+                }
+            }
+
+            // Downloader Status / Operation Bar
+            if (model.isDownloading) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Downloading model weights...",
+                            fontSize = 11.sp,
+                            color = PrimaryColor,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "${(model.downloadProgress * 100).toInt()}%",
+                            fontSize = 11.sp,
+                            color = PrimaryColor,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { model.downloadProgress },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        color = PrimaryColor,
+                        trackColor = Color.DarkGray
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (model.isDownloaded) {
+                        if (model.id != "whisper_tiny") {
+                            IconButton(onClick = onDelete) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = "Delete downloaded model files",
+                                    tint = TertiaryColor
+                                )
+                            }
+                        }
+                        Button(
+                            onClick = onSelect,
+                            enabled = !model.isSelected,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (model.isSelected) Color.Transparent else PrimaryColor,
+                                disabledContainerColor = SurfaceLightDark
+                            ),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Text(
+                                text = if (model.isSelected) "ACTIVE" else "ACTIVATE",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (model.isSelected) TextSecondary else Color.Black
+                            )
+                        }
+                    } else {
+                        Button(
+                            onClick = onDownload,
+                            colors = ButtonDefaults.buttonColors(containerColor = SecondaryColor),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color.White
+                                )
+                                Text(
+                                    text = "DOWNLOAD MODEL",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================== DICTIONARY TAB ====================
+@Composable
+fun DictionaryTab(viewModel: MainViewModel) {
+    val words by viewModel.dictionaryWords.collectAsStateWithLifecycle()
+    var inputWord by remember { mutableStateOf("") }
+    var inputReplacement by remember { mutableStateOf("") }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        item {
+            Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Personal Dictation Dictionary",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Add custom industry words, acronyms, or proper names. The post-processor will automatically replace close phonetic matches in your transcribed dictations.",
+                    fontSize = 13.sp,
+                    color = TextSecondary
+                )
+            }
+        }
+
+        // Add custom word card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Add Custom Word Mapping",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = TextPrimary
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = inputWord,
+                            onValueChange = { inputWord = it },
+                            label = { Text("Original Word") },
+                            placeholder = { Text("e.g. gisin") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = PrimaryColor,
+                                unfocusedBorderColor = Color.DarkGray,
+                                focusedLabelColor = PrimaryColor
+                            ),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        OutlinedTextField(
+                            value = inputReplacement,
+                            onValueChange = { inputReplacement = it },
+                            label = { Text("Replacement Word") },
+                            placeholder = { Text("e.g. Genshin") },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = PrimaryColor,
+                                unfocusedBorderColor = Color.DarkGray,
+                                focusedLabelColor = PrimaryColor
+                            ),
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (inputWord.isNotBlank() && inputReplacement.isNotBlank()) {
+                                viewModel.addWord(inputWord, inputReplacement)
+                                inputWord = ""
+                                inputReplacement = ""
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                    ) {
+                        Text(
+                            text = "Add Word Mapping",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = Color.Black
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Saved Mappings (${words.size})",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = TextSecondary
+                )
+            }
+        }
+
+        if (words.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 40.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.Book,
+                            contentDescription = null,
+                            tint = TextSecondary.copy(alpha = 0.3f),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "No custom mappings saved yet.",
+                            fontSize = 13.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+            }
+        } else {
+            items(words) { word ->
+                DictionaryRow(word = word, onDelete = { viewModel.deleteWord(word.id) })
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(20.dp)) }
+    }
+}
+
+@Composable
+fun DictionaryRow(word: DictionaryWord, onDelete: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Column {
+                    Text(
+                        text = "Original / Typo",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = word.word,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TertiaryColor
+                    )
+                }
+
+                Icon(
+                    imageVector = Icons.Default.ArrowForward,
+                    contentDescription = null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(16.dp)
+                )
+
+                Column {
+                    Text(
+                        text = "Correct Mapping",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary
+                    )
+                    Text(
+                        text = word.replacement,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PrimaryColor
+                    )
+                }
+            }
+
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = "Delete mapping word",
+                    tint = TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+// ==================== HISTORY TAB ====================
+@Composable
+fun HistoryTab(viewModel: MainViewModel) {
+    val history by viewModel.transcriptionHistory.collectAsStateWithLifecycle()
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        item {
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Transcription History",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Review and copy offline dictations and transcribed shared files.",
+                        fontSize = 13.sp,
+                        color = TextSecondary
+                    )
+                }
+
+                if (history.isNotEmpty()) {
+                    TextButton(
+                        onClick = { viewModel.clearHistory() },
+                        colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor)
+                    ) {
+                        Text(text = "CLEAR ALL", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        if (history.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 80.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            imageVector = Icons.Default.HistoryToggleOff,
+                            contentDescription = null,
+                            tint = TextSecondary.copy(alpha = 0.3f),
+                            modifier = Modifier.size(56.dp)
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(
+                            text = "No transcript history available.",
+                            fontSize = 14.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+            }
+        } else {
+            items(history) { item ->
+                HistoryCard(
+                    item = item,
+                    onCopy = {
+                        clipboardManager.setText(AnnotatedString(item.text))
+                        Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                    },
+                    onDelete = { viewModel.deleteHistoryItem(item.id) }
+                )
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(20.dp)) }
+    }
+}
+
+@Composable
+fun HistoryCard(
+    item: TranscriptionHistory,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val formatter = remember { SimpleDateFormat("MMM dd, yyyy - HH:mm", Locale.getDefault()) }
+    val dateStr = formatter.format(Date(item.timestamp))
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Header: Icon, Type, Metadata
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = if (item.type == "shared_file") Icons.Default.AudioFile else Icons.Default.KeyboardVoice,
+                        contentDescription = null,
+                        tint = if (item.type == "shared_file") SecondaryColor else PrimaryColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = if (item.type == "shared_file") "SHARED FILE" else "DICTATION",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (item.type == "shared_file") SecondaryColor else PrimaryColor,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                Text(
+                    text = dateStr,
+                    fontSize = 11.sp,
+                    color = TextSecondary
+                )
+            }
+
+            if (!item.fileName.isNullOrEmpty()) {
+                Text(
+                    text = "File: ${item.fileName}",
+                    fontSize = 12.sp,
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // Transcribed Text Block
+            Text(
+                text = item.text,
+                fontSize = 14.sp,
+                color = TextPrimary,
+                lineHeight = 20.sp
+            )
+
+            // Bottom bar: model info, duration, actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // model label
+                    Box(
+                        modifier = Modifier
+                            .background(SurfaceLightDark, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = item.modelUsed,
+                            fontSize = 10.sp,
+                            color = TextSecondary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // duration
+                    if (item.durationSec > 0) {
+                        Text(
+                            text = "${item.durationSec}s duration",
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                Row {
+                    IconButton(onClick = onDelete) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Delete history log",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(onClick = onCopy) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy transcription text",
+                            tint = PrimaryColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================== SHARED AUDIO TAB ====================
+@Composable
+fun SharedAudioTab(viewModel: MainViewModel) {
+    val audioUri by viewModel.sharedAudioUri.collectAsStateWithLifecycle()
+    val audioName by viewModel.sharedAudioName.collectAsStateWithLifecycle()
+    val audioSize by viewModel.sharedAudioSize.collectAsStateWithLifecycle()
+    val transcribing by viewModel.isSharedTranscribing.collectAsStateWithLifecycle()
+    val progress by viewModel.sharedProgress.collectAsStateWithLifecycle()
+    val statusText by viewModel.sharedStatusText.collectAsStateWithLifecycle()
+    val resultText by viewModel.sharedResultText.collectAsStateWithLifecycle()
+    val activeModel by viewModel.selectedModel.collectAsStateWithLifecycle()
+
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        item {
+            Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Shared Audio Transcriber",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "VozLocal received an audio track shared from another application. Choose a local Whisper model to transcribe it offline.",
+                    fontSize = 13.sp,
+                    color = TextSecondary
+                )
+            }
+        }
+
+        // Selected File Details Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(SecondaryColor.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Audiotrack,
+                            contentDescription = null,
+                            tint = SecondaryColor,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = audioName,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = TextPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "Size: $audioSize",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+
+                    IconButton(onClick = { viewModel.clearSharedFile() }) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear selected shared file",
+                            tint = TextSecondary
+                        )
+                    }
+                }
+            }
+        }
+
+        // Transcription progress / controls
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (transcribing) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                progress = { progress },
+                                modifier = Modifier.size(56.dp),
+                                color = PrimaryColor,
+                                trackColor = Color.DarkGray,
+                                strokeWidth = 5.dp
+                            )
+                            Text(
+                                text = "${(progress * 100).toInt()}%",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = PrimaryColor
+                            )
+                            Text(
+                                text = statusText,
+                                fontSize = 12.sp,
+                                color = TextPrimary,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else if (resultText.isNotEmpty()) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "TRANSCRIPTION COMPLETED",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = PrimaryColor,
+                                    letterSpacing = 1.sp
+                                )
+
+                                Row {
+                                    IconButton(
+                                        onClick = {
+                                            clipboardManager.setText(AnnotatedString(resultText))
+                                            Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = "Copy text",
+                                            tint = PrimaryColor
+                                        )
+                                    }
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(SurfaceLightDark)
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = resultText,
+                                    fontSize = 14.sp,
+                                    color = TextPrimary,
+                                    lineHeight = 20.sp
+                                )
+                            }
+                        }
+                    } else {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "Ready to Transcribe",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "Active Transcription Model: ${activeModel?.name ?: "No model selected"}",
+                                fontSize = 12.sp,
+                                color = TextSecondary
+                            )
+
+                            Button(
+                                onClick = { viewModel.startSharedTranscription() },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = Color.Black
+                                    )
+                                    Text(
+                                        text = "Start Offline Transcription",
+                                        fontWeight = FontWeight.ExtraBold,
+                                        fontSize = 13.sp,
+                                        color = Color.Black
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(20.dp)) }
+    }
+}
+
+// ==================== SETTINGS DIALOG ====================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SettingsDialog(
+    viewModel: MainViewModel,
+    onDismiss: () -> Unit
+) {
+    val historyLimit by viewModel.historyLimit.collectAsStateWithLifecycle()
+    val smartPunctuation by viewModel.smartPunctuation.collectAsStateWithLifecycle()
+    val autoCapitalization by viewModel.autoCapitalization.collectAsStateWithLifecycle()
+    val applyDictionary by viewModel.applyDictionary.collectAsStateWithLifecycle()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = null,
+                    tint = PrimaryColor
+                )
+                Text(
+                    text = "VozLocal Settings",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = TextPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Retention Limit Setting
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "History Retention Limit",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Configure how many recent dictation items are retained in your visible history tab.",
+                        fontSize = 11.sp,
+                        color = TextSecondary,
+                        lineHeight = 15.sp
+                    )
+
+                    // Selection buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val options = listOf(
+                            5 to "5",
+                            10 to "10",
+                            20 to "20",
+                            50 to "50",
+                            -1 to "All"
+                        )
+                        options.forEach { (valLimit, label) ->
+                            val isSelected = historyLimit == valLimit
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) PrimaryColor else SurfaceLightDark)
+                                    .clickable { viewModel.setHistoryLimit(valLimit) }
+                                    .padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (isSelected) Color.Black else TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = Color.DarkGray.copy(alpha = 0.5f))
+
+                // Post-processing options mirrored inside settings
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Text Correction Filters",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = TextPrimary
+                    )
+
+                    // Smart pause
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "Smart Pause Correction", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = "Fuses long speech pauses", fontSize = 10.sp, color = TextSecondary)
+                        }
+                        Switch(
+                            checked = smartPunctuation,
+                            onCheckedChange = { viewModel.smartPunctuation.value = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                        )
+                    }
+
+                    // Auto-cap
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "Auto-Capitalization", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = "Starts sentences with uppercase", fontSize = 10.sp, color = TextSecondary)
+                        }
+                        Switch(
+                            checked = autoCapitalization,
+                            onCheckedChange = { viewModel.autoCapitalization.value = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                        )
+                    }
+
+                    // Dictionary
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "Apply Local Dictionary", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = "Corrects common misspellings", fontSize = 10.sp, color = TextSecondary)
+                        }
+                        Switch(
+                            checked = applyDictionary,
+                            onCheckedChange = { viewModel.applyDictionary.value = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "Done", color = PrimaryColor, fontWeight = FontWeight.Bold)
+            }
+        },
+        containerColor = SurfaceDark,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+// ==================== STATS TAB ====================
+@Composable
+fun StatsTab(viewModel: MainViewModel) {
+    val stats by viewModel.dictationStats.collectAsStateWithLifecycle()
+
+    // Base calculations
+    val totalWords = stats.sumOf { it.wordCount }
+    val totalSeconds = stats.sumOf { it.durationSec }
+    val totalMinutes = totalSeconds / 60f
+    
+    val averageWpm = if (stats.isNotEmpty()) {
+        stats.map { it.wpm }.average().toFloat()
+    } else {
+        0f
+    }
+
+    // Today calculations
+    val calendar = Calendar.getInstance()
+    val todayMidnight = calendar.apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    val statsToday = stats.filter { it.timestamp >= todayMidnight }
+    val todayWords = statsToday.sumOf { it.wordCount }
+    val todayAvgWpm = if (statsToday.isNotEmpty()) statsToday.map { it.wpm }.average().toFloat() else 0f
+
+    // Week calculations (last 7 days)
+    val sdf = SimpleDateFormat("EEE", Locale.getDefault())
+    val last7DaysData = (0..6).map { offset ->
+        val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -offset) }
+        val dateString = sdf.format(cal.time)
+        val dayStart = cal.apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val dayEnd = dayStart + 24 * 60 * 60 * 1000
+        val dayStats = stats.filter { it.timestamp in dayStart until dayEnd }
+        val wordCount = dayStats.sumOf { it.wordCount }
+        dateString to wordCount
+    }.reversed()
+
+    val maxWordCount = last7DaysData.maxOfOrNull { it.second } ?: 1
+    val displayMax = if (maxWordCount > 0) maxWordCount else 100
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        item {
+            Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Offline Dictation Analytics",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Track your typing efficiency, dictation word count and verbal speech rate (WPM) processed locally on device.",
+                    fontSize = 13.sp,
+                    color = TextSecondary
+                )
+            }
+        }
+
+        // Metrics Row cards
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Card 1: Today's Words
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    shape = RoundedCornerShape(16.dp),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(PrimaryColor.copy(alpha = 0.4f), Color.Transparent)))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(text = "TODAY'S WORDS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                        Text(text = todayWords.toString(), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor)
+                        Text(
+                            text = String.format(Locale.US, "%.1f min duration", statsToday.sumOf { it.durationSec } / 60f),
+                            fontSize = 10.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                // Card 2: Average WPM
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    shape = RoundedCornerShape(16.dp),
+                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(SecondaryColor.copy(alpha = 0.4f), Color.Transparent)))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(text = "VERBAL SPEED", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(text = String.format(Locale.US, "%.0f", averageWpm), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = SecondaryColor)
+                            Text(text = "WPM", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SecondaryColor)
+                        }
+                        Text(
+                            text = if (todayAvgWpm > 0f) String.format(Locale.US, "%.0f WPM today", todayAvgWpm) else "No dictations today",
+                            fontSize = 10.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+            }
+        }
+
+        // Bar Chart Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Weekly Dictation Trend",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = "Total words dictated per day",
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                        }
+
+                        Icon(
+                            imageVector = Icons.Default.TrendingUp,
+                            contentDescription = null,
+                            tint = PrimaryColor
+                        )
+                    }
+
+                    // Render Bars
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(140.dp)
+                            .padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        last7DaysData.forEach { (day, wordCount) ->
+                            val normalizedHeightRatio = wordCount.toFloat() / displayMax.toFloat()
+                            val barHeight = (normalizedHeightRatio * 90).coerceAtLeast(6f).dp
+
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Bottom,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                if (wordCount > 0) {
+                                    Text(
+                                        text = wordCount.toString(),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                }
+
+                                Box(
+                                    modifier = Modifier
+                                        .width(16.dp)
+                                        .height(barHeight)
+                                        .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                        .background(
+                                            Brush.verticalGradient(
+                                                listOf(PrimaryColor, SecondaryColor)
+                                            )
+                                        )
+                                )
+
+                                Spacer(modifier = Modifier.height(6.dp))
+
+                                Text(
+                                    text = day,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Lifetime Metrics Panel
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Lifetime Milestones",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = TextPrimary
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Stat Item 1
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "LIFETIME WORDS", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                            Text(text = totalWords.toString(), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                        }
+
+                        // Stat Item 2
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "TOTAL SPEAK TIME", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = String.format(Locale.US, "%.1f min", totalMinutes),
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = TextPrimary
+                            )
+                        }
+
+                        // Stat Item 3
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "DICTATIONS", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                            Text(text = stats.size.toString(), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                        }
+                    }
+
+                    HorizontalDivider(color = Color.DarkGray.copy(alpha = 0.3f))
+
+                    // Helpful Insight
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = SecondaryColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        val insightsText = when {
+                            stats.isEmpty() -> "Start dictating to see speech performance analytics here."
+                            averageWpm > 150f -> "Your speech rate is fast! Whisper models might require clear pronunciation."
+                            averageWpm > 110f -> "Excellent verbal delivery speed! This is close to standard professional presentation pace."
+                            else -> "Great pace. Speaking deliberately improves transcription accuracy of local neural models."
+                        }
+                        Text(
+                            text = insightsText,
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            lineHeight = 15.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Action Buttons
+        if (stats.isNotEmpty()) {
+            item {
+                TextButton(
+                    onClick = { viewModel.clearStats() },
+                    colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Text(text = "RESET ALL STATISTICS", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        item { Spacer(modifier = Modifier.height(20.dp)) }
+    }
+}
+
+// ==================== SETUP WIZARD SCREEN ====================
+@Composable
+fun SetupWizardScreen(
+    hasMicPermission: Boolean,
+    hasAccessibilityEnabled: Boolean,
+    hasOverlayPermission: Boolean,
+    onRequestMicPermission: () -> Unit,
+    onEnableAccessibility: () -> Unit,
+    onEnableOverlay: () -> Unit,
+    onSkip: () -> Unit,
+    onDone: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BackgroundDark)
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Spacer(modifier = Modifier.height(24.dp))
+        
+        // Beautiful Pulsing Mic Header
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(listOf(PrimaryColor, SecondaryColor)))
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Hearing,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(40.dp)
+            )
+        }
+        
+        Text(
+            text = "Welcome to VozLocal",
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 24.sp,
+            color = TextPrimary,
+            textAlign = TextAlign.Center
+        )
+        
+        Text(
+            text = "VozLocal provides on-device, fully offline speech-to-text with post-processing. Let's finish the setup to start dictating globally!",
+            fontSize = 13.sp,
+            color = TextSecondary,
+            textAlign = TextAlign.Center,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        )
+        
+        Spacer(modifier = Modifier.height(12.dp))
+        
+        // Step 1: Microphone Permission
+        SetupStepCard(
+            title = "1. Microphone Permission",
+            description = "Allows recording voice for processing with Whisper local models.",
+            isGranted = hasMicPermission,
+            buttonText = "Grant Microphone Permission",
+            onAction = onRequestMicPermission,
+            testTag = "setup_step_mic"
+        )
+        
+        // Step 2: Accessibility Service
+        SetupStepCard(
+            title = "2. Accessibility Service",
+            description = "Enables detecting input fields globally to draw the floating dictation button and paste typed text.",
+            isGranted = hasAccessibilityEnabled,
+            buttonText = "Enable Accessibility Service",
+            onAction = onEnableAccessibility,
+            testTag = "setup_step_accessibility"
+        )
+        
+        // Step 3: Draw Over Other Apps
+        SetupStepCard(
+            title = "3. Display Over Other Apps",
+            description = "Allows the floating dictation widget to be rendered on top of other applications.",
+            isGranted = hasOverlayPermission,
+            buttonText = "Allow Draw Over Apps",
+            onAction = onEnableOverlay,
+            testTag = "setup_step_overlay"
+        )
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        if (hasMicPermission && hasAccessibilityEnabled && hasOverlayPermission) {
+            Button(
+                onClick = onDone,
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .testTag("setup_done_button")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color.Black)
+                    Text("START USING VOZLOCAL", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp)
+                }
+            }
+        } else {
+            TextButton(
+                onClick = onSkip,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary),
+                modifier = Modifier.testTag("setup_skip_button")
+            ) {
+                Text("Skip Setup & Explore App", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+    }
+}
+
+@Composable
+fun SetupStepCard(
+    title: String,
+    description: String,
+    isGranted: Boolean,
+    buttonText: String,
+    onAction: () -> Unit,
+    testTag: String
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(testTag),
+        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        shape = RoundedCornerShape(16.dp),
+        border = CardDefaults.outlinedCardBorder().copy(
+            brush = Brush.linearGradient(
+                listOf(
+                    if (isGranted) Color(0xFF10B981).copy(alpha = 0.5f) else SecondaryColor.copy(alpha = 0.3f),
+                    Color.Transparent
+                )
+            )
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    color = TextPrimary
+                )
+                
+                if (isGranted) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF10B981).copy(alpha = 0.15f), RoundedCornerShape(100.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "ACTIVE",
+                                color = Color(0xFF10B981),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFFEF4444).copy(alpha = 0.15f), RoundedCornerShape(100.dp))
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "REQUIRED",
+                            color = Color(0xFFEF4444),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                }
+            }
+            
+            Text(
+                text = description,
+                fontSize = 12.sp,
+                color = TextSecondary,
+                lineHeight = 16.sp
+            )
+            
+            if (!isGranted) {
+                Button(
+                    onClick = onAction,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.align(Alignment.End)
+                ) {
+                    Text(
+                        text = buttonText,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp,
+                        color = Color.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun isAccessibilityServiceEnabled(
+    context: Context,
+    service: Class<out android.accessibilityservice.AccessibilityService>
+): Boolean {
+    val expectedComponentName = ComponentName(context, service)
+    val enabledServicesSetting = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    ) ?: return false
+    val colonSplitter = TextUtils.SimpleStringSplitter(':')
+    colonSplitter.setString(enabledServicesSetting)
+    while (colonSplitter.hasNext()) {
+        val componentNameString = colonSplitter.next()
+        val enabledService = ComponentName.unflattenFromString(componentNameString)
+        if (enabledService != null && enabledService == expectedComponentName) {
+            return true
+        }
+    }
+    return false
+}

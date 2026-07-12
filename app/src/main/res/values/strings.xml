@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">VozLocal</string>
+    <string name="accessibility_service_description">VozLocal Dictation Service provides global floating dictation. Tap the floating microphone to record and auto-paste transcriptions into any text box.</string>
+</resources>

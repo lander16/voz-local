@@ -1,0 +1,6 @@
+{
+  "name": "VozLocal",
+  "description": "On-device speech dictation and audio transcription using local models.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
