@@ -74,6 +74,20 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
     val autoCapitalization = MutableStateFlow(true)
     val applyDictionary = MutableStateFlow(true)
     val historyLimit = MutableStateFlow(repository.getHistoryLimit())
+    val showOnlyOnInput = MutableStateFlow(repository.getShowOnlyOnInput())
+
+    fun setShowOnlyOnInput(value: Boolean) {
+        repository.saveShowOnlyOnInput(value)
+        showOnlyOnInput.value = value
+    }
+
+    private val _simulatedSpeechInput = MutableStateFlow(repository.getSimulatedSpeech())
+    val simulatedSpeechInput: StateFlow<String> = _simulatedSpeechInput.asStateFlow()
+
+    fun updateSimulatedSpeechInput(text: String) {
+        _simulatedSpeechInput.value = text
+        repository.saveSimulatedSpeech(text)
+    }
 
     fun setHistoryLimit(limit: Int) {
         repository.saveHistoryLimit(limit)
@@ -195,15 +209,20 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
         viewModelScope.launch {
             delay(1200) // simulating final post-processing step
 
-            // Spanish or English output simulation base
-            val baseSpanishText = "Hola, esta es una demostración real del dictado de voz offline de VozLocal. El motor está ejecutándose directamente en este teléfono móvil, garantizando total privacidad sin enviar datos a la nube."
-            val baseEnglishText = "Hello, this is a real demonstration of VozLocal offline voice dictation. The model is running directly on this device, guaranteeing complete privacy with no cloud connections."
-
-            val rawText = if (model.id == "whisper_es_optimized") {
-                baseSpanishText
+            val customText = _simulatedSpeechInput.value
+            val rawText = if (customText.isNotBlank()) {
+                customText
             } else {
-                // Mix in language options based on settings
-                if (Locale.getDefault().language == "es") baseSpanishText else baseEnglishText
+                // Spanish or English output simulation base
+                val baseSpanishText = "Hola, esta es una demostración real del dictado de voz offline de VozLocal. El motor está ejecutándose directamente en este teléfono móvil, garantizando total privacidad sin enviar datos a la nube."
+                val baseEnglishText = "Hello, this is a real demonstration of VozLocal offline voice dictation. The model is running directly on this device, guaranteeing complete privacy with no cloud connections."
+
+                if (model.id == "whisper_es_optimized") {
+                    baseSpanishText
+                } else {
+                    // Mix in language options based on settings
+                    if (Locale.getDefault().language == "es") baseSpanishText else baseEnglishText
+                }
             }
 
             // Apply Dictionary, Auto-caps and Punctuation
@@ -237,7 +256,7 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
                 )
             )
 
-            _currentLiveTranscription.value = ""
+            _currentLiveTranscription.value = processedText
             _recordDurationSec.value = 0
             _liveWaveform.value = emptyList()
         }

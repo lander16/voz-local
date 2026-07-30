@@ -131,6 +131,7 @@ fun MainScreen(
 
     if (showSetupWizard) {
         SetupWizardScreen(
+            viewModel = viewModel,
             hasMicPermission = hasMicPermission,
             hasAccessibilityEnabled = hasAccessibilityEnabled,
             hasOverlayPermission = hasOverlayPermission,
@@ -455,36 +456,64 @@ fun DictateTab(viewModel: MainViewModel) {
                     .padding(16.dp)
             ) {
                 if (liveText.isNotEmpty() || isRecording) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = liveText,
-                            fontSize = 15.sp,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Medium,
-                            lineHeight = 22.sp,
-                            modifier = Modifier.weight(1f)
-                        )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = liveText,
+                                fontSize = 15.sp,
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Medium,
+                                lineHeight = 22.sp,
+                                modifier = Modifier.weight(1f)
+                            )
 
-                        if (isRecording) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            if (isRecording) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(TertiaryColor)
+                                    )
+                                    Text(
+                                        text = "Live Transcription Feed...",
+                                        fontSize = 11.sp,
+                                        color = TertiaryColor,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        if (!isRecording && liveText.isNotEmpty()) {
+                            IconButton(
+                                onClick = {
+                                    try {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("VozLocal Transcription", liveText)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        e.printStackTrace()
+                                    }
+                                },
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(36.dp)
+                                    .testTag("copy_transcription_button")
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(TertiaryColor)
-                                )
-                                Text(
-                                    text = "Live Transcription Feed...",
-                                    fontSize = 11.sp,
-                                    color = TertiaryColor,
-                                    fontWeight = FontWeight.Bold
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy to Clipboard",
+                                    tint = PrimaryColor,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
@@ -625,6 +654,74 @@ fun DictateTab(viewModel: MainViewModel) {
             }
         }
 
+        // Emulator Speech Simulator
+        item {
+            val simulatedSpeechInput by viewModel.simulatedSpeechInput.collectAsStateWithLifecycle()
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("simulation_card"),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Hearing,
+                            contentDescription = null,
+                            tint = SecondaryColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Emulator Speech Simulator",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = TextPrimary
+                        )
+                    }
+
+                    Text(
+                        text = "The streaming emulator does not support hardware microphone audio inputs. Type what you want to \"speak\" here, and click TAP TO DICTATE above or use the floating overlay button to see it transcribed with all your local dictionary and smart punctuation filters applied!",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        lineHeight = 16.sp
+                    )
+
+                    OutlinedTextField(
+                        value = simulatedSpeechInput,
+                        onValueChange = { viewModel.updateSimulatedSpeechInput(it) },
+                        placeholder = {
+                            Text(
+                                text = "Type custom phrase to dictate here...",
+                                fontSize = 13.sp,
+                                color = TextSecondary.copy(alpha = 0.5f)
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("simulation_text_input"),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryColor,
+                            unfocusedBorderColor = Color(0xFF374151),
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                            cursorColor = PrimaryColor
+                        ),
+                        singleLine = false,
+                        maxLines = 3
+                    )
+                }
+            }
+        }
+
         // Post-Processing Modifiers Configuration
         item {
             Column(
@@ -715,6 +812,34 @@ fun DictateTab(viewModel: MainViewModel) {
                         checked = applyDictionary,
                         onCheckedChange = { viewModel.applyDictionary.value = it },
                         colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
+
+                HorizontalDivider(color = BackgroundDark)
+
+                // Modifier 4: Show only on text input
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Visibility, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                        Column {
+                            Text(text = "Smart Overlay Button", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = "Only show floating button when clicking text fields.", fontSize = 11.sp, color = TextSecondary)
+                        }
+                    }
+                    val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
+                    Switch(
+                        checked = showOnlyOnInput,
+                        onCheckedChange = { viewModel.setShowOnlyOnInput(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor),
+                        modifier = Modifier.testTag("main_only_on_input_switch")
                     )
                 }
             }
@@ -1003,7 +1128,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                     color = TextPrimary
                 )
                 Text(
-                    text = "Add custom industry words, acronyms, or proper names. The post-processor will automatically replace close phonetic matches in your transcribed dictations.",
+                    text = "Add custom words, proper names, or jargon you use often and want the model to recognize. They are sent directly to the local model's biasing vocabulary list. You can also specify common misheard variations to automatically replace them.",
                     fontSize = 13.sp,
                     color = TextSecondary
                 )
@@ -1022,48 +1147,48 @@ fun DictionaryTab(viewModel: MainViewModel) {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Add Custom Word Mapping",
+                        text = "Add Word to Recognize",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = TextPrimary
                     )
 
-                    Row(
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         OutlinedTextField(
                             value = inputWord,
                             onValueChange = { inputWord = it },
-                            label = { Text("Original Word") },
-                            placeholder = { Text("e.g. gisin") },
+                            label = { Text("Word / Phrase to Recognize") },
+                            placeholder = { Text("e.g. VozLocal") },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = PrimaryColor,
                                 unfocusedBorderColor = Color.DarkGray,
                                 focusedLabelColor = PrimaryColor
                             ),
                             singleLine = true,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         )
 
                         OutlinedTextField(
                             value = inputReplacement,
                             onValueChange = { inputReplacement = it },
-                            label = { Text("Replacement Word") },
-                            placeholder = { Text("e.g. Genshin") },
+                            label = { Text("Phonetic / Misheard variants (optional)") },
+                            placeholder = { Text("e.g. voz local, voice local, bos local") },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = PrimaryColor,
                                 unfocusedBorderColor = Color.DarkGray,
                                 focusedLabelColor = PrimaryColor
                             ),
                             singleLine = true,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.fillMaxWidth()
                         )
                     }
 
                     Button(
                         onClick = {
-                            if (inputWord.isNotBlank() && inputReplacement.isNotBlank()) {
+                            if (inputWord.isNotBlank()) {
                                 viewModel.addWord(inputWord, inputReplacement)
                                 inputWord = ""
                                 inputReplacement = ""
@@ -1076,7 +1201,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                             .height(44.dp)
                     ) {
                         Text(
-                            text = "Add Word Mapping",
+                            text = "Add Custom Word",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = Color.Black
@@ -1092,7 +1217,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Saved Mappings (${words.size})",
+                    text = "Recognized Words (${words.size})",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = TextSecondary
@@ -1117,7 +1242,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "No custom mappings saved yet.",
+                            text = "No custom words saved yet.",
                             fontSize = 13.sp,
                             color = TextSecondary
                         )
@@ -1148,44 +1273,38 @@ fun DictionaryRow(word: DictionaryWord, onDelete: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Column {
-                    Text(
-                        text = "Original / Typo",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecondary
-                    )
-                    Text(
-                        text = word.word,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TertiaryColor
-                    )
-                }
-
-                Icon(
-                    imageVector = Icons.Default.ArrowForward,
-                    contentDescription = null,
-                    tint = TextSecondary,
-                    modifier = Modifier.size(16.dp)
+                Text(
+                    text = "Word / Phrase to Recognize",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextSecondary
+                )
+                Text(
+                    text = word.word,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = PrimaryColor
                 )
 
-                Column {
+                if (word.replacement.isNotBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Correct Mapping",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecondary
+                        text = "Phonetic variations: ${word.replacement}",
+                        fontSize = 11.sp,
+                        color = TextSecondary,
+                        style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)
                     )
+                } else {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = word.replacement,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = PrimaryColor
+                        text = "Auto-correction & spelling bias active",
+                        fontSize = 11.sp,
+                        color = Color(0xFF10B981),
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
@@ -1193,7 +1312,7 @@ fun DictionaryRow(word: DictionaryWord, onDelete: () -> Unit) {
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.DeleteOutline,
-                    contentDescription = "Delete mapping word",
+                    contentDescription = "Delete dictionary word",
                     tint = TextSecondary,
                     modifier = Modifier.size(20.dp)
                 )
@@ -2137,6 +2256,7 @@ fun StatsTab(viewModel: MainViewModel) {
 // ==================== SETUP WIZARD SCREEN ====================
 @Composable
 fun SetupWizardScreen(
+    viewModel: MainViewModel,
     hasMicPermission: Boolean,
     hasAccessibilityEnabled: Boolean,
     hasOverlayPermission: Boolean,
@@ -2226,6 +2346,74 @@ fun SetupWizardScreen(
         Spacer(modifier = Modifier.height(16.dp))
         
         if (hasMicPermission && hasAccessibilityEnabled && hasOverlayPermission) {
+            // Configuration Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("setup_config_card"),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = PrimaryColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Overlay Button Preference",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = TextPrimary
+                        )
+                    }
+
+                    Text(
+                        text = "VozLocal can automatically hide the floating overlay button when no text input is focused, ensuring your screen remains clean and clutter-free.",
+                        fontSize = 12.sp,
+                        color = TextSecondary,
+                        lineHeight = 16.sp
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Show button ONLY on clicking inputs",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimary
+                        )
+                        val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
+                        Switch(
+                            checked = showOnlyOnInput,
+                            onCheckedChange = { viewModel.setShowOnlyOnInput(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.Black,
+                                checkedTrackColor = PrimaryColor,
+                                uncheckedThumbColor = Color.LightGray,
+                                uncheckedTrackColor = Color.DarkGray
+                            ),
+                            modifier = Modifier.testTag("setup_only_on_input_switch")
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Button(
                 onClick = onDone,
                 colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),

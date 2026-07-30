@@ -37,6 +37,22 @@ class DictationRepository(context: Context) {
         prefs.edit().putInt("history_limit", limit).apply()
     }
 
+    fun getSimulatedSpeech(): String {
+        return prefs.getString("simulated_speech", "") ?: ""
+    }
+
+    fun saveSimulatedSpeech(text: String) {
+        prefs.edit().putString("simulated_speech", text).apply()
+    }
+
+    fun getShowOnlyOnInput(): Boolean {
+        return prefs.getBoolean("show_only_on_input", true)
+    }
+
+    fun saveShowOnlyOnInput(value: Boolean) {
+        prefs.edit().putBoolean("show_only_on_input", value).apply()
+    }
+
     suspend fun pruneHistory(limit: Int) = withContext(Dispatchers.IO) {
         if (limit > 0) {
             val currentHistory = historyDao.getAllHistory().first()
@@ -234,13 +250,24 @@ class DictationRepository(context: Context) {
         // 1. Clean extra spaces
         result = result.replace(Regex("\\s+"), " ").trim()
 
-        // 2. Dictionary Replacements
+        // 2. Dictionary Replacements & Misheard Vocabulary Biasing
         if (applyDict) {
             val words = getWordsList()
             for (dictWord in words) {
-                // Word boundaries or direct matches, case insensitive
-                val regex = Regex("(?i)\\b${Regex.escape(dictWord.word)}\\b")
-                result = result.replace(regex, dictWord.replacement)
+                // First, replace any specific phonetic / misheard variants if provided in the replacement field
+                if (dictWord.replacement.isNotBlank()) {
+                    val variants = dictWord.replacement.split(",")
+                    for (variant in variants) {
+                        val trimmedVariant = variant.trim()
+                        if (trimmedVariant.isNotEmpty()) {
+                            val regex = Regex("(?i)\\b${Regex.escape(trimmedVariant)}\\b")
+                            result = result.replace(regex, dictWord.word)
+                        }
+                    }
+                }
+                // Direct case-insensitive replacement/correction of the main word itself (e.g., vozlocal to VozLocal)
+                val directRegex = Regex("(?i)\\b${Regex.escape(dictWord.word)}\\b")
+                result = result.replace(directRegex, dictWord.word)
             }
         }
 

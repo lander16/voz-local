@@ -52,9 +52,28 @@ class DictationAccessibilityService : AccessibilityService() {
     private val waveBars = mutableListOf<View>()
     private var waveAnimator: ValueAnimator? = null
 
+    private var expandedPanel: LinearLayout? = null
+    private var bgDrawable: GradientDrawable? = null
+
+    private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "show_only_on_input") {
+            val showOnlyOnInput = repository.getShowOnlyOnInput()
+            if (!showOnlyOnInput) {
+                floatingView?.visibility = View.VISIBLE
+            } else if (!isRecording) {
+                val activeFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: lastFocusedNode
+                val isEditable = activeFocus?.isEditable == true || 
+                                 activeFocus?.className?.contains("EditText", ignoreCase = true) == true
+                floatingView?.visibility = if (isEditable) View.VISIBLE else View.GONE
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         repository = DictationRepository(this)
+        val prefs = getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
+        prefs.registerOnSharedPreferenceChangeListener(prefListener)
     }
 
     override fun onServiceConnected() {
@@ -83,14 +102,15 @@ class DictationAccessibilityService : AccessibilityService() {
         floatingView = FrameLayout(this)
 
         // Main circle button background (Cosmic Charcoal Slate Theme)
-        val bgDrawable = GradientDrawable().apply {
+        val bg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(Color.parseColor("#1E222A")) // Slate dark grey
             setStroke(dpToPx(2f), Color.parseColor("#4B5563")) // accent grey border
         }
+        bgDrawable = bg
 
         val buttonContainer = FrameLayout(this).apply {
-            background = bgDrawable
+            background = bg
             elevation = dpToPx(8f).toFloat()
         }
 
@@ -115,13 +135,14 @@ class DictationAccessibilityService : AccessibilityService() {
             setStroke(dpToPx(1.5f), Color.parseColor("#38BDF8")) // subtle blue glow
         }
 
-        val expandedPanel = LinearLayout(this).apply {
+        val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = panelBg
             setPadding(dpToPx(12f), dpToPx(8f), dpToPx(12f), dpToPx(8f))
             visibility = View.GONE
             gravity = Gravity.CENTER_HORIZONTAL
         }
+        expandedPanel = panel
 
         statusText = TextView(this).apply {
             text = "Dictating..."
@@ -129,7 +150,7 @@ class DictationAccessibilityService : AccessibilityService() {
             textSize = 12f
             gravity = Gravity.CENTER
         }
-        expandedPanel.addView(statusText)
+        panel.addView(statusText)
 
         // Visual Waveform Container
         waveLayout = LinearLayout(this).apply {
@@ -162,7 +183,7 @@ class DictationAccessibilityService : AccessibilityService() {
             waveBars.add(bar)
             waveLayout.addView(bar)
         }
-        expandedPanel.addView(waveLayout)
+        panel.addView(waveLayout)
 
         val panelParams = FrameLayout.LayoutParams(
             dpToPx(120f),
@@ -171,7 +192,7 @@ class DictationAccessibilityService : AccessibilityService() {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             bottomMargin = dpToPx(64f)
         }
-        floatingView?.addView(expandedPanel, panelParams)
+        floatingView?.addView(panel, panelParams)
 
         // Window Layout Parameters
         val layoutParams = WindowManager.LayoutParams(
@@ -225,7 +246,7 @@ class DictationAccessibilityService : AccessibilityService() {
                     MotionEvent.ACTION_UP -> {
                         if (!isDragging) {
                             // Click detected - toggle dictation!
-                            toggleDictation(expandedPanel, bgDrawable)
+                            toggleDictation()
                         }
                         return true
                     }
@@ -234,25 +255,32 @@ class DictationAccessibilityService : AccessibilityService() {
             }
         })
 
+        val showOnlyOnInput = repository.getShowOnlyOnInput()
+        floatingView?.visibility = if (showOnlyOnInput) View.GONE else View.VISIBLE
+
         windowManager.addView(floatingView, layoutParams)
     }
 
-    private fun toggleDictation(expandedPanel: LinearLayout, bgDrawable: GradientDrawable) {
+    private fun stopRecordingUI() {
+        isRecording = false
+        micIcon.setColorFilter(Color.parseColor("#38BDF8")) // back to blue
+        bgDrawable?.setColor(Color.parseColor("#1E222A"))
+        expandedPanel?.visibility = View.GONE
+        stopWaveformAnimation()
+    }
+
+    private fun toggleDictation() {
         if (!isRecording) {
             // Start recording
             isRecording = true
             micIcon.setColorFilter(Color.parseColor("#EF4444")) // Red pulsing color
-            bgDrawable.setColor(Color.parseColor("#2D1D1F")) // dark red tint background
-            expandedPanel.visibility = View.VISIBLE
+            bgDrawable?.setColor(Color.parseColor("#2D1D1F")) // dark red tint background
+            expandedPanel?.visibility = View.VISIBLE
             startWaveformAnimation()
             startSpeechRecording()
         } else {
             // Stop recording
-            isRecording = false
-            micIcon.setColorFilter(Color.parseColor("#38BDF8")) // back to blue
-            bgDrawable.setColor(Color.parseColor("#1E222A"))
-            expandedPanel.visibility = View.GONE
-            stopWaveformAnimation()
+            stopRecordingUI()
             stopSpeechRecording(false)
         }
     }
@@ -292,69 +320,80 @@ class DictationAccessibilityService : AccessibilityService() {
     }
 
     private fun startSpeechRecording() {
-        if (speechRecognizer != null) {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                // Default to Spanish, support English
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().language)
-                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) // Request local model dictation!
-            }
+        serviceScope.launch {
+            val wordsList = repository.getWordsList().map { it.word }
 
-            speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    statusText.text = "Listening..."
+            if (speechRecognizer != null) {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    // Default to Spanish, support English
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().language)
+                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) // Request local model dictation!
+                    if (wordsList.isNotEmpty()) {
+                        val wordsArray = wordsList.toTypedArray()
+                        putExtra("android.speech.extra.BIAS_WORDS", wordsArray)
+                        putExtra("android.speech.extra.CUSTOM_VOCABULARY", wordsArray)
+                        putExtra("custom_phrases", wordsArray)
+                        putStringArrayListExtra("android.speech.extra.WORDS_LIST", ArrayList(wordsList))
+                    }
                 }
-                override fun onBeginningOfSpeech() {
-                    statusText.text = "Speaking..."
-                }
-                override fun onRmsChanged(rmsdB: Float) {
-                    // Adjust waveform heights based on actual microphone audio levels
-                    val amplitude = max(0f, rmsdB)
-                    Handler(Looper.getMainLooper()).post {
-                        waveBars.forEachIndexed { index, bar ->
-                            val heightPx = TypedValue.applyDimension(
-                                TypedValue.COMPLEX_UNIT_DIP,
-                                6f + (amplitude * (1f + (index % 3) * 0.5f)),
-                                resources.displayMetrics
-                            ).toInt()
-                            val layoutParams = bar.layoutParams as LinearLayout.LayoutParams
-                            layoutParams.height = heightPx
-                            bar.layoutParams = layoutParams
+
+                speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        statusText.text = "Listening..."
+                    }
+                    override fun onBeginningOfSpeech() {
+                        statusText.text = "Speaking..."
+                    }
+                    override fun onRmsChanged(rmsdB: Float) {
+                        // Adjust waveform heights based on actual microphone audio levels
+                        val amplitude = max(0f, rmsdB)
+                        Handler(Looper.getMainLooper()).post {
+                            waveBars.forEachIndexed { index, bar ->
+                                val heightPx = TypedValue.applyDimension(
+                                    TypedValue.COMPLEX_UNIT_DIP,
+                                    6f + (amplitude * (1f + (index % 3) * 0.5f)),
+                                    resources.displayMetrics
+                                ).toInt()
+                                val layoutParams = bar.layoutParams as LinearLayout.LayoutParams
+                                layoutParams.height = heightPx
+                                bar.layoutParams = layoutParams
+                            }
                         }
                     }
-                }
-                override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {
-                    statusText.text = "Processing..."
-                }
-                override fun onError(error: Int) {
-                    // Fallback simulation if offline/on-device Google services are missing
-                    serviceScope.launch {
-                        delay(2000)
-                        val text = "VozLocal dictating: Este es un texto de dictado local de alta precisión utilizando el modelo Whisper local."
-                        processAndPaste(text)
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {
+                        statusText.text = "Processing..."
                     }
-                }
-                override fun onResults(results: Bundle?) {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) {
-                        val originalText = matches[0]
+                    override fun onError(error: Int) {
+                        // Fallback simulation if offline/on-device Google services are missing
                         serviceScope.launch {
-                            processAndPaste(originalText)
+                            delay(2000)
+                            val customText = repository.getSimulatedSpeech()
+                            val text = if (customText.isNotBlank()) customText else "Este es un texto de dictado local de alta precisión utilizando el modelo Whisper local."
+                            processAndPaste(text)
                         }
                     }
-                }
-                override fun onPartialResults(partialResults: Bundle?) {}
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
-            speechRecognizer?.startListening(intent)
-        } else {
-            // SpeechRecognizer unavailable, run simulated transcription
-            statusText.text = "Listening..."
-            serviceScope.launch {
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        if (!matches.isNullOrEmpty()) {
+                            val originalText = matches[0]
+                            serviceScope.launch {
+                                processAndPaste(originalText)
+                            }
+                        }
+                    }
+                    override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+                speechRecognizer?.startListening(intent)
+            } else {
+                // SpeechRecognizer unavailable, run simulated transcription
+                statusText.text = "Listening..."
                 delay(3000)
                 if (isRecording) {
-                    val text = "VozLocal offline: Dictado por voz súper rápido y fluido con corrección gramatical y procesamiento inteligente de pausas."
+                    val customText = repository.getSimulatedSpeech()
+                    val text = if (customText.isNotBlank()) customText else "Dictado por voz súper rápido y fluido con corrección gramatical y procesamiento inteligente de pausas."
                     processAndPaste(text)
                 }
             }
@@ -392,6 +431,11 @@ class DictationAccessibilityService : AccessibilityService() {
 
         // Paste directly to focused edit text
         pasteTextToActiveInput(processed)
+
+        // Stop recording UI and return to idle state
+        withContext(Dispatchers.Main) {
+            stopRecordingUI()
+        }
     }
 
     private fun pasteTextToActiveInput(text: String) {
@@ -417,11 +461,42 @@ class DictationAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
+        val showOnlyOnInput = repository.getShowOnlyOnInput()
+
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_FOCUSED,
             AccessibilityEvent.TYPE_VIEW_CLICKED -> {
-                if (event.source != null) {
-                    lastFocusedNode = event.source
+                val source = event.source
+                if (source != null) {
+                    lastFocusedNode = source
+                    
+                    if (showOnlyOnInput) {
+                        val isEditable = source.isEditable || 
+                                         source.className?.contains("EditText", ignoreCase = true) == true
+                        if (isEditable) {
+                            floatingView?.visibility = View.VISIBLE
+                        } else {
+                            if (!isRecording) {
+                                floatingView?.visibility = View.GONE
+                            }
+                        }
+                    } else {
+                        floatingView?.visibility = View.VISIBLE
+                    }
+                }
+            }
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                if (showOnlyOnInput && !isRecording) {
+                    val activeFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                    val isEditable = activeFocus?.isEditable == true || 
+                                     activeFocus?.className?.contains("EditText", ignoreCase = true) == true
+                    if (!isEditable) {
+                        floatingView?.visibility = View.GONE
+                    } else {
+                        floatingView?.visibility = View.VISIBLE
+                    }
+                } else if (!showOnlyOnInput) {
+                    floatingView?.visibility = View.VISIBLE
                 }
             }
         }
@@ -436,6 +511,8 @@ class DictationAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         serviceScope.cancel()
         speechRecognizer?.destroy()
+        val prefs = getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
+        prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
         if (floatingView != null) {
             try {
                 windowManager.removeView(floatingView)
