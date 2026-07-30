@@ -37,14 +37,6 @@ class DictationRepository(context: Context) {
         prefs.edit().putInt("history_limit", limit).apply()
     }
 
-    fun getSimulatedSpeech(): String {
-        return prefs.getString("simulated_speech", "") ?: ""
-    }
-
-    fun saveSimulatedSpeech(text: String) {
-        prefs.edit().putString("simulated_speech", text).apply()
-    }
-
     fun getShowOnlyOnInput(): Boolean {
         return prefs.getBoolean("show_only_on_input", true)
     }

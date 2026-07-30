@@ -55,6 +55,17 @@ class DictationAccessibilityService : AccessibilityService() {
     private var expandedPanel: LinearLayout? = null
     private var bgDrawable: GradientDrawable? = null
 
+    private fun isInputNode(node: AccessibilityNodeInfo?): Boolean {
+        if (node == null) return false
+        if (node.isEditable) return true
+        val className = node.className?.toString() ?: ""
+        return className.contains("EditText", ignoreCase = true) ||
+               className.contains("Input", ignoreCase = true) ||
+               className.contains("TextField", ignoreCase = true) ||
+               className.contains("AutoComplete", ignoreCase = true) ||
+               className.contains("SearchView", ignoreCase = true)
+    }
+
     private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "show_only_on_input") {
             val showOnlyOnInput = repository.getShowOnlyOnInput()
@@ -62,9 +73,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 floatingView?.visibility = View.VISIBLE
             } else if (!isRecording) {
                 val activeFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: lastFocusedNode
-                val isEditable = activeFocus?.isEditable == true || 
-                                 activeFocus?.className?.contains("EditText", ignoreCase = true) == true
-                floatingView?.visibility = if (isEditable) View.VISIBLE else View.GONE
+                floatingView?.visibility = if (isInputNode(activeFocus)) View.VISIBLE else View.GONE
             }
         }
     }
@@ -366,12 +375,12 @@ class DictationAccessibilityService : AccessibilityService() {
                         statusText.text = "Processing..."
                     }
                     override fun onError(error: Int) {
-                        // Fallback simulation if offline/on-device Google services are missing
                         serviceScope.launch {
-                            delay(2000)
-                            val customText = repository.getSimulatedSpeech()
-                            val text = if (customText.isNotBlank()) customText else "Este es un texto de dictado local de alta precisión utilizando el modelo Whisper local."
-                            processAndPaste(text)
+                            statusText.text = if (error == SpeechRecognizer.ERROR_NO_MATCH) "No speech heard" else "Speech error ($error)"
+                            delay(1500)
+                            if (isRecording) {
+                                stopRecordingUI()
+                            }
                         }
                     }
                     override fun onResults(results: Bundle?) {
@@ -388,13 +397,10 @@ class DictationAccessibilityService : AccessibilityService() {
                 })
                 speechRecognizer?.startListening(intent)
             } else {
-                // SpeechRecognizer unavailable, run simulated transcription
-                statusText.text = "Listening..."
-                delay(3000)
+                statusText.text = "Speech Recognizer not available"
+                delay(2000)
                 if (isRecording) {
-                    val customText = repository.getSimulatedSpeech()
-                    val text = if (customText.isNotBlank()) customText else "Dictado por voz súper rápido y fluido con corrección gramatical y procesamiento inteligente de pausas."
-                    processAndPaste(text)
+                    stopRecordingUI()
                 }
             }
         }
@@ -465,19 +471,20 @@ class DictationAccessibilityService : AccessibilityService() {
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_FOCUSED,
-            AccessibilityEvent.TYPE_VIEW_CLICKED -> {
+            AccessibilityEvent.TYPE_VIEW_CLICKED,
+            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
                 val source = event.source
                 if (source != null) {
                     lastFocusedNode = source
                     
                     if (showOnlyOnInput) {
-                        val isEditable = source.isEditable || 
-                                         source.className?.contains("EditText", ignoreCase = true) == true
-                        if (isEditable) {
+                        if (isInputNode(source)) {
                             floatingView?.visibility = View.VISIBLE
                         } else {
                             if (!isRecording) {
-                                floatingView?.visibility = View.GONE
+                                val inputFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+                                floatingView?.visibility = if (isInputNode(inputFocus)) View.VISIBLE else View.GONE
                             }
                         }
                     } else {
@@ -485,16 +492,11 @@ class DictationAccessibilityService : AccessibilityService() {
                     }
                 }
             }
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
                 if (showOnlyOnInput && !isRecording) {
                     val activeFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                    val isEditable = activeFocus?.isEditable == true || 
-                                     activeFocus?.className?.contains("EditText", ignoreCase = true) == true
-                    if (!isEditable) {
-                        floatingView?.visibility = View.GONE
-                    } else {
-                        floatingView?.visibility = View.VISIBLE
-                    }
+                    floatingView?.visibility = if (isInputNode(activeFocus)) View.VISIBLE else View.GONE
                 } else if (!showOnlyOnInput) {
                     floatingView?.visibility = View.VISIBLE
                 }
