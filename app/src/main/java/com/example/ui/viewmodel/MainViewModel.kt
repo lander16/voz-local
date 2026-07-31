@@ -89,13 +89,13 @@ class MainViewModel(
     companion object {
         // Supported whisper.cpp language codes for the selector
         val LANGUAGE_OPTIONS = listOf(
-            "es" to "Español",
-            "en" to "English",
-            "fr" to "Français",
-            "de" to "Deutsch",
-            "pt" to "Português",
-            "it" to "Italiano",
-            "auto" to "Auto-detect (slower)"
+            "es" to "🇪🇸 Español",
+            "en" to "🇺🇸 English",
+            "fr" to "🇫🇷 Français",
+            "de" to "🇩🇪 Deutsch",
+            "pt" to "🇵🇹 Português",
+            "it" to "🇮🇹 Italiano",
+            "auto" to "🌐 Auto-detect (slower)"
         )
     }
 

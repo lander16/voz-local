@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -813,7 +814,7 @@ fun DictateTab(viewModel: MainViewModel) {
                     .clip(RoundedCornerShape(16.dp))
                     .background(SurfaceDark)
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
                     text = "Recognition Language",
@@ -822,35 +823,33 @@ fun DictateTab(viewModel: MainViewModel) {
                     color = TextPrimary
                 )
                 Text(
-                    text = "Setting a specific language is much faster than auto-detect.",
+                    text = "Setting a specific language avoids the ~300ms auto-detect overhead.",
                     fontSize = 11.sp,
                     color = TextSecondary
                 )
                 val currentLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
                 val languageOptions = MainViewModel.LANGUAGE_OPTIONS
 
-                Row(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(vertical = 4.dp)
                 ) {
-                    languageOptions.forEach { (code, label) ->
+                    items(languageOptions) { (code, label) ->
                         val isSelected = currentLanguage == code
                         Surface(
                             onClick = { viewModel.setLanguage(code) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             color = if (isSelected) PrimaryColor.copy(alpha = 0.2f) else BackgroundDark,
-                            border = if (isSelected) BorderStroke(1.5.dp, PrimaryColor) else null,
+                            border = if (isSelected) BorderStroke(1.5.dp, PrimaryColor) else BorderStroke(1.dp, SurfaceLightDark),
                             tonalElevation = 0.dp
                         ) {
                             Text(
                                 text = label,
-                                textAlign = TextAlign.Center,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isSelected) PrimaryColor else TextSecondary,
-                                maxLines = 1,
-                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 14.dp)
                             )
                         }
                     }
