@@ -176,12 +176,20 @@ class DictationRepository(private val context: Context) {
                         modelDao.insertModels(missingModels)
                     }
 
-                    // Update download status for existing models in database and reset stale downloading flags
+                    // Update metadata and download status for existing models in database
                     val updatedList = allModels.first()
                     for (model in updatedList) {
                         val downloaded = ModelUrls.isModelDownloaded(context, model.id)
-                        if (model.isDownloaded != downloaded || model.isDownloading) {
+                        val defaultModel = defaultModels.find { it.id == model.id }
+                        val targetSize = defaultModel?.sizeMb ?: model.sizeMb
+                        val targetName = defaultModel?.name ?: model.name
+                        val targetSpeed = defaultModel?.speedMultiplier ?: model.speedMultiplier
+
+                        if (model.isDownloaded != downloaded || model.isDownloading || model.sizeMb != targetSize || model.name != targetName) {
                             modelDao.updateModel(model.copy(
+                                name = targetName,
+                                sizeMb = targetSize,
+                                speedMultiplier = targetSpeed,
                                 isDownloaded = downloaded,
                                 isDownloading = false,
                                 downloadProgress = if (downloaded) 1.0f else 0.0f
