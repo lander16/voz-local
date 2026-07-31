@@ -33,7 +33,18 @@ class DictationRepository(private val context: Context) {
     val modelDownloader = ModelDownloader(context)
     val audioDecoder = AudioDecoder(context)
 
-    val allModels: Flow<List<DictationModel>> = modelDao.getAllModels()
+    val allModels: Flow<List<DictationModel>> = modelDao.getAllModels().map { list ->
+        list.sortedBy { model ->
+            if (model.id.startsWith("qwen")) 99 else when (model.id) {
+                "whisper_tiny" -> 1
+                "whisper_base" -> 2
+                "whisper_small" -> 3
+                "whisper_medium" -> 4
+                "whisper_large_v3_turbo" -> 5
+                else -> 10
+            }
+        }
+    }
     val allHistory: Flow<List<TranscriptionHistory>> = historyDao.getAllHistory()
     val allWords: Flow<List<DictionaryWord>> = dictionaryDao.getAllWords()
     val allStats: Flow<List<DictationStat>> = statsDao.getAllStats()
@@ -130,7 +141,7 @@ class DictationRepository(private val context: Context) {
                     DictationModel(
                         id = "whisper_large_v3_turbo",
                         name = "Whisper Large v3 Turbo (SOTA Quality)",
-                        sizeMb = 855f,  // q8_0 quantized
+                        sizeMb = 547f,  // q5_0 mobile optimized
                         accuracySpanish = 99,
                         accuracyEnglish = 99,
                         speedMultiplier = 3.5f,
