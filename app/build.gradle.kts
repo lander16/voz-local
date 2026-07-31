@@ -21,6 +21,21 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    ndk {
+      abiFilters += setOf("arm64-v8a", "x86_64")
+    }
+    externalNativeBuild {
+      cmake {
+        arguments("-DCMAKE_BUILD_TYPE=Release", "-DANDROID_STL=c++_shared")
+        cppFlags("-O3", "-ffast-math", "-fno-finite-math-only")
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path = file("src/main/jni/whisper/CMakeLists.txt")
+    }
   }
 
   signingConfigs {
