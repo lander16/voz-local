@@ -86,27 +86,23 @@ class DictationAccessibilityService : AccessibilityService() {
         val maxScreenY = (screenHeight - btnSize).coerceAtLeast(0)
         buttonScreenY = buttonScreenY.coerceIn(0, maxScreenY)
 
-        if (panel.visibility == View.VISIBLE) {
-            if (isRightSide) {
-                // Button stays pinned at buttonScreenX on screen!
-                // Panel is at x = 0 inside overlay window (screen X = buttonScreenX - offset)
-                // Button is at x = offset inside overlay window (screen X = buttonScreenX)
-                panel.translationX = 0f
-                btn.translationX = offset.toFloat()
-                params.x = buttonScreenX - offset
-            } else {
-                // Button stays pinned at buttonScreenX on screen!
-                // Button is at x = 0 inside overlay window (screen X = buttonScreenX)
-                // Panel is at x = btnSize + margin inside overlay window (screen X = buttonScreenX + btnSize + margin)
-                btn.translationX = 0f
-                panel.translationX = (btnSize + margin).toFloat()
-                params.x = buttonScreenX
-            }
-        } else {
-            // Panel is GONE: Button is at x = 0 inside overlay window (screen X = buttonScreenX)
-            btn.translationX = 0f
+        params.width = btnSize + offset
+        params.height = btnSize
+
+        if (isRightSide) {
+            // Button is on right half -> Window left edge is at (buttonScreenX - offset).
+            // Mic button is inside window at x = offset (Screen X = buttonScreenX).
+            // Panel is inside window at x = 0 (Screen X = buttonScreenX - offset).
+            params.x = buttonScreenX - offset
+            btn.translationX = offset.toFloat()
             panel.translationX = 0f
+        } else {
+            // Button is on left half -> Window left edge is at buttonScreenX.
+            // Mic button is inside window at x = 0 (Screen X = buttonScreenX).
+            // Panel is inside window at x = offset (Screen X = buttonScreenX + offset).
             params.x = buttonScreenX
+            btn.translationX = 0f
+            panel.translationX = offset.toFloat()
         }
         params.y = buttonScreenY
     }
@@ -269,7 +265,7 @@ class DictationAccessibilityService : AccessibilityService() {
         }
         panel.addView(waveLayout)
 
-        // Clear, high-visibility Stop & Transcribe Button inside panel
+        // Clear, high-visibility Stop Button inside panel
         val stopButtonBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dpToPx(6f).toFloat()
@@ -297,8 +293,8 @@ class DictationAccessibilityService : AccessibilityService() {
         rootLayout.addView(buttonContainer, FrameLayout.LayoutParams(btnSize, btnSize))
 
         val layoutParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            dpToPx(204f),
+            btnSize,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
             } else {
@@ -369,10 +365,6 @@ class DictationAccessibilityService : AccessibilityService() {
         micIcon.setColorFilter(Color.parseColor("#38BDF8"))
         bgDrawable?.setColor(Color.parseColor("#1E222A"))
         expandedPanel?.visibility = View.GONE
-        (floatingView?.layoutParams as? WindowManager.LayoutParams)?.let { params ->
-            updatePanelPositioning(params)
-            windowManager.updateViewLayout(floatingView, params)
-        }
         updateFloatingViewVisibility()
     }
 
@@ -390,10 +382,6 @@ class DictationAccessibilityService : AccessibilityService() {
             panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#EF4444"))
 
             expandedPanel?.visibility = View.VISIBLE
-            (floatingView?.layoutParams as? WindowManager.LayoutParams)?.let { params ->
-                updatePanelPositioning(params)
-                windowManager.updateViewLayout(floatingView, params)
-            }
 
             var seconds = 0
             timerJob?.cancel()
