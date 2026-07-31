@@ -20,6 +20,9 @@ interface ModelDao {
 
     @Query("UPDATE dictation_models SET isSelected = (id = :modelId)")
     suspend fun selectModel(modelId: String)
+
+    @Query("DELETE FROM dictation_models WHERE id NOT IN (:validIds)")
+    suspend fun pruneStaleModels(validIds: List<String>)
 }
 
 @Dao

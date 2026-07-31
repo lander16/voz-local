@@ -153,7 +153,11 @@ class DictationRepository(private val context: Context) {
                 if (current.isEmpty()) {
                     modelDao.insertModels(defaultModels)
                 } else {
-                    // Insert any newly added default models (e.g. qwen2.5_0.5b) for existing installations
+                    // Prune any deprecated placeholder models (e.g. whisper_es_optimized) from SQLite
+                    val validIds = defaultModels.map { it.id }
+                    modelDao.pruneStaleModels(validIds)
+
+                    // Insert any newly added default models (e.g. whisper_large_v3_turbo, qwen2.5_0.5b)
                     val currentIds = current.map { it.id }.toSet()
                     val missingModels = defaultModels.filter { it.id !in currentIds }
                     if (missingModels.isNotEmpty()) {
