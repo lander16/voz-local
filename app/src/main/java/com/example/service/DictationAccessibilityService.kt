@@ -180,13 +180,15 @@ class DictationAccessibilityService : AccessibilityService() {
             TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics).toInt()
         }
 
-        val rootLayout = FrameLayout(this)
+        val rootLayout = FrameLayout(this).apply {
+            alpha = 0.88f
+        }
         floatingView = rootLayout
 
         val bg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(Color.parseColor("#1E222A"))
-            setStroke(dpToPx(2f), Color.parseColor("#4B5563"))
+            setColor(Color.parseColor("#D91E222A")) // ~85% translucent dark background
+            setStroke(dpToPx(2f), Color.parseColor("#804B5563"))
         }
         bgDrawable = bg
 
@@ -211,7 +213,7 @@ class DictationAccessibilityService : AccessibilityService() {
         val panelBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dpToPx(16f).toFloat()
-            setColor(Color.parseColor("#0F172A")) // Slate dark
+            setColor(Color.parseColor("#E60F172A")) // ~90% translucent dark slate
             setStroke(dpToPx(1.5f), Color.parseColor("#EF4444")) // Red border
         }
         panelBgDrawable = panelBg
@@ -362,9 +364,10 @@ class DictationAccessibilityService : AccessibilityService() {
         isRecording = false
         timerJob?.cancel()
         timerJob = null
+        stopWaveformAnimation()
         micIcon.setImageResource(android.R.drawable.ic_btn_speak_now)
         micIcon.setColorFilter(Color.parseColor("#38BDF8"))
-        bgDrawable?.setColor(Color.parseColor("#1E222A"))
+        bgDrawable?.setColor(Color.parseColor("#D91E222A"))
         expandedPanel?.visibility = View.GONE
         updateFloatingViewVisibility()
     }
@@ -379,7 +382,7 @@ class DictationAccessibilityService : AccessibilityService() {
             startTimestamp = System.currentTimeMillis()
             micIcon.setColorFilter(Color.WHITE)
             micIcon.setImageResource(android.R.drawable.ic_media_pause)
-            bgDrawable?.setColor(Color.parseColor("#EF4444"))
+            bgDrawable?.setColor(Color.parseColor("#D9EF4444"))
             panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#EF4444"))
 
             expandedPanel?.visibility = View.VISIBLE
@@ -413,12 +416,16 @@ class DictationAccessibilityService : AccessibilityService() {
         } else {
             timerJob?.cancel()
             timerJob = null
-            statusText.text = "..."
+            isRecording = false
+            
+            // Indicate active transcription progress
+            statusText.text = "Transcribing..."
             panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#38BDF8"))
             micIcon.setImageResource(android.R.drawable.ic_btn_speak_now)
             micIcon.setColorFilter(Color.parseColor("#38BDF8"))
-            bgDrawable?.setColor(Color.parseColor("#1E222A"))
+            bgDrawable?.setColor(Color.parseColor("#D91E222A"))
 
+            startWaveformAnimation()
             val samples = audioRecorder.stopRecording()
 
             serviceScope.launch(Dispatchers.Default) {
@@ -427,12 +434,13 @@ class DictationAccessibilityService : AccessibilityService() {
                 val modelId = selected?.id ?: "whisper_tiny"
 
                 val rawText = repository.transcribeAudio(samples, modelId)
-                if (rawText.isNotEmpty()) {
-                    processAndPaste(rawText, selected?.name ?: "Whisper Local")
-                } else {
-                    withContext(Dispatchers.Main) {
-                        statusText.text = "..."
-                        delay(1200)
+                withContext(Dispatchers.Main) {
+                    if (rawText.isNotEmpty()) {
+                        statusText.text = "Pasting..."
+                        processAndPaste(rawText, selected?.name ?: "Whisper Local")
+                    } else {
+                        statusText.text = "No speech"
+                        delay(800)
                         stopRecordingUI()
                     }
                 }
