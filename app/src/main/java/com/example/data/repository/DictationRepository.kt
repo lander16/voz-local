@@ -86,70 +86,71 @@ class DictationRepository(private val context: Context) {
     init {
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                val defaultModels = listOf(
+                    DictationModel(
+                        id = "whisper_tiny",
+                        name = "Whisper Tiny (Multi-Language)",
+                        sizeMb = 42f,  // q8_0 quantized
+                        accuracySpanish = 72,
+                        accuracyEnglish = 79,
+                        speedMultiplier = 8.5f,
+                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_tiny"),
+                        isSelected = true
+                    ),
+                    DictationModel(
+                        id = "whisper_base",
+                        name = "Whisper Base (Standard)",
+                        sizeMb = 78f,  // q8_0 quantized
+                        accuracySpanish = 83,
+                        accuracyEnglish = 89,
+                        speedMultiplier = 5.0f,
+                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_base"),
+                        isSelected = false
+                    ),
+                    DictationModel(
+                        id = "whisper_small",
+                        name = "Whisper Small (High Precision)",
+                        sizeMb = 252f,  // q8_0 quantized
+                        accuracySpanish = 92,
+                        accuracyEnglish = 95,
+                        speedMultiplier = 2.5f,
+                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_small"),
+                        isSelected = false
+                    ),
+                    DictationModel(
+                        id = "whisper_medium",
+                        name = "Whisper Medium (Ultra Quality)",
+                        sizeMb = 823f,  // q8_0 quantized
+                        accuracySpanish = 97,
+                        accuracyEnglish = 99,
+                        speedMultiplier = 1.0f,
+                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_medium"),
+                        isSelected = false
+                    ),
+                    DictationModel(
+                        id = "whisper_es_optimized",
+                        name = "VozLocal Spanish-Specialized v2",
+                        sizeMb = 252f,  // q8_0 quantized (small model)
+                        accuracySpanish = 96,
+                        accuracyEnglish = 68,
+                        speedMultiplier = 4.2f,
+                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_es_optimized"),
+                        isSelected = false
+                    ),
+                    DictationModel(
+                        id = "qwen2.5_0.5b",
+                        name = "Qwen2.5 0.5B (AI Text Polisher)",
+                        sizeMb = 398f,  // Q4_K_M quantized
+                        accuracySpanish = 99,
+                        accuracyEnglish = 99,
+                        speedMultiplier = 12.0f,
+                        isDownloaded = ModelUrls.isModelDownloaded(context, "qwen2.5_0.5b"),
+                        isSelected = false
+                    )
+                )
+
                 val current = allModels.first()
                 if (current.isEmpty()) {
-                    val defaultModels = listOf(
-                        DictationModel(
-                            id = "whisper_tiny",
-                            name = "Whisper Tiny (Multi-Language)",
-                            sizeMb = 42f,  // q8_0 quantized
-                            accuracySpanish = 72,
-                            accuracyEnglish = 79,
-                            speedMultiplier = 8.5f,
-                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_tiny"),
-                            isSelected = true
-                        ),
-                        DictationModel(
-                            id = "whisper_base",
-                            name = "Whisper Base (Standard)",
-                            sizeMb = 78f,  // q8_0 quantized
-                            accuracySpanish = 83,
-                            accuracyEnglish = 89,
-                            speedMultiplier = 5.0f,
-                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_base"),
-                            isSelected = false
-                        ),
-                        DictationModel(
-                            id = "whisper_small",
-                            name = "Whisper Small (High Precision)",
-                            sizeMb = 252f,  // q8_0 quantized
-                            accuracySpanish = 92,
-                            accuracyEnglish = 95,
-                            speedMultiplier = 2.5f,
-                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_small"),
-                            isSelected = false
-                        ),
-                        DictationModel(
-                            id = "whisper_medium",
-                            name = "Whisper Medium (Ultra Quality)",
-                            sizeMb = 823f,  // q8_0 quantized
-                            accuracySpanish = 97,
-                            accuracyEnglish = 99,
-                            speedMultiplier = 1.0f,
-                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_medium"),
-                            isSelected = false
-                        ),
-                        DictationModel(
-                            id = "whisper_es_optimized",
-                            name = "VozLocal Spanish-Specialized v2",
-                            sizeMb = 252f,  // q8_0 quantized (small model)
-                            accuracySpanish = 96,
-                            accuracyEnglish = 68,
-                            speedMultiplier = 4.2f,
-                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_es_optimized"),
-                            isSelected = false
-                        ),
-                        DictationModel(
-                            id = "qwen2.5_0.5b",
-                            name = "Qwen2.5 0.5B (AI Text Polisher)",
-                            sizeMb = 398f,  // Q4_K_M quantized
-                            accuracySpanish = 99,
-                            accuracyEnglish = 99,
-                            speedMultiplier = 12.0f,
-                            isDownloaded = ModelUrls.isModelDownloaded(context, "qwen2.5_0.5b"),
-                            isSelected = false
-                        )
-                    )
                     modelDao.insertModels(defaultModels)
                 } else {
                     // Insert any newly added default models (e.g. qwen2.5_0.5b) for existing installations
