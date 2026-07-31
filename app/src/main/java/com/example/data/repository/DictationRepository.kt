@@ -1,21 +1,26 @@
 package com.example.data.repository
 
 import android.content.Context
+import android.net.Uri
+import android.util.Log
+import com.example.audio.AudioDecoder
 import com.example.data.local.AppDatabase
 import com.example.data.model.DictationModel
+import com.example.data.model.DictationStat
 import com.example.data.model.DictionaryWord
 import com.example.data.model.TranscriptionHistory
-import com.example.data.model.DictationStat
+import com.example.whisper.WhisperEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.UUID
+import java.util.Locale
 
-class DictationRepository(context: Context) {
+private const val TAG = "DictationRepository"
+
+class DictationRepository(private val context: Context) {
     private val database = AppDatabase.getDatabase(context)
     private val modelDao = database.modelDao()
     private val historyDao = database.historyDao()
@@ -24,13 +29,17 @@ class DictationRepository(context: Context) {
 
     private val prefs = context.getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
 
+    val whisperEngine = WhisperEngine(context)
+    val modelDownloader = ModelDownloader(context)
+    val audioDecoder = AudioDecoder(context)
+
     val allModels: Flow<List<DictationModel>> = modelDao.getAllModels()
     val allHistory: Flow<List<TranscriptionHistory>> = historyDao.getAllHistory()
     val allWords: Flow<List<DictionaryWord>> = dictionaryDao.getAllWords()
     val allStats: Flow<List<DictationStat>> = statsDao.getAllStats()
 
     fun getHistoryLimit(): Int {
-        return prefs.getInt("history_limit", -1) // -1 means Unlimited
+        return prefs.getInt("history_limit", -1)
     }
 
     fun saveHistoryLimit(limit: Int) {
@@ -45,6 +54,23 @@ class DictationRepository(context: Context) {
         prefs.edit().putBoolean("show_only_on_input", value).apply()
     }
 
+    // Language preference — "es" by default, avoids expensive auto-detection (~200-500ms)
+    fun getLanguage(): String {
+        return prefs.getString("whisper_language", "es") ?: "es"
+    }
+
+    fun saveLanguage(language: String) {
+        prefs.edit().putString("whisper_language", language).apply()
+    }
+
+    fun getUseAiPolisher(): Boolean {
+        return prefs.getBoolean("use_ai_polisher", false)
+    }
+
+    fun saveUseAiPolisher(value: Boolean) {
+        prefs.edit().putBoolean("use_ai_polisher", value).apply()
+    }
+
     suspend fun pruneHistory(limit: Int) = withContext(Dispatchers.IO) {
         if (limit > 0) {
             val currentHistory = historyDao.getAllHistory().first()
@@ -57,9 +83,7 @@ class DictationRepository(context: Context) {
         }
     }
 
-
     init {
-        // Prepopulate models asynchronously
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val current = allModels.first()
@@ -68,58 +92,80 @@ class DictationRepository(context: Context) {
                         DictationModel(
                             id = "whisper_tiny",
                             name = "Whisper Tiny (Multi-Language)",
-                            sizeMb = 75f,
+                            sizeMb = 42f,  // q8_0 quantized
                             accuracySpanish = 72,
                             accuracyEnglish = 79,
                             speedMultiplier = 8.5f,
-                            isDownloaded = true,
+                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_tiny"),
                             isSelected = true
                         ),
                         DictationModel(
                             id = "whisper_base",
                             name = "Whisper Base (Standard)",
-                            sizeMb = 140f,
+                            sizeMb = 78f,  // q8_0 quantized
                             accuracySpanish = 83,
                             accuracyEnglish = 89,
                             speedMultiplier = 5.0f,
-                            isDownloaded = false,
+                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_base"),
                             isSelected = false
                         ),
                         DictationModel(
                             id = "whisper_small",
                             name = "Whisper Small (High Precision)",
-                            sizeMb = 460f,
+                            sizeMb = 252f,  // q8_0 quantized
                             accuracySpanish = 92,
                             accuracyEnglish = 95,
                             speedMultiplier = 2.5f,
-                            isDownloaded = false,
+                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_small"),
                             isSelected = false
                         ),
                         DictationModel(
                             id = "whisper_medium",
                             name = "Whisper Medium (Ultra Quality)",
-                            sizeMb = 1500f,
+                            sizeMb = 823f,  // q8_0 quantized
                             accuracySpanish = 97,
                             accuracyEnglish = 99,
                             speedMultiplier = 1.0f,
-                            isDownloaded = false,
+                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_medium"),
                             isSelected = false
                         ),
                         DictationModel(
                             id = "whisper_es_optimized",
                             name = "VozLocal Spanish-Specialized v2",
-                            sizeMb = 210f,
+                            sizeMb = 252f,  // q8_0 quantized (small model)
                             accuracySpanish = 96,
                             accuracyEnglish = 68,
                             speedMultiplier = 4.2f,
-                            isDownloaded = false,
+                            isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_es_optimized"),
+                            isSelected = false
+                        ),
+                        DictationModel(
+                            id = "qwen2.5_0.5b",
+                            name = "Qwen2.5 0.5B (AI Text Polisher)",
+                            sizeMb = 398f,  // Q4_K_M quantized
+                            accuracySpanish = 99,
+                            accuracyEnglish = 99,
+                            speedMultiplier = 12.0f,
+                            isDownloaded = ModelUrls.isModelDownloaded(context, "qwen2.5_0.5b"),
                             isSelected = false
                         )
                     )
                     modelDao.insertModels(defaultModels)
+                } else {
+                    // Update download status for existing models in database and reset stale downloading flags
+                    for (model in current) {
+                        val downloaded = ModelUrls.isModelDownloaded(context, model.id)
+                        if (model.isDownloaded != downloaded || model.isDownloading) {
+                            modelDao.updateModel(model.copy(
+                                isDownloaded = downloaded,
+                                isDownloading = false,
+                                downloadProgress = if (downloaded) 1.0f else 0.0f
+                            ))
+                        }
+                    }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Error initializing default models", e)
             }
         }
     }
@@ -137,36 +183,32 @@ class DictationRepository(context: Context) {
         scope.launch(Dispatchers.IO) {
             try {
                 val models = allModels.first()
-                val model = models.find { it.id == modelId } ?: return@launch
+                var model = models.find { it.id == modelId } ?: return@launch
                 if (model.isDownloaded || model.isDownloading) return@launch
 
-                // Set status to downloading
-                modelDao.updateModel(model.copy(isDownloading = true, downloadProgress = 0.01f))
+                model = model.copy(isDownloading = true, downloadProgress = 0.01f)
+                modelDao.updateModel(model)
 
-                var progress = 0.05f
-                while (progress < 1.0f) {
-                    delay(300) // update every 300ms
-                    // simulate download speed based on size (larger takes a bit longer)
-                    val step = when {
-                        model.sizeMb > 1000f -> 0.04f
-                        model.sizeMb > 400f -> 0.08f
-                        else -> 0.15f
-                    }
-                    progress += step
-                    if (progress > 1.0f) progress = 1.0f
-                    val currentModel = allModels.first().find { it.id == modelId } ?: break
-                    modelDao.updateModel(currentModel.copy(downloadProgress = progress))
+                val success = modelDownloader.downloadModel(modelId) { progress ->
+                    model = model.copy(isDownloading = true, downloadProgress = progress)
+                    modelDao.updateModel(model)
                 }
 
-                val finalModel = allModels.first().find { it.id == modelId } ?: return@launch
-                modelDao.updateModel(finalModel.copy(
-                    isDownloading = false,
-                    isDownloaded = true,
-                    downloadProgress = 1.0f
-                ))
+                if (success) {
+                    modelDao.updateModel(model.copy(
+                        isDownloading = false,
+                        isDownloaded = true,
+                        downloadProgress = 1.0f
+                    ))
+                } else {
+                    modelDao.updateModel(model.copy(
+                        isDownloading = false,
+                        isDownloaded = false,
+                        downloadProgress = 0.0f
+                    ))
+                }
             } catch (e: Exception) {
-                e.printStackTrace()
-                // Reset on error
+                Log.e(TAG, "Error downloading model $modelId", e)
                 val models = allModels.first()
                 val model = models.find { it.id == modelId }
                 if (model != null) {
@@ -179,12 +221,14 @@ class DictationRepository(context: Context) {
     suspend fun deleteDownloadedModel(modelId: String) = withContext(Dispatchers.IO) {
         val models = allModels.first()
         val model = models.find { it.id == modelId } ?: return@withContext
-        // Do not delete preloaded tiny model
-        if (modelId == "whisper_tiny") return@withContext
 
-        // If the model is selected, select "whisper_tiny" instead
         if (model.isSelected) {
             modelDao.selectModel("whisper_tiny")
+        }
+
+        val file = ModelUrls.getModelFile(context, modelId)
+        if (file.exists()) {
+            file.delete()
         }
 
         modelDao.updateModel(model.copy(
@@ -192,6 +236,49 @@ class DictationRepository(context: Context) {
             downloadProgress = 0.0f,
             isDownloading = false
         ))
+    }
+
+    // Inference & Transcription Operations
+    suspend fun transcribeAudio(samples: FloatArray, modelId: String): String = withContext(Dispatchers.Default) {
+        if (samples.isEmpty()) return@withContext ""
+
+        // Ensure Whisper engine is loaded with target model
+        val loaded = whisperEngine.loadModel(modelId)
+        if (!loaded) {
+            Log.e(TAG, "Could not load Whisper model $modelId for transcription")
+            return@withContext "Model not downloaded. Please download $modelId in the Models tab first."
+        }
+
+        val language = getLanguage()
+        whisperEngine.transcribe(samples, language)
+    }
+
+    suspend fun transcribeSharedFile(
+        uri: Uri,
+        modelId: String,
+        onProgress: (Float, String) -> Unit
+    ): String = withContext(Dispatchers.Default) {
+        onProgress(0.10f, "Decoding audio file...")
+        val samples = audioDecoder.decodeToPcm16k(uri) { prog ->
+            onProgress(0.10f + prog * 0.40f, "Decoding audio file...")
+        }
+
+        if (samples.isEmpty()) {
+            return@withContext "Error: Failed to decode audio file."
+        }
+
+        onProgress(0.55f, "Loading local Whisper model...")
+        val loaded = whisperEngine.loadModel(modelId)
+        if (!loaded) {
+            return@withContext "Error: Local Whisper model $modelId is not downloaded yet. Please download it first."
+        }
+
+        onProgress(0.70f, "Running local Whisper inference...")
+        val language = getLanguage()
+        val rawResult = whisperEngine.transcribe(samples, language)
+        onProgress(0.95f, "Applying local post-processing...")
+
+        rawResult
     }
 
     // History Operations
@@ -246,7 +333,6 @@ class DictationRepository(context: Context) {
         if (applyDict) {
             val words = getWordsList()
             for (dictWord in words) {
-                // First, replace any specific phonetic / misheard variants if provided in the replacement field
                 if (dictWord.replacement.isNotBlank()) {
                     val variants = dictWord.replacement.split(",")
                     for (variant in variants) {
@@ -257,40 +343,79 @@ class DictationRepository(context: Context) {
                         }
                     }
                 }
-                // Direct case-insensitive replacement/correction of the main word itself (e.g., vozlocal to VozLocal)
                 val directRegex = Regex("(?i)\\b${Regex.escape(dictWord.word)}\\b")
                 result = result.replace(directRegex, dictWord.word)
             }
         }
 
-        // 3. Smart Punctuation & Formatting (Auto-adds pauses correction, periods, commas)
+        // 3. Smart Punctuation & Spoken Commands (Verbalized punctuation & Pause formatting)
         if (smartPunctuation) {
-            // Fix double punctuation, replace pauses markers if they exist
-            result = result.replace(Regex("\\s*,\\s*,"), ",")
-            result = result.replace(Regex("\\s*\\.\\s*\\."), "...")
-            result = result.replace(" (pausa) ", ", ")
-            result = result.replace(" (pause) ", ", ")
+            // Verbalized Punctuation - Spanish
+            result = result.replace(Regex("(?i)\\bpunto\\b"), ".")
+            result = result.replace(Regex("(?i)\\bcoma\\b"), ",")
+            result = result.replace(Regex("(?i)\\bdos puntos\\b"), ":")
+            result = result.replace(Regex("(?i)\\bsigno de (interrogacion|interrogación)\\b"), "?")
+            result = result.replace(Regex("(?i)\\bsigno de (exclamacion|exclamación)\\b"), "!")
+            result = result.replace(Regex("(?i)\\bnueva l[ií]nea\\b"), "\n")
+            result = result.replace(Regex("(?i)\\bnuevo p[aá]rrafo\\b"), "\n\n")
 
-            // Ensure spacing around punctuation
-            result = result.replace(Regex("([,.?!])([^\\s\\d])"), "$1 $2")
+            // Verbalized Punctuation - English
+            result = result.replace(Regex("(?i)\\bperiod\\b"), ".")
+            result = result.replace(Regex("(?i)\\bfull stop\\b"), ".")
+            result = result.replace(Regex("(?i)\\bcomma\\b"), ",")
+            result = result.replace(Regex("(?i)\\bcolon\\b"), ":")
+            result = result.replace(Regex("(?i)\\bquestion mark\\b"), "?")
+            result = result.replace(Regex("(?i)\\bexclamation (mark|point)\\b"), "!")
+            result = result.replace(Regex("(?i)\\bnew line\\b"), "\n")
+            result = result.replace(Regex("(?i)\\bnew paragraph\\b"), "\n\n")
+
+            // Clean spaces BEFORE punctuation: "hola ," -> "hola,"
+            result = result.replace(Regex("\\s+([,.?!:])"), "$1")
+
+            // Ensure single space AFTER punctuation if followed by a letter: "hola,mundo" -> "hola, mundo"
+            result = result.replace(Regex("([,.?!:])([^\\s\\d,.?!:])"), "$1 $2")
+
+            // Clean duplicate commas or periods
+            result = result.replace(Regex(",\\s*,"), ",")
+            result = result.replace(Regex("\\.\\s*\\.(?!\\.)"), ".")
+
+            // 3.5. Grammatical Intent & Question Detection (Spanish + English)
+            val rawSentences = result.split(Regex("(?<=[.\\n])\\s*")).toMutableList()
+            for (i in rawSentences.indices) {
+                val sentence = rawSentences[i].trim()
+                if (sentence.isEmpty() || sentence.endsWith("?") || sentence.endsWith("!")) continue
+
+                // Check Spanish Question Intent
+                val isSpanishQuestion = Regex("(?i)^\\s*([¿]|qu[eé]|cu[aá]l|cu[aá]les|qui[eé]n|qui[eé]nes|d[oó]nde|cu[aá]ndo|por\\s*qu[eé]|c[oó]mo|cu[aá]nto|cu[aá]ntos|cu[aá]nta|cu[aá]ntas|sabes|sabes\\s+si|ser[aá]|te\\s+parece|puedes|podr[ií]as|quieres|tienes|crees|te\\s+gustar[ií]a)\\b").containsMatchIn(sentence) ||
+                        Regex("(?i)\\b(verdad|cierto|no\\s+crees|o\\s+no)\\s*[.]?$").containsMatchIn(sentence)
+
+                // Check English Question Intent
+                val isEnglishQuestion = Regex("(?i)^\\s*(what|why|where|when|who|whom|whose|which|how|is|are|was|were|do|does|did|can|could|would|should|will|shall|have|has|had|am|isnt|arent|wasnt|werent|dont|doesnt|didnt|cant|couldnt|wouldnt|shouldnt|wont)\\s+(you|i|we|it|he|she|they|this|that|there)\\b").containsMatchIn(sentence) ||
+                        Regex("(?i)\\b(right|correct|is\\s+it|don't\\s+you|don't\\s+you\\s+think)\\s*[.]?$").containsMatchIn(sentence)
+
+                if (isSpanishQuestion || isEnglishQuestion) {
+                    var formatted = sentence.removeSuffix(".")
+                    if (isSpanishQuestion && !formatted.startsWith("¿")) {
+                        formatted = "¿$formatted"
+                    }
+                    rawSentences[i] = "$formatted?"
+                }
+            }
+            result = rawSentences.joinToString(" ")
         }
 
         // 4. Auto-Capitalization
         if (autoCapitalize && result.isNotEmpty()) {
-            // Capitalize first letter of string
-            result = result.substring(0, 1).uppercase() + result.substring(1)
+            // Capitalize start of string
+            result = result.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
-            // Capitalize after periods, question marks, exclamation marks
-            val sentences = result.split(Regex("(?<=[.?!])\\s+"))
-            result = sentences.joinToString(" ") { sentence ->
-                if (sentence.isNotEmpty()) {
-                    sentence.substring(0, 1).uppercase() + sentence.substring(1)
-                } else {
-                    ""
-                }
+            // Capitalize first letter after sentence ending punctuation (. ! ? ¿) or newlines
+            val pattern = Regex("([.!?¿\\n]\\s*)([a-zñáéíóú])")
+            result = pattern.replace(result) { matchResult ->
+                matchResult.groupValues[1] + matchResult.groupValues[2].uppercase()
             }
         }
 
-        result
+        result.trim()
     }
 }
