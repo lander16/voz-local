@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -774,6 +775,86 @@ fun DictateTab(viewModel: MainViewModel) {
                         modifier = Modifier.testTag("main_only_on_input_switch")
                     )
                 }
+
+                HorizontalDivider(color = BackgroundDark)
+
+                // Modifier 5: AI Post-Processing (Qwen 0.5B)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Psychology, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                        Column {
+                            Text(text = "AI Text Polisher (Qwen 0.5B)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(text = "Cleans up filler words & polishes dictation with local LLM.", fontSize = 11.sp, color = TextSecondary)
+                        }
+                    }
+                    val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
+                    Switch(
+                        checked = useAiPolisher,
+                        onCheckedChange = { viewModel.setUseAiPolisher(it) },
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
+            }
+        }
+
+        // Language Selection
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SurfaceDark)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Recognition Language",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Setting a specific language is much faster than auto-detect.",
+                    fontSize = 11.sp,
+                    color = TextSecondary
+                )
+                val currentLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
+                val languageOptions = MainViewModel.LANGUAGE_OPTIONS
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    languageOptions.forEach { (code, label) ->
+                        val isSelected = currentLanguage == code
+                        Surface(
+                            onClick = { viewModel.setLanguage(code) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (isSelected) PrimaryColor.copy(alpha = 0.2f) else BackgroundDark,
+                            border = if (isSelected) BorderStroke(1.5.dp, PrimaryColor) else null,
+                            tonalElevation = 0.dp
+                        ) {
+                            Text(
+                                text = label,
+                                textAlign = TextAlign.Center,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isSelected) PrimaryColor else TextSecondary,
+                                maxLines = 1,
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -818,7 +899,8 @@ fun ModelsTab(viewModel: MainViewModel) {
                 model = model,
                 onSelect = { viewModel.selectModel(model.id) },
                 onDownload = { viewModel.downloadModel(model.id) },
-                onDelete = { viewModel.deleteModel(model.id) }
+                onDelete = { viewModel.deleteModel(model.id) },
+                onRedownload = { viewModel.redownloadModel(model.id) }
             )
         }
 
@@ -831,7 +913,8 @@ fun ModelCard(
     model: DictationModel,
     onSelect: () -> Unit,
     onDownload: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRedownload: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -971,11 +1054,14 @@ fun ModelCard(
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (model.isDownloaded) {
-                        if (model.id != "whisper_tiny") {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             IconButton(onClick = onDelete) {
                                 Icon(
                                     imageVector = Icons.Default.DeleteOutline,
@@ -983,7 +1069,15 @@ fun ModelCard(
                                     tint = TertiaryColor
                                 )
                             }
+                            IconButton(onClick = onRedownload) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Re-download model weights",
+                                    tint = PrimaryColor
+                                )
+                            }
                         }
+
                         Button(
                             onClick = onSelect,
                             enabled = !model.isSelected,

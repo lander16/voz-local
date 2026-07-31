@@ -3,19 +3,27 @@ package com.example.ui.viewmodel
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.audio.AudioRecorder
 import com.example.data.model.DictationModel
+import com.example.data.model.DictationStat
 import com.example.data.model.DictionaryWord
 import com.example.data.model.TranscriptionHistory
-import com.example.data.model.DictationStat
 import com.example.data.repository.DictationRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.*
-import kotlin.random.Random
 
-class MainViewModel(private val repository: DictationRepository) : ViewModel() {
+private const val TAG = "MainViewModel"
+
+class MainViewModel(
+    private val context: Context,
+    private val repository: DictationRepository
+) : ViewModel() {
+
+    private val audioRecorder = AudioRecorder()
 
     // Models & Data Flows
     val modelsList: StateFlow<List<DictationModel>> = repository.allModels
@@ -75,10 +83,35 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
     val applyDictionary = MutableStateFlow(true)
     val historyLimit = MutableStateFlow(repository.getHistoryLimit())
     val showOnlyOnInput = MutableStateFlow(repository.getShowOnlyOnInput())
+    val whisperLanguage = MutableStateFlow(repository.getLanguage())
+    val useAiPolisher = MutableStateFlow(repository.getUseAiPolisher())
+
+    companion object {
+        // Supported whisper.cpp language codes for the selector
+        val LANGUAGE_OPTIONS = listOf(
+            "es" to "Español",
+            "en" to "English",
+            "fr" to "Français",
+            "de" to "Deutsch",
+            "pt" to "Português",
+            "it" to "Italiano",
+            "auto" to "Auto-detect (slower)"
+        )
+    }
 
     fun setShowOnlyOnInput(value: Boolean) {
         repository.saveShowOnlyOnInput(value)
         showOnlyOnInput.value = value
+    }
+
+    fun setLanguage(language: String) {
+        repository.saveLanguage(language)
+        whisperLanguage.value = language
+    }
+
+    fun setUseAiPolisher(value: Boolean) {
+        repository.saveUseAiPolisher(value)
+        useAiPolisher.value = value
     }
 
     fun setHistoryLimit(limit: Int) {
@@ -95,7 +128,6 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
         }
     }
 
-    private var recordJob: Job? = null
     private var timerJob: Job? = null
 
     // Dictionary Operations
@@ -128,6 +160,13 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
         }
     }
 
+    fun redownloadModel(modelId: String) {
+        viewModelScope.launch {
+            repository.deleteDownloadedModel(modelId)
+            repository.startModelDownload(modelId, viewModelScope)
+        }
+    }
+
     // History Operations
     fun deleteHistoryItem(id: Int) {
         viewModelScope.launch {
@@ -141,7 +180,7 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
         }
     }
 
-    // Main Audio Recording Simulation
+    // Real Audio Recording & Local Whisper Inference
     fun toggleRecording() {
         if (_isRecording.value) {
             stopRecordingAndTranscribe()
@@ -153,8 +192,8 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
     private fun startRecording() {
         _isRecording.value = true
         _recordDurationSec.value = 0
-        _currentLiveTranscription.value = "Listening to microphone..."
-        _liveWaveform.value = List(25) { 0.1f }
+        _currentLiveTranscription.value = "Recording mic audio (PCM 16kHz)..."
+        _liveWaveform.value = List(25) { 0.05f }
 
         // Start duration timer
         timerJob = viewModelScope.launch {
@@ -164,61 +203,54 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
             }
         }
 
-        // Generate dynamic live waveform values simulating real speech
-        recordJob = viewModelScope.launch {
-            while (isActive) {
-                delay(120)
-                val newWaves = _liveWaveform.value.toMutableList()
-                newWaves.removeAt(0)
-                // randomize waves mimicking human talking blocks and silences
-                val speakWeight = if (Random.nextFloat() > 0.3f) Random.nextFloat() * 0.8f + 0.15f else 0.05f
-                newWaves.add(speakWeight)
-                _liveWaveform.value = newWaves
-
-                // Periodically update live feedback text to resemble Whisper continuous decoding
-                val sec = _recordDurationSec.value
-                _currentLiveTranscription.value = when {
-                    sec == 0 -> "Listening for audio speech input..."
-                    sec < 3 -> "Processing voice feed..."
-                    sec < 6 -> "Procesando voz local [Model: ${selectedModel.value?.name ?: "Whisper"}]..."
-                    sec < 10 -> "Procesando voz: \"Estamos transcribiendo audio de forma completamente offline...\""
-                    else -> "Procesando voz: \"Estamos transcribiendo audio de forma completamente offline en este dispositivo local...\""
-                }
-            }
+        audioRecorder.startRecording(viewModelScope) { amplitude ->
+            val newWaves = _liveWaveform.value.toMutableList()
+            if (newWaves.size > 25) newWaves.removeAt(0)
+            newWaves.add(amplitude)
+            _liveWaveform.value = newWaves
         }
     }
 
     private fun stopRecordingAndTranscribe() {
+        if (!_isRecording.value) return
+
         timerJob?.cancel()
-        recordJob?.cancel()
         _isRecording.value = false
 
+        val samples = audioRecorder.stopRecording()
         val finalDuration = _recordDurationSec.value
-        val model = selectedModel.value ?: return
+        val model = selectedModel.value
 
-        _currentLiveTranscription.value = "Post-processing audio transcripts..."
+        if (model == null) {
+            _currentLiveTranscription.value = "Please select a model in the Models tab."
+            return
+        }
 
-        viewModelScope.launch {
-            delay(1200) // final post-processing step
+        if (samples.isEmpty()) {
+            _currentLiveTranscription.value = "No mic audio captured."
+            return
+        }
 
-            val baseSpanishText = "Hola, esta es una demostración del dictado de voz offline de VozLocal. El motor está ejecutándose directamente en este dispositivo móvil, garantizando total privacidad sin enviar datos a la nube."
-            val baseEnglishText = "Hello, this is a demonstration of VozLocal offline voice dictation. The model is running directly on this device, guaranteeing complete privacy with no cloud connections."
+        _currentLiveTranscription.value = "Running local Whisper model inference..."
 
-            val rawText = if (model.id == "whisper_es_optimized") {
-                baseSpanishText
-            } else {
-                if (Locale.getDefault().language == "es") baseSpanishText else baseEnglishText
+        viewModelScope.launch(Dispatchers.Default) {
+            val rawOutput = repository.transcribeAudio(samples, model.id)
+
+            if (rawOutput.isEmpty()) {
+                withContext(Dispatchers.Main) {
+                    _currentLiveTranscription.value = "No speech detected in recorded audio."
+                    _liveWaveform.value = emptyList()
+                }
+                return@launch
             }
 
-            // Apply Dictionary, Auto-caps and Punctuation
             val processedText = repository.postProcessText(
-                text = rawText,
+                text = rawOutput,
                 smartPunctuation = smartPunctuation.value,
                 autoCapitalize = autoCapitalization.value,
                 applyDict = applyDictionary.value
             )
 
-            // Calculate and Save statistics
             val wordCount = processedText.split(Regex("\\s+")).filter { it.isNotBlank() }.size
             val calcDuration = if (finalDuration > 0) finalDuration else 1
             val calculatedWpm = (wordCount.toFloat() / (calcDuration.toFloat() / 60f))
@@ -231,7 +263,6 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
                 )
             )
 
-            // Save to history
             repository.insertHistory(
                 TranscriptionHistory(
                     text = processedText,
@@ -241,20 +272,20 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
                 )
             )
 
-            _currentLiveTranscription.value = processedText
-            _recordDurationSec.value = 0
-            _liveWaveform.value = emptyList()
+            withContext(Dispatchers.Main) {
+                _currentLiveTranscription.value = processedText
+                _liveWaveform.value = emptyList()
+            }
         }
     }
 
-    // Shared Audio Intake & Transcription
+    // Shared Audio Intake & Asynchronous Local Transcription
     fun setSharedAudio(context: Context, uri: Uri) {
         _sharedAudioUri.value = uri
         _sharedResultText.value = ""
         _sharedProgress.value = 0f
         _sharedStatusText.value = "Audio file loaded. Select model above to transcribe."
 
-        // Fetch display name and file size
         try {
             context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
@@ -276,58 +307,27 @@ class MainViewModel(private val repository: DictationRepository) : ViewModel() {
         val model = selectedModel.value ?: return
 
         _isSharedTranscribing.value = true
-        _sharedProgress.value = 0f
+        _sharedProgress.value = 0.05f
         _sharedResultText.value = ""
+        _sharedStatusText.value = "Preparing local decoder..."
 
         viewModelScope.launch(Dispatchers.Default) {
-            val stages = listOf(
-                "Initializing audio codec reader..." to 0.15f,
-                "Reading PCM audio frames (16kHz)..." to 0.35f,
-                "Extracting voice features (Mel spectrogram)..." to 0.55f,
-                "Running Whisper local encoder-decoder passes..." to 0.80f,
-                "Refining transcription and correcting pauses..." to 0.95f
-            )
-
-            for (stage in stages) {
-                _sharedStatusText.value = stage.first
-                // Simulation delays relative to model speed multipliers
-                val delayTime = (600 / model.speedMultiplier).toLong()
-                
-                // Gradually increment progress
-                val startProg = _sharedProgress.value
-                val endProg = stage.second
-                val steps = 10
-                for (step in 1..steps) {
-                    delay(delayTime / steps)
-                    _sharedProgress.value = startProg + (endProg - startProg) * (step.toFloat() / steps)
-                }
-            }
-
-            _sharedStatusText.value = "Post-processing dictionary checks..."
-            delay(400)
-
-            // Transcribe based on context of audio file name or selected model
-            val fileNameLower = _sharedAudioName.value.lowercase()
-            val isSpanishFile = fileNameLower.contains("audio") || fileNameLower.contains("grabacion") || fileNameLower.contains("nota") || model.id == "whisper_es_optimized"
-
-            val rawOutput = if (isSpanishFile) {
-                "He completado la transcripción local del archivo compartido de audio. Esta nota grabada contenía información muy importante sobre el diseño del pipeline local del modelo, incluyendo los parámetros del corrector de pausas silenciosas y el diccionario."
-            } else {
-                "Successfully completed local transcription of the shared audio file. The voice recording discussed building a state-of-the-art offline speech architecture using localized whisper checkpoints and custom dictionary postprocessing."
+            val result = repository.transcribeSharedFile(uri, model.id) { prog, status ->
+                _sharedProgress.value = prog
+                _sharedStatusText.value = status
             }
 
             val processedResult = repository.postProcessText(
-                text = rawOutput,
+                text = result,
                 smartPunctuation = smartPunctuation.value,
                 autoCapitalize = autoCapitalization.value,
                 applyDict = applyDictionary.value
             )
 
-            // Save to history
             repository.insertHistory(
                 TranscriptionHistory(
                     text = processedResult,
-                    durationSec = 18, // simulated audio length
+                    durationSec = 0,
                     modelUsed = model.name,
                     type = "shared_file",
                     fileName = _sharedAudioName.value

@@ -6,7 +6,6 @@ import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.drawable.GradientDrawable
@@ -14,9 +13,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
-import android.speech.SpeechRecognizer
+import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
@@ -28,11 +25,14 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import com.example.R
+import com.example.VozLocalApp
+import com.example.audio.AudioRecorder
 import com.example.data.repository.DictationRepository
 import kotlinx.coroutines.*
-import java.util.Locale
+import kotlinx.coroutines.flow.first
 import kotlin.math.max
+
+private const val TAG = "DictationService"
 
 class DictationAccessibilityService : AccessibilityService() {
 
@@ -40,8 +40,9 @@ class DictationAccessibilityService : AccessibilityService() {
     private var floatingView: FrameLayout? = null
     private var isRecording = false
     private var lastFocusedNode: AccessibilityNodeInfo? = null
+    private var startTimestamp: Long = 0
 
-    private var speechRecognizer: SpeechRecognizer? = null
+    private val audioRecorder = AudioRecorder()
     private lateinit var repository: DictationRepository
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -80,7 +81,7 @@ class DictationAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
-        repository = DictationRepository(this)
+        repository = (applicationContext as VozLocalApp).repository
         val prefs = getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
         prefs.registerOnSharedPreferenceChangeListener(prefListener)
     }
@@ -89,17 +90,6 @@ class DictationAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createFloatingView()
-        initSpeechRecognizer()
-    }
-
-    private fun initSpeechRecognizer() {
-        try {
-            if (SpeechRecognizer.isRecognitionAvailable(this)) {
-                speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -110,11 +100,10 @@ class DictationAccessibilityService : AccessibilityService() {
 
         floatingView = FrameLayout(this)
 
-        // Main circle button background (Cosmic Charcoal Slate Theme)
         val bg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(Color.parseColor("#1E222A")) // Slate dark grey
-            setStroke(dpToPx(2f), Color.parseColor("#4B5563")) // accent grey border
+            setColor(Color.parseColor("#1E222A"))
+            setStroke(dpToPx(2f), Color.parseColor("#4B5563"))
         }
         bgDrawable = bg
 
@@ -124,9 +113,8 @@ class DictationAccessibilityService : AccessibilityService() {
         }
 
         micIcon = ImageView(this).apply {
-            // Use standard system microphone icon or fallback
             setImageResource(android.R.drawable.ic_btn_speak_now)
-            setColorFilter(Color.parseColor("#38BDF8")) // Beautiful sky-blue accent
+            setColorFilter(Color.parseColor("#38BDF8"))
             scaleType = ImageView.ScaleType.CENTER_INSIDE
         }
 
@@ -136,12 +124,11 @@ class DictationAccessibilityService : AccessibilityService() {
         buttonContainer.addView(micIcon, FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER))
         floatingView?.addView(buttonContainer, FrameLayout.LayoutParams(btnSize, btnSize))
 
-        // Create recording expanded panel (hidden by default)
         val panelBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dpToPx(16f).toFloat()
-            setColor(Color.parseColor("#111827")) // deep black-blue
-            setStroke(dpToPx(1.5f), Color.parseColor("#38BDF8")) // subtle blue glow
+            setColor(Color.parseColor("#111827"))
+            setStroke(dpToPx(1.5f), Color.parseColor("#38BDF8"))
         }
 
         val panel = LinearLayout(this).apply {
@@ -161,7 +148,6 @@ class DictationAccessibilityService : AccessibilityService() {
         }
         panel.addView(statusText)
 
-        // Visual Waveform Container
         waveLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL
@@ -174,7 +160,6 @@ class DictationAccessibilityService : AccessibilityService() {
             layoutParams = waveParams
         }
 
-        // Add 5 waveform bars
         for (i in 0 until 5) {
             val bar = View(this).apply {
                 val barParams = LinearLayout.LayoutParams(dpToPx(4f), dpToPx(6f)).apply {
@@ -195,7 +180,7 @@ class DictationAccessibilityService : AccessibilityService() {
         panel.addView(waveLayout)
 
         val panelParams = FrameLayout.LayoutParams(
-            dpToPx(120f),
+            dpToPx(140f),
             FrameLayout.LayoutParams.WRAP_CONTENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
@@ -203,7 +188,6 @@ class DictationAccessibilityService : AccessibilityService() {
         }
         floatingView?.addView(panel, panelParams)
 
-        // Window Layout Parameters
         val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -221,7 +205,6 @@ class DictationAccessibilityService : AccessibilityService() {
             y = 600
         }
 
-        // Add dragging functionality to the button
         buttonContainer.setOnTouchListener(object : View.OnTouchListener {
             private var initialX = 0
             private var initialY = 0
@@ -254,7 +237,6 @@ class DictationAccessibilityService : AccessibilityService() {
                     }
                     MotionEvent.ACTION_UP -> {
                         if (!isDragging) {
-                            // Click detected - toggle dictation!
                             toggleDictation()
                         }
                         return true
@@ -272,7 +254,7 @@ class DictationAccessibilityService : AccessibilityService() {
 
     private fun stopRecordingUI() {
         isRecording = false
-        micIcon.setColorFilter(Color.parseColor("#38BDF8")) // back to blue
+        micIcon.setColorFilter(Color.parseColor("#38BDF8"))
         bgDrawable?.setColor(Color.parseColor("#1E222A"))
         expandedPanel?.visibility = View.GONE
         stopWaveformAnimation()
@@ -280,17 +262,49 @@ class DictationAccessibilityService : AccessibilityService() {
 
     private fun toggleDictation() {
         if (!isRecording) {
-            // Start recording
             isRecording = true
-            micIcon.setColorFilter(Color.parseColor("#EF4444")) // Red pulsing color
-            bgDrawable?.setColor(Color.parseColor("#2D1D1F")) // dark red tint background
+            startTimestamp = System.currentTimeMillis()
+            micIcon.setColorFilter(Color.parseColor("#EF4444"))
+            bgDrawable?.setColor(Color.parseColor("#2D1D1F"))
             expandedPanel?.visibility = View.VISIBLE
+            statusText.text = "Recording audio..."
             startWaveformAnimation()
-            startSpeechRecording()
+
+            audioRecorder.startRecording(serviceScope) { amplitude ->
+                Handler(Looper.getMainLooper()).post {
+                    waveBars.forEachIndexed { index, bar ->
+                        val heightPx = TypedValue.applyDimension(
+                            TypedValue.COMPLEX_UNIT_DIP,
+                            6f + (amplitude * 24f * (1f + (index % 3) * 0.3f)),
+                            resources.displayMetrics
+                        ).toInt()
+                        val layoutParams = bar.layoutParams as LinearLayout.LayoutParams
+                        layoutParams.height = heightPx
+                        bar.layoutParams = layoutParams
+                    }
+                }
+            }
         } else {
-            // Stop recording
-            stopRecordingUI()
-            stopSpeechRecording(false)
+            statusText.text = "Whisper transcribing..."
+            val samples = audioRecorder.stopRecording()
+            stopWaveformAnimation()
+
+            serviceScope.launch(Dispatchers.Default) {
+                val models = repository.allModels.first()
+                val selected = models.find { it.isSelected } ?: models.firstOrNull()
+                val modelId = selected?.id ?: "whisper_tiny"
+
+                val rawText = repository.transcribeAudio(samples, modelId)
+                if (rawText.isNotEmpty()) {
+                    processAndPaste(rawText, selected?.name ?: "Whisper Local")
+                } else {
+                    withContext(Dispatchers.Main) {
+                        statusText.text = "No speech heard"
+                        delay(1200)
+                        stopRecordingUI()
+                    }
+                }
+            }
         }
     }
 
@@ -320,7 +334,6 @@ class DictationAccessibilityService : AccessibilityService() {
     private fun stopWaveformAnimation() {
         waveAnimator?.cancel()
         waveAnimator = null
-        // Reset bars to default height
         waveBars.forEach { bar ->
             val params = bar.layoutParams as LinearLayout.LayoutParams
             params.height = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 6f, resources.displayMetrics).toInt()
@@ -328,96 +341,9 @@ class DictationAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun startSpeechRecording() {
-        serviceScope.launch {
-            val wordsList = repository.getWordsList().map { it.word }
+    private suspend fun processAndPaste(rawText: String, modelName: String) {
+        val durationSec = ((System.currentTimeMillis() - startTimestamp) / 1000).toInt().coerceAtLeast(1)
 
-            if (speechRecognizer != null) {
-                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    // Default to Spanish, support English
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().language)
-                    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) // Request local model dictation!
-                    if (wordsList.isNotEmpty()) {
-                        val wordsArray = wordsList.toTypedArray()
-                        putExtra("android.speech.extra.BIAS_WORDS", wordsArray)
-                        putExtra("android.speech.extra.CUSTOM_VOCABULARY", wordsArray)
-                        putExtra("custom_phrases", wordsArray)
-                        putStringArrayListExtra("android.speech.extra.WORDS_LIST", ArrayList(wordsList))
-                    }
-                }
-
-                speechRecognizer?.setRecognitionListener(object : RecognitionListener {
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        statusText.text = "Listening..."
-                    }
-                    override fun onBeginningOfSpeech() {
-                        statusText.text = "Speaking..."
-                    }
-                    override fun onRmsChanged(rmsdB: Float) {
-                        // Adjust waveform heights based on actual microphone audio levels
-                        val amplitude = max(0f, rmsdB)
-                        Handler(Looper.getMainLooper()).post {
-                            waveBars.forEachIndexed { index, bar ->
-                                val heightPx = TypedValue.applyDimension(
-                                    TypedValue.COMPLEX_UNIT_DIP,
-                                    6f + (amplitude * (1f + (index % 3) * 0.5f)),
-                                    resources.displayMetrics
-                                ).toInt()
-                                val layoutParams = bar.layoutParams as LinearLayout.LayoutParams
-                                layoutParams.height = heightPx
-                                bar.layoutParams = layoutParams
-                            }
-                        }
-                    }
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-                    override fun onEndOfSpeech() {
-                        statusText.text = "Processing..."
-                    }
-                    override fun onError(error: Int) {
-                        serviceScope.launch {
-                            statusText.text = if (error == SpeechRecognizer.ERROR_NO_MATCH) "No speech heard" else "Speech error ($error)"
-                            delay(1500)
-                            if (isRecording) {
-                                stopRecordingUI()
-                            }
-                        }
-                    }
-                    override fun onResults(results: Bundle?) {
-                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        if (!matches.isNullOrEmpty()) {
-                            val originalText = matches[0]
-                            serviceScope.launch {
-                                processAndPaste(originalText)
-                            }
-                        }
-                    }
-                    override fun onPartialResults(partialResults: Bundle?) {}
-                    override fun onEvent(eventType: Int, params: Bundle?) {}
-                })
-                speechRecognizer?.startListening(intent)
-            } else {
-                statusText.text = "Speech Recognizer not available"
-                delay(2000)
-                if (isRecording) {
-                    stopRecordingUI()
-                }
-            }
-        }
-    }
-
-    private fun stopSpeechRecording(cancel: Boolean) {
-        if (speechRecognizer != null) {
-            if (cancel) {
-                speechRecognizer?.cancel()
-            } else {
-                speechRecognizer?.stopListening()
-            }
-        }
-    }
-
-    private suspend fun processAndPaste(rawText: String) {
-        // Run advanced post-processing via repository
         val processed = repository.postProcessText(
             text = rawText,
             smartPunctuation = true,
@@ -425,21 +351,17 @@ class DictationAccessibilityService : AccessibilityService() {
             applyDict = true
         )
 
-        // Log into transcription history
         repository.insertHistory(
             com.example.data.model.TranscriptionHistory(
                 text = processed,
-                durationSec = 4, // average duration
-                modelUsed = "Whisper Local (On-Device)",
+                durationSec = durationSec,
+                modelUsed = modelName,
                 type = "dictation"
             )
         )
 
-        // Paste directly to focused edit text
-        pasteTextToActiveInput(processed)
-
-        // Stop recording UI and return to idle state
         withContext(Dispatchers.Main) {
+            pasteTextToActiveInput(processed)
             stopRecordingUI()
         }
     }
@@ -447,20 +369,18 @@ class DictationAccessibilityService : AccessibilityService() {
     private fun pasteTextToActiveInput(text: String) {
         val targetNode = findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: lastFocusedNode
         if (targetNode != null) {
-            // Attempt 1: Direct SET_TEXT
             val arguments = Bundle()
             arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
             val success = targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
 
             if (!success) {
-                // Attempt 2: Clipboard paste fallback
                 try {
                     val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     val clip = ClipData.newPlainText("VozLocal Dictation", text)
                     clipboard.setPrimaryClip(clip)
                     targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
                 } catch (e: Exception) {
-                    e.printStackTrace()
+                    Log.e(TAG, "Paste failed", e)
                 }
             }
         }
@@ -476,8 +396,9 @@ class DictationAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
                 val source = event.source
                 if (source != null) {
+                    lastFocusedNode?.recycle()
                     lastFocusedNode = source
-                    
+
                     if (showOnlyOnInput) {
                         if (isInputNode(source)) {
                             floatingView?.visibility = View.VISIBLE
@@ -507,19 +428,21 @@ class DictationAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         isRecording = false
         stopWaveformAnimation()
-        stopSpeechRecording(true)
+        audioRecorder.stopRecording()
     }
 
     override fun onDestroy() {
         serviceScope.cancel()
-        speechRecognizer?.destroy()
+        @Suppress("DEPRECATION")
+        lastFocusedNode?.recycle()
+        lastFocusedNode = null
         val prefs = getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
         if (floatingView != null) {
             try {
                 windowManager.removeView(floatingView)
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e(TAG, "Error removing floating view", e)
             }
         }
         super.onDestroy()

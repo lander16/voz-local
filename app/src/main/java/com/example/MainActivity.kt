@@ -39,9 +39,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Initialize Repository and ViewModel
-        val repository = DictationRepository(this)
-        val factory = MainViewModelFactory(repository)
+        // Initialize Repository and ViewModel from Application singleton
+        val repository = (applicationContext as VozLocalApp).repository
+        val factory = MainViewModelFactory(this, repository)
         viewModel = ViewModelProvider(this, factory)[MainViewModel::class.java]
 
         // Handle possible incoming Shared Audio Intent
@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
 
         // Request audio recording permissions if not granted
         checkAndRequestAudioPermission()
+        checkOverlayPermission()
 
         setContent {
             MyApplicationTheme {
