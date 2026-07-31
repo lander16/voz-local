@@ -128,13 +128,13 @@ class DictationRepository(private val context: Context) {
                         isSelected = false
                     ),
                     DictationModel(
-                        id = "whisper_es_optimized",
-                        name = "VozLocal Spanish-Specialized v2",
-                        sizeMb = 252f,  // q8_0 quantized (small model)
-                        accuracySpanish = 96,
-                        accuracyEnglish = 68,
-                        speedMultiplier = 4.2f,
-                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_es_optimized"),
+                        id = "whisper_large_v3_turbo",
+                        name = "Whisper Large v3 Turbo (SOTA Quality)",
+                        sizeMb = 855f,  // q8_0 quantized
+                        accuracySpanish = 99,
+                        accuracyEnglish = 99,
+                        speedMultiplier = 3.5f,
+                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_large_v3_turbo"),
                         isSelected = false
                     ),
                     DictationModel(
