@@ -39,6 +39,7 @@ class DictationAccessibilityService : AccessibilityService() {
 
     private lateinit var windowManager: WindowManager
     private var floatingView: FrameLayout? = null
+    private var buttonView: FrameLayout? = null
     private var isRecording = false
     private var lastFocusedNode: AccessibilityNodeInfo? = null
     private var startTimestamp: Long = 0
@@ -56,6 +57,34 @@ class DictationAccessibilityService : AccessibilityService() {
 
     private var expandedPanel: LinearLayout? = null
     private var bgDrawable: GradientDrawable? = null
+
+    private fun updatePanelPositioning(params: WindowManager.LayoutParams) {
+        val panel = expandedPanel ?: return
+        val btn = buttonView ?: return
+        val dpToPx = { dp: Float ->
+            TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics).toInt()
+        }
+        val screenWidth = resources.displayMetrics.widthPixels
+        val btnSize = dpToPx(56f)
+        val margin = dpToPx(8f)
+
+        val isRightSide = params.x > (screenWidth / 2)
+
+        val btnParams = btn.layoutParams as FrameLayout.LayoutParams
+        val panelParams = panel.layoutParams as FrameLayout.LayoutParams
+
+        if (isRightSide) {
+            btnParams.gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            panelParams.gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            panelParams.setMargins(0, 0, btnSize + margin, 0)
+        } else {
+            btnParams.gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            panelParams.gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            panelParams.setMargins(btnSize + margin, 0, 0, 0)
+        }
+        btn.layoutParams = btnParams
+        panel.layoutParams = panelParams
+    }
 
     private fun isInputNode(node: AccessibilityNodeInfo?): Boolean {
         if (node == null) return false
@@ -219,6 +248,7 @@ class DictationAccessibilityService : AccessibilityService() {
         }
         floatingView?.addView(panel, panelParams)
 
+        buttonView = buttonContainer
         val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -235,6 +265,8 @@ class DictationAccessibilityService : AccessibilityService() {
             x = 50
             y = 600
         }
+
+        updatePanelPositioning(layoutParams)
 
         buttonContainer.setOnTouchListener(object : View.OnTouchListener {
             private var initialX = 0
@@ -262,6 +294,7 @@ class DictationAccessibilityService : AccessibilityService() {
                         if (isDragging) {
                             layoutParams.x = initialX + dx
                             layoutParams.y = initialY + dy
+                            updatePanelPositioning(layoutParams)
                             windowManager.updateViewLayout(floatingView, layoutParams)
                         }
                         return true
@@ -296,6 +329,7 @@ class DictationAccessibilityService : AccessibilityService() {
             startTimestamp = System.currentTimeMillis()
             micIcon.setColorFilter(Color.parseColor("#EF4444"))
             bgDrawable?.setColor(Color.parseColor("#2D1D1F"))
+            (floatingView?.layoutParams as? WindowManager.LayoutParams)?.let { updatePanelPositioning(it) }
             expandedPanel?.visibility = View.VISIBLE
             statusText.text = "Recording audio..."
             startWaveformAnimation()
