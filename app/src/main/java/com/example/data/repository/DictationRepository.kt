@@ -152,8 +152,16 @@ class DictationRepository(private val context: Context) {
                     )
                     modelDao.insertModels(defaultModels)
                 } else {
+                    // Insert any newly added default models (e.g. qwen2.5_0.5b) for existing installations
+                    val currentIds = current.map { it.id }.toSet()
+                    val missingModels = defaultModels.filter { it.id !in currentIds }
+                    if (missingModels.isNotEmpty()) {
+                        modelDao.insertModels(missingModels)
+                    }
+
                     // Update download status for existing models in database and reset stale downloading flags
-                    for (model in current) {
+                    val updatedList = allModels.first()
+                    for (model in updatedList) {
                         val downloaded = ModelUrls.isModelDownloaded(context, model.id)
                         if (model.isDownloaded != downloaded || model.isDownloading) {
                             modelDao.updateModel(model.copy(
