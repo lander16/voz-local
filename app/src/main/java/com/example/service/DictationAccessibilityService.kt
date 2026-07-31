@@ -59,31 +59,47 @@ class DictationAccessibilityService : AccessibilityService() {
     private var bgDrawable: GradientDrawable? = null
 
     private fun updatePanelPositioning(params: WindowManager.LayoutParams) {
+        val root = floatingView as? LinearLayout ?: return
         val panel = expandedPanel ?: return
         val btn = buttonView ?: return
         val dpToPx = { dp: Float ->
             TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics).toInt()
         }
         val screenWidth = resources.displayMetrics.widthPixels
+        val screenHeight = resources.displayMetrics.heightPixels
         val btnSize = dpToPx(56f)
+        val panelWidth = dpToPx(140f)
         val margin = dpToPx(8f)
 
         val isRightSide = params.x > (screenWidth / 2)
 
-        val btnParams = btn.layoutParams as FrameLayout.LayoutParams
-        val panelParams = panel.layoutParams as FrameLayout.LayoutParams
+        root.removeAllViews()
+
+        val btnParams = LinearLayout.LayoutParams(btnSize, btnSize)
+        val panelParams = LinearLayout.LayoutParams(panelWidth, LinearLayout.LayoutParams.WRAP_CONTENT)
 
         if (isRightSide) {
-            btnParams.gravity = Gravity.CENTER_VERTICAL or Gravity.END
-            panelParams.gravity = Gravity.CENTER_VERTICAL or Gravity.END
-            panelParams.setMargins(0, 0, btnSize + margin, 0)
+            // Button is on right side -> Panel first (to the left), Button second (on the right)
+            panelParams.rightMargin = margin
+            panelParams.leftMargin = 0
+            root.addView(panel, panelParams)
+            root.addView(btn, btnParams)
         } else {
-            btnParams.gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            panelParams.gravity = Gravity.CENTER_VERTICAL or Gravity.START
-            panelParams.setMargins(btnSize + margin, 0, 0, 0)
+            // Button is on left side -> Button first (on the left), Panel second (to the right)
+            panelParams.leftMargin = margin
+            panelParams.rightMargin = 0
+            root.addView(btn, btnParams)
+            root.addView(panel, panelParams)
         }
-        btn.layoutParams = btnParams
-        panel.layoutParams = panelParams
+
+        // Clamp window coordinates so floating view cannot be dragged off-screen
+        val totalWidth = if (panel.visibility == View.VISIBLE) btnSize + panelWidth + margin else btnSize
+        val maxX = (screenWidth - totalWidth).coerceAtLeast(0)
+        params.x = params.x.coerceIn(0, maxX)
+
+        val totalHeight = dpToPx(56f)
+        val maxY = (screenHeight - totalHeight).coerceAtLeast(0)
+        params.y = params.y.coerceIn(0, maxY)
     }
 
     private fun isInputNode(node: AccessibilityNodeInfo?): Boolean {
@@ -158,7 +174,11 @@ class DictationAccessibilityService : AccessibilityService() {
             TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics).toInt()
         }
 
-        floatingView = FrameLayout(this)
+        val rootLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        floatingView = rootLayout
 
         val bg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
@@ -171,6 +191,7 @@ class DictationAccessibilityService : AccessibilityService() {
             background = bg
             elevation = dpToPx(8f).toFloat()
         }
+        buttonView = buttonContainer
 
         micIcon = ImageView(this).apply {
             setImageResource(android.R.drawable.ic_btn_speak_now)
@@ -178,11 +199,8 @@ class DictationAccessibilityService : AccessibilityService() {
             scaleType = ImageView.ScaleType.CENTER_INSIDE
         }
 
-        val btnSize = dpToPx(56f)
         val iconSize = dpToPx(28f)
-
         buttonContainer.addView(micIcon, FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER))
-        floatingView?.addView(buttonContainer, FrameLayout.LayoutParams(btnSize, btnSize))
 
         val panelBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
@@ -239,16 +257,6 @@ class DictationAccessibilityService : AccessibilityService() {
         }
         panel.addView(waveLayout)
 
-        val panelParams = FrameLayout.LayoutParams(
-            dpToPx(140f),
-            FrameLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            bottomMargin = dpToPx(64f)
-        }
-        floatingView?.addView(panel, panelParams)
-
-        buttonView = buttonContainer
         val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -258,7 +266,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 @Suppress("DEPRECATION")
                 WindowManager.LayoutParams.TYPE_PHONE
             },
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
