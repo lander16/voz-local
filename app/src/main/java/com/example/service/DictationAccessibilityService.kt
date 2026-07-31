@@ -61,35 +61,54 @@ class DictationAccessibilityService : AccessibilityService() {
     private var bgDrawable: GradientDrawable? = null
     private var panelBgDrawable: GradientDrawable? = null
 
+    private var buttonScreenX = 50
+    private var buttonScreenY = 600
+
     private fun updatePanelPositioning(params: WindowManager.LayoutParams) {
         val panel = expandedPanel ?: return
+        val btn = buttonView ?: return
         val dpToPx = { dp: Float ->
             TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics).toInt()
         }
         val screenWidth = resources.displayMetrics.widthPixels
         val screenHeight = resources.displayMetrics.heightPixels
         val btnSize = dpToPx(56f)
-        val panelWidth = dpToPx(150f)
+        val panelWidth = dpToPx(140f)
         val margin = dpToPx(8f)
+        val offset = panelWidth + margin
 
-        val isRightSide = params.x > (screenWidth / 2)
+        val isRightSide = buttonScreenX > (screenWidth / 2)
 
-        if (isRightSide) {
-            // Button is on right half -> position panel to the LEFT of mic button
-            panel.translationX = -(panelWidth + margin).toFloat()
+        val minScreenX = if (isRightSide) offset else 0
+        val maxScreenX = if (!isRightSide) screenWidth - btnSize - offset else screenWidth - btnSize
+        buttonScreenX = buttonScreenX.coerceIn(minScreenX.coerceAtLeast(0), maxScreenX.coerceAtLeast(0))
+
+        val maxScreenY = (screenHeight - btnSize).coerceAtLeast(0)
+        buttonScreenY = buttonScreenY.coerceIn(0, maxScreenY)
+
+        if (panel.visibility == View.VISIBLE) {
+            if (isRightSide) {
+                // Button stays pinned at buttonScreenX on screen!
+                // Panel is at x = 0 inside overlay window (screen X = buttonScreenX - offset)
+                // Button is at x = offset inside overlay window (screen X = buttonScreenX)
+                panel.translationX = 0f
+                btn.translationX = offset.toFloat()
+                params.x = buttonScreenX - offset
+            } else {
+                // Button stays pinned at buttonScreenX on screen!
+                // Button is at x = 0 inside overlay window (screen X = buttonScreenX)
+                // Panel is at x = btnSize + margin inside overlay window (screen X = buttonScreenX + btnSize + margin)
+                btn.translationX = 0f
+                panel.translationX = (btnSize + margin).toFloat()
+                params.x = buttonScreenX
+            }
         } else {
-            // Button is on left half -> position panel to the RIGHT of mic button
-            panel.translationX = (btnSize + margin).toFloat()
+            // Panel is GONE: Button is at x = 0 inside overlay window (screen X = buttonScreenX)
+            btn.translationX = 0f
+            panel.translationX = 0f
+            params.x = buttonScreenX
         }
-
-        // Clamp params.x and params.y strictly so mic button position is NEVER mutated when clicking/toggling.
-        val minX = if (isRightSide) panelWidth + margin else 0
-        val maxX = if (!isRightSide) screenWidth - btnSize - panelWidth - margin else screenWidth - btnSize
-
-        params.x = params.x.coerceIn(minX.coerceAtLeast(0), maxX.coerceAtLeast(0))
-
-        val maxY = (screenHeight - btnSize).coerceAtLeast(0)
-        params.y = params.y.coerceIn(0, maxY)
+        params.y = buttonScreenY
     }
 
     private fun isInputNode(node: AccessibilityNodeInfo?): Boolean {
@@ -188,31 +207,31 @@ class DictationAccessibilityService : AccessibilityService() {
 
         val btnSize = dpToPx(56f)
         val iconSize = dpToPx(28f)
-        val panelWidth = dpToPx(150f)
+        val panelWidth = dpToPx(140f)
 
         buttonContainer.addView(micIcon, FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER))
 
         val panelBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dpToPx(16f).toFloat()
-            setColor(Color.parseColor("#0F172A")) // Dark slate
-            setStroke(dpToPx(1.5f), Color.parseColor("#EF4444")) // Crimson border
+            setColor(Color.parseColor("#0F172A")) // Slate dark
+            setStroke(dpToPx(1.5f), Color.parseColor("#EF4444")) // Red border
         }
         panelBgDrawable = panelBg
 
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = panelBg
-            setPadding(dpToPx(12f), dpToPx(10f), dpToPx(12f), dpToPx(10f))
+            setPadding(dpToPx(10f), dpToPx(8f), dpToPx(10f), dpToPx(8f))
             visibility = View.GONE
             gravity = Gravity.CENTER_HORIZONTAL
         }
         expandedPanel = panel
 
         statusText = TextView(this).apply {
-            text = "🔴 Recording (00:00)"
+            text = "00:00"
             setTextColor(Color.parseColor("#F8FAFC"))
-            textSize = 12f
+            textSize = 13f
             setTypeface(null, Typeface.BOLD)
             gravity = Gravity.CENTER
         }
@@ -223,19 +242,19 @@ class DictationAccessibilityService : AccessibilityService() {
             gravity = Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL
             val waveParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-                dpToPx(20f)
+                dpToPx(18f)
             ).apply {
-                topMargin = dpToPx(6f)
-                bottomMargin = dpToPx(8f)
+                topMargin = dpToPx(4f)
+                bottomMargin = dpToPx(6f)
             }
             layoutParams = waveParams
         }
 
         for (i in 0 until 5) {
             val bar = View(this).apply {
-                val barParams = LinearLayout.LayoutParams(dpToPx(4f), dpToPx(10f)).apply {
-                    leftMargin = dpToPx(3f)
-                    rightMargin = dpToPx(3f)
+                val barParams = LinearLayout.LayoutParams(dpToPx(4f), dpToPx(6f)).apply {
+                    leftMargin = dpToPx(2.5f)
+                    rightMargin = dpToPx(2.5f)
                 }
                 layoutParams = barParams
                 val barDrawable = GradientDrawable().apply {
@@ -250,21 +269,21 @@ class DictationAccessibilityService : AccessibilityService() {
         }
         panel.addView(waveLayout)
 
-        // Clear, explicit Stop & Transcribe Button inside the panel!
+        // Clear, high-visibility Stop & Transcribe Button inside panel
         val stopButtonBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = dpToPx(8f).toFloat()
+            cornerRadius = dpToPx(6f).toFloat()
             setColor(Color.parseColor("#EF4444"))
         }
 
         val stopButton = TextView(this).apply {
-            text = "⏹ Stop & Transcribe"
+            text = "⏹ Stop"
             setTextColor(Color.WHITE)
             textSize = 11f
             setTypeface(null, Typeface.BOLD)
             gravity = Gravity.CENTER
             background = stopButtonBg
-            setPadding(dpToPx(10f), dpToPx(6f), dpToPx(10f), dpToPx(6f))
+            setPadding(dpToPx(12f), dpToPx(5f), dpToPx(12f), dpToPx(5f))
             setOnClickListener {
                 if (isRecording) {
                     toggleDictation()
@@ -290,24 +309,24 @@ class DictationAccessibilityService : AccessibilityService() {
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 50
-            y = 600
+            x = buttonScreenX
+            y = buttonScreenY
         }
 
         updatePanelPositioning(layoutParams)
 
         buttonContainer.setOnTouchListener(object : View.OnTouchListener {
-            private var initialX = 0
-            private var initialY = 0
             private var initialTouchX = 0f
             private var initialTouchY = 0f
+            private var startScreenX = 0
+            private var startScreenY = 0
             private var isDragging = false
 
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        initialX = layoutParams.x
-                        initialY = layoutParams.y
+                        startScreenX = buttonScreenX
+                        startScreenY = buttonScreenY
                         initialTouchX = event.rawX
                         initialTouchY = event.rawY
                         isDragging = false
@@ -320,8 +339,8 @@ class DictationAccessibilityService : AccessibilityService() {
                             isDragging = true
                         }
                         if (isDragging) {
-                            layoutParams.x = initialX + dx
-                            layoutParams.y = initialY + dy
+                            buttonScreenX = startScreenX + dx
+                            buttonScreenY = startScreenY + dy
                             updatePanelPositioning(layoutParams)
                             windowManager.updateViewLayout(floatingView, layoutParams)
                         }
@@ -350,7 +369,10 @@ class DictationAccessibilityService : AccessibilityService() {
         micIcon.setColorFilter(Color.parseColor("#38BDF8"))
         bgDrawable?.setColor(Color.parseColor("#1E222A"))
         expandedPanel?.visibility = View.GONE
-        stopWaveformAnimation()
+        (floatingView?.layoutParams as? WindowManager.LayoutParams)?.let { params ->
+            updatePanelPositioning(params)
+            windowManager.updateViewLayout(floatingView, params)
+        }
         updateFloatingViewVisibility()
     }
 
@@ -366,8 +388,12 @@ class DictationAccessibilityService : AccessibilityService() {
             micIcon.setImageResource(android.R.drawable.ic_media_pause)
             bgDrawable?.setColor(Color.parseColor("#EF4444"))
             panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#EF4444"))
-            (floatingView?.layoutParams as? WindowManager.LayoutParams)?.let { updatePanelPositioning(it) }
+
             expandedPanel?.visibility = View.VISIBLE
+            (floatingView?.layoutParams as? WindowManager.LayoutParams)?.let { params ->
+                updatePanelPositioning(params)
+                windowManager.updateViewLayout(floatingView, params)
+            }
 
             var seconds = 0
             timerJob?.cancel()
@@ -375,20 +401,18 @@ class DictationAccessibilityService : AccessibilityService() {
                 while (isRecording) {
                     val m = seconds / 60
                     val s = seconds % 60
-                    statusText.text = "🔴 Recording (%02d:%02d)".format(m, s)
+                    statusText.text = "%02d:%02d".format(m, s)
                     delay(1000)
                     seconds++
                 }
             }
-
-            startWaveformAnimation()
 
             audioRecorder.startRecording(serviceScope) { amplitude ->
                 Handler(Looper.getMainLooper()).post {
                     waveBars.forEachIndexed { index, bar ->
                         val heightPx = TypedValue.applyDimension(
                             TypedValue.COMPLEX_UNIT_DIP,
-                            6f + (amplitude * 24f * (1f + (index % 3) * 0.3f)),
+                            6f + (amplitude * 20f * (1f + (index % 3) * 0.2f)),
                             resources.displayMetrics
                         ).toInt()
                         val layoutParams = bar.layoutParams as LinearLayout.LayoutParams
@@ -400,14 +424,13 @@ class DictationAccessibilityService : AccessibilityService() {
         } else {
             timerJob?.cancel()
             timerJob = null
-            statusText.text = "⏳ Transcribing..."
+            statusText.text = "..."
             panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#38BDF8"))
             micIcon.setImageResource(android.R.drawable.ic_btn_speak_now)
             micIcon.setColorFilter(Color.parseColor("#38BDF8"))
             bgDrawable?.setColor(Color.parseColor("#1E222A"))
 
             val samples = audioRecorder.stopRecording()
-            stopWaveformAnimation()
 
             serviceScope.launch(Dispatchers.Default) {
                 val models = repository.allModels.first()
@@ -419,7 +442,7 @@ class DictationAccessibilityService : AccessibilityService() {
                     processAndPaste(rawText, selected?.name ?: "Whisper Local")
                 } else {
                     withContext(Dispatchers.Main) {
-                        statusText.text = "No speech heard"
+                        statusText.text = "..."
                         delay(1200)
                         stopRecordingUI()
                     }
