@@ -73,7 +73,7 @@ class DictationAccessibilityService : AccessibilityService() {
         val screenWidth = resources.displayMetrics.widthPixels
         val screenHeight = resources.displayMetrics.heightPixels
         val btnSize = dpToPx(56f)
-        val panelWidth = dpToPx(140f)
+        val panelWidth = dpToPx(80f)
         val margin = dpToPx(8f)
         val offset = panelWidth + margin
         val totalWidth = btnSize + offset
@@ -206,7 +206,7 @@ class DictationAccessibilityService : AccessibilityService() {
 
         val btnSize = dpToPx(56f)
         val iconSize = dpToPx(28f)
-        val panelWidth = dpToPx(140f)
+        val panelWidth = dpToPx(80f)
 
         buttonContainer.addView(micIcon, FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER))
 
@@ -221,7 +221,7 @@ class DictationAccessibilityService : AccessibilityService() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = panelBg
-            setPadding(dpToPx(10f), dpToPx(8f), dpToPx(10f), dpToPx(8f))
+            setPadding(dpToPx(6f), dpToPx(6f), dpToPx(6f), dpToPx(6f))
             visibility = View.GONE
             gravity = Gravity.CENTER_HORIZONTAL
         }
@@ -230,7 +230,7 @@ class DictationAccessibilityService : AccessibilityService() {
         statusText = TextView(this).apply {
             text = "00:00"
             setTextColor(Color.parseColor("#F8FAFC"))
-            textSize = 13f
+            textSize = 12f
             setTypeface(null, Typeface.BOLD)
             gravity = Gravity.CENTER
         }
@@ -241,19 +241,19 @@ class DictationAccessibilityService : AccessibilityService() {
             gravity = Gravity.CENTER_VERTICAL or Gravity.CENTER_HORIZONTAL
             val waveParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
-                dpToPx(18f)
+                dpToPx(16f)
             ).apply {
-                topMargin = dpToPx(4f)
-                bottomMargin = dpToPx(6f)
+                topMargin = dpToPx(2f)
+                bottomMargin = dpToPx(4f)
             }
             layoutParams = waveParams
         }
 
         for (i in 0 until 5) {
             val bar = View(this).apply {
-                val barParams = LinearLayout.LayoutParams(dpToPx(4f), dpToPx(6f)).apply {
-                    leftMargin = dpToPx(2.5f)
-                    rightMargin = dpToPx(2.5f)
+                val barParams = LinearLayout.LayoutParams(dpToPx(3.5f), dpToPx(6f)).apply {
+                    leftMargin = dpToPx(2f)
+                    rightMargin = dpToPx(2f)
                 }
                 layoutParams = barParams
                 val barDrawable = GradientDrawable().apply {
@@ -268,21 +268,20 @@ class DictationAccessibilityService : AccessibilityService() {
         }
         panel.addView(waveLayout)
 
-        // Clear, high-visibility Stop Button inside panel
         val stopButtonBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
-            cornerRadius = dpToPx(6f).toFloat()
+            cornerRadius = dpToPx(4f).toFloat()
             setColor(Color.parseColor("#EF4444"))
         }
 
         val stopButton = TextView(this).apply {
-            text = "⏹ Stop"
+            text = "⏹"
             setTextColor(Color.WHITE)
-            textSize = 11f
+            textSize = 10f
             setTypeface(null, Typeface.BOLD)
             gravity = Gravity.CENTER
             background = stopButtonBg
-            setPadding(dpToPx(12f), dpToPx(5f), dpToPx(12f), dpToPx(5f))
+            setPadding(dpToPx(8f), dpToPx(3f), dpToPx(8f), dpToPx(3f))
             setOnClickListener {
                 if (isRecording) {
                     toggleDictation()
@@ -296,7 +295,7 @@ class DictationAccessibilityService : AccessibilityService() {
         rootLayout.addView(buttonContainer, FrameLayout.LayoutParams(btnSize, btnSize))
 
         val layoutParams = WindowManager.LayoutParams(
-            dpToPx(204f),
+            dpToPx(144f),
             btnSize,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
@@ -385,6 +384,14 @@ class DictationAccessibilityService : AccessibilityService() {
             bgDrawable?.setColor(Color.parseColor("#D9EF4444"))
             panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#EF4444"))
 
+            statusText.visibility = View.VISIBLE
+            statusText.text = "00:00"
+            stopWaveformAnimation()
+
+            waveBars.forEach { bar ->
+                (bar.background as? GradientDrawable)?.setColor(Color.parseColor("#EF4444"))
+            }
+
             expandedPanel?.visibility = View.VISIBLE
 
             var seconds = 0
@@ -404,7 +411,7 @@ class DictationAccessibilityService : AccessibilityService() {
                     waveBars.forEachIndexed { index, bar ->
                         val heightPx = TypedValue.applyDimension(
                             TypedValue.COMPLEX_UNIT_DIP,
-                            6f + (amplitude * 20f * (1f + (index % 3) * 0.2f)),
+                            6f + (amplitude * 18f * (1f + (index % 3) * 0.2f)),
                             resources.displayMetrics
                         ).toInt()
                         val layoutParams = bar.layoutParams as LinearLayout.LayoutParams
@@ -418,12 +425,16 @@ class DictationAccessibilityService : AccessibilityService() {
             timerJob = null
             isRecording = false
             
-            // Indicate active transcription progress
-            statusText.text = "Transcribing..."
+            // Purely visual processing state (NO text words!)
+            statusText.visibility = View.GONE
             panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#38BDF8"))
             micIcon.setImageResource(android.R.drawable.ic_btn_speak_now)
             micIcon.setColorFilter(Color.parseColor("#38BDF8"))
             bgDrawable?.setColor(Color.parseColor("#D91E222A"))
+
+            waveBars.forEach { bar ->
+                (bar.background as? GradientDrawable)?.setColor(Color.parseColor("#38BDF8"))
+            }
 
             startWaveformAnimation()
             val samples = audioRecorder.stopRecording()
@@ -436,11 +447,8 @@ class DictationAccessibilityService : AccessibilityService() {
                 val rawText = repository.transcribeAudio(samples, modelId)
                 withContext(Dispatchers.Main) {
                     if (rawText.isNotEmpty()) {
-                        statusText.text = "Pasting..."
                         processAndPaste(rawText, selected?.name ?: "Whisper Local")
                     } else {
-                        statusText.text = "No speech"
-                        delay(800)
                         stopRecordingUI()
                     }
                 }
