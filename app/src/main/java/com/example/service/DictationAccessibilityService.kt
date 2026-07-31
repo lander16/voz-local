@@ -87,28 +87,23 @@ class DictationAccessibilityService : AccessibilityService() {
         val maxY = (screenHeight - btnSize).coerceAtLeast(0)
         buttonScreenY = buttonScreenY.coerceIn(0, maxY)
 
-        if (panel.visibility == View.VISIBLE) {
-            params.width = totalWidth
-            params.height = btnSize
+        params.width = totalWidth
+        params.height = btnSize
 
-            if (isRightSide) {
-                // Right half of screen -> Open panel to the LEFT of mic button
-                params.x = buttonScreenX - offset
-                panel.translationX = 0f
-                btn.translationX = offset.toFloat()
-            } else {
-                // Left half of screen -> Open panel to the RIGHT of mic button
-                params.x = buttonScreenX
-                btn.translationX = 0f
-                panel.translationX = (btnSize + margin).toFloat()
-            }
+        if (isRightSide) {
+            // Button on right side: Window left edge is at (buttonScreenX - offset).
+            // Mic button is at offset inside window (Screen X = buttonScreenX).
+            // Panel is at 0 inside window (Screen X = buttonScreenX - offset).
+            params.x = buttonScreenX - offset
+            panel.translationX = 0f
+            btn.translationX = offset.toFloat()
         } else {
-            // Panel hidden: overlay window is just the mic button, zero offset during drag
-            params.width = btnSize
-            params.height = btnSize
+            // Button on left side: Window left edge is at buttonScreenX.
+            // Mic button is at 0 inside window (Screen X = buttonScreenX).
+            // Panel is at (btnSize + margin) inside window (Screen X = buttonScreenX + btnSize + margin).
             params.x = buttonScreenX
             btn.translationX = 0f
-            panel.translationX = 0f
+            panel.translationX = (btnSize + margin).toFloat()
         }
         params.y = buttonScreenY
     }
@@ -299,7 +294,7 @@ class DictationAccessibilityService : AccessibilityService() {
         rootLayout.addView(buttonContainer, FrameLayout.LayoutParams(btnSize, btnSize))
 
         val layoutParams = WindowManager.LayoutParams(
-            btnSize,
+            dpToPx(204f),
             btnSize,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
@@ -371,10 +366,6 @@ class DictationAccessibilityService : AccessibilityService() {
         micIcon.setColorFilter(Color.parseColor("#38BDF8"))
         bgDrawable?.setColor(Color.parseColor("#1E222A"))
         expandedPanel?.visibility = View.GONE
-        (floatingView?.layoutParams as? WindowManager.LayoutParams)?.let { params ->
-            updatePanelPositioning(params)
-            windowManager.updateViewLayout(floatingView, params)
-        }
         updateFloatingViewVisibility()
     }
 
@@ -392,10 +383,6 @@ class DictationAccessibilityService : AccessibilityService() {
             panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#EF4444"))
 
             expandedPanel?.visibility = View.VISIBLE
-            (floatingView?.layoutParams as? WindowManager.LayoutParams)?.let { params ->
-                updatePanelPositioning(params)
-                windowManager.updateViewLayout(floatingView, params)
-            }
 
             var seconds = 0
             timerJob?.cancel()
