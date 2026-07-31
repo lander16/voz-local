@@ -38,7 +38,7 @@ private const val TAG = "DictationService"
 class DictationAccessibilityService : AccessibilityService() {
 
     private lateinit var windowManager: WindowManager
-    private var floatingView: FrameLayout? = null
+    private var floatingView: LinearLayout? = null
     private var buttonView: FrameLayout? = null
     private var isRecording = false
     private var lastFocusedNode: AccessibilityNodeInfo? = null
