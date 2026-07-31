@@ -21,6 +21,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -67,15 +68,45 @@ class DictationAccessibilityService : AccessibilityService() {
                className.contains("SearchView", ignoreCase = true)
     }
 
+    private fun isKeyboardVisible(): Boolean {
+        return try {
+            val activeWindows = windows
+            if (activeWindows != null) {
+                for (window in activeWindows) {
+                    if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
+                        return true
+                    }
+                }
+            }
+            false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    private fun updateFloatingViewVisibility() {
+        if (isRecording) {
+            floatingView?.visibility = View.VISIBLE
+            return
+        }
+
+        val showOnlyOnInput = repository.getShowOnlyOnInput()
+        if (!showOnlyOnInput) {
+            floatingView?.visibility = View.VISIBLE
+            return
+        }
+
+        val keyboardOpen = isKeyboardVisible()
+        val activeFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: lastFocusedNode
+        val isEditing = isInputNode(activeFocus)
+
+        // Only show floating button when the soft keyboard is open AND a text field is active
+        floatingView?.visibility = if (keyboardOpen && isEditing) View.VISIBLE else View.GONE
+    }
+
     private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "show_only_on_input") {
-            val showOnlyOnInput = repository.getShowOnlyOnInput()
-            if (!showOnlyOnInput) {
-                floatingView?.visibility = View.VISIBLE
-            } else if (!isRecording) {
-                val activeFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: lastFocusedNode
-                floatingView?.visibility = if (isInputNode(activeFocus)) View.VISIBLE else View.GONE
-            }
+            updateFloatingViewVisibility()
         }
     }
 
@@ -246,9 +277,7 @@ class DictationAccessibilityService : AccessibilityService() {
             }
         })
 
-        val showOnlyOnInput = repository.getShowOnlyOnInput()
-        floatingView?.visibility = if (showOnlyOnInput) View.GONE else View.VISIBLE
-
+        updateFloatingViewVisibility()
         windowManager.addView(floatingView, layoutParams)
     }
 
@@ -258,6 +287,7 @@ class DictationAccessibilityService : AccessibilityService() {
         bgDrawable?.setColor(Color.parseColor("#1E222A"))
         expandedPanel?.visibility = View.GONE
         stopWaveformAnimation()
+        updateFloatingViewVisibility()
     }
 
     private fun toggleDictation() {
@@ -387,42 +417,13 @@ class DictationAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        val showOnlyOnInput = repository.getShowOnlyOnInput()
-
-        when (event.eventType) {
-            AccessibilityEvent.TYPE_VIEW_FOCUSED,
-            AccessibilityEvent.TYPE_VIEW_CLICKED,
-            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED,
-            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
-                val source = event.source
-                if (source != null) {
-                    lastFocusedNode?.recycle()
-                    lastFocusedNode = source
-
-                    if (showOnlyOnInput) {
-                        if (isInputNode(source)) {
-                            floatingView?.visibility = View.VISIBLE
-                        } else {
-                            if (!isRecording) {
-                                val inputFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                                floatingView?.visibility = if (isInputNode(inputFocus)) View.VISIBLE else View.GONE
-                            }
-                        }
-                    } else {
-                        floatingView?.visibility = View.VISIBLE
-                    }
-                }
-            }
-            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
-                if (showOnlyOnInput && !isRecording) {
-                    val activeFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-                    floatingView?.visibility = if (isInputNode(activeFocus)) View.VISIBLE else View.GONE
-                } else if (!showOnlyOnInput) {
-                    floatingView?.visibility = View.VISIBLE
-                }
-            }
+        val source = event.source
+        if (source != null && isInputNode(source)) {
+            lastFocusedNode?.recycle()
+            lastFocusedNode = source
         }
+
+        updateFloatingViewVisibility()
     }
 
     override fun onInterrupt() {
