@@ -32,7 +32,7 @@ private val LightColorScheme = lightColorScheme(
     tertiary = TertiaryColor,
     background = Color(0xFFF8FAFC), // beautiful slate-light
     surface = Color.White,
-    onPrimary = Color.White,
+    onPrimary = Color(0xFF0F172A), // dark slate contrast over sky blue
     onSecondary = Color.White,
     onTertiary = Color.White,
     onBackground = Color(0xFF0F172A),
@@ -40,6 +40,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = Color(0xFFF1F5F9),
     onSurfaceVariant = Color(0xFF475569)
 )
+
 
 @Composable
 fun MyApplicationTheme(

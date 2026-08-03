@@ -13,6 +13,8 @@ val SurfaceLightDark = Color(0xFF1E293B)   // Secondary card slate
 
 val TextPrimary = Color(0xFFF8FAFC)        // Slate Off-White
 val TextSecondary = Color(0xFF94A3B8)      // Slate Grey
+val TextMuted = Color(0xFF64748B)          // Medium Slate Grey (High-contrast captions)
 
 val AccentGlow = Color(0x1F38BDF8)         // Glow Sky Blue
 val RecordingGlow = Color(0x1FF43F5E)      // Glow active Red
+

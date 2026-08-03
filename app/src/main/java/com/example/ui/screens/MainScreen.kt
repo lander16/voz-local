@@ -22,7 +22,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Launch
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -37,10 +41,15 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +65,23 @@ import com.example.ui.theme.*
 import com.example.ui.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+
+/** Custom Compose modifier for subtle, responsive tactile press feedback */
+@Composable
+fun Modifier.pressScale(): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow),
+        label = "press_scale"
+    )
+    return this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
+}
+
 
 enum class Tab {
     DICTATE, STATS, MODELS, DICTIONARY, HISTORY, SHARED
@@ -82,7 +108,6 @@ fun MainScreen(
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     var hasMicPermission by remember { mutableStateOf(false) }
     var hasAccessibilityEnabled by remember { mutableStateOf(false) }
-    var hasOverlayPermission by remember { mutableStateOf(false) }
     var bypassSetup by remember { mutableStateOf(false) }
 
     fun checkAllPermissions() {
@@ -95,12 +120,6 @@ fun MainScreen(
             context,
             com.example.service.DictationAccessibilityService::class.java
         )
-
-        hasOverlayPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            android.provider.Settings.canDrawOverlays(context)
-        } else {
-            true
-        }
     }
 
     // Check permissions on start and whenever the app resumes
@@ -122,13 +141,13 @@ fun MainScreen(
     ) { isGranted ->
         hasMicPermission = isGranted
         if (isGranted) {
-            Toast.makeText(context, "Microphone permission granted!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Microphone permission granted", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "Microphone permission is required for voice dictation.", Toast.LENGTH_LONG).show()
         }
     }
 
-    val isSetupComplete = hasMicPermission && hasAccessibilityEnabled && hasOverlayPermission
+    val isSetupComplete = hasMicPermission && hasAccessibilityEnabled
     val showSetupWizard = !isSetupComplete && !bypassSetup
 
     if (showSetupWizard) {
@@ -136,7 +155,6 @@ fun MainScreen(
             viewModel = viewModel,
             hasMicPermission = hasMicPermission,
             hasAccessibilityEnabled = hasAccessibilityEnabled,
-            hasOverlayPermission = hasOverlayPermission,
             onRequestMicPermission = {
                 micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
             },
@@ -149,27 +167,13 @@ fun MainScreen(
                     Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
                 }
             },
-            onEnableOverlay = {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                    try {
-                        val intent = Intent(
-                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:${context.packageName}")
-                        )
-                        context.startActivity(intent)
-                        Toast.makeText(context, "Enable 'Display over other apps' for VozLocal", Toast.LENGTH_LONG).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(context, "Could not open Overlay settings", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            },
             onSkip = {
                 bypassSetup = true
-                Toast.makeText(context, "Welcome! You can configure permissions later in settings.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "You can configure permissions in settings later", Toast.LENGTH_SHORT).show()
             },
             onDone = {
                 bypassSetup = true
-                Toast.makeText(context, "Setup completed successfully! Enjoy VozLocal!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Setup completed successfully", Toast.LENGTH_SHORT).show()
             }
         )
     } else {
@@ -314,6 +318,7 @@ fun MainScreen(
 @Composable
 fun DictateTab(viewModel: MainViewModel) {
     val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val recordDurationSec by viewModel.recordDurationSec.collectAsStateWithLifecycle()
     val liveWaveform by viewModel.liveWaveform.collectAsStateWithLifecycle()
@@ -341,7 +346,7 @@ fun DictateTab(viewModel: MainViewModel) {
                     .fillMaxWidth()
                     .testTag("accessibility_card"),
                 colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(24.dp),
                 border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(SecondaryColor.copy(alpha = 0.5f), Color.Transparent)))
             ) {
                 Column(
@@ -353,7 +358,7 @@ fun DictateTab(viewModel: MainViewModel) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Launch,
+                            imageVector = Icons.AutoMirrored.Filled.Launch,
                             contentDescription = null,
                             tint = PrimaryColor,
                             modifier = Modifier.size(20.dp)
@@ -383,7 +388,9 @@ fun DictateTab(viewModel: MainViewModel) {
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
                         shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.align(Alignment.End)
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .pressScale()
                     ) {
                         Text(
                             text = "Enable Floating Button",
@@ -498,10 +505,8 @@ fun DictateTab(viewModel: MainViewModel) {
                             IconButton(
                                 onClick = {
                                     try {
-                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        val clip = android.content.ClipData.newPlainText("VozLocal Transcription", liveText)
-                                        clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                        clipboardManager.setText(AnnotatedString(liveText))
+                                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
                                     } catch (e: Exception) {
                                         e.printStackTrace()
                                     }
@@ -646,197 +651,203 @@ fun DictateTab(viewModel: MainViewModel) {
                         val sec = recordDurationSec % 60
                         String.format(Locale.US, "RECORDING  %02d:%02d", min, sec)
                     } else {
-                        "TAP TO DICTATE"
+                        "Start Dictating"
                     },
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 12.sp,
                     letterSpacing = 1.5.sp,
-                    color = if (isRecording) TertiaryColor else PrimaryColor
+                    color = if (isRecording) TertiaryColor else PrimaryColor,
+                    style = Typography.labelSmall.withTabularNumbers(),
+                    modifier = Modifier.semantics {
+                        liveRegion = LiveRegionMode.Polite
+                        val min = recordDurationSec / 60
+                        val sec = recordDurationSec % 60
+                        contentDescription = if (isRecording) {
+                            "Recording in progress: $min minutes $sec seconds"
+                        } else {
+                            "Start dictating"
+                        }
+                    }
                 )
             }
         }
 
         // Post-Processing Modifiers Configuration
         item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(SurfaceDark)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(24.dp)
             ) {
-                Text(
-                    text = "Local Post-Processing Filters",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = TextPrimary
-                )
-
-                // Modifier 1: Smart Punctuation
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                        Column {
-                            Text(text = "Smart Pause Correction", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(text = "Fuses long speech pauses into logical punctuation.", fontSize = 11.sp, color = TextSecondary)
-                        }
-                    }
-                    Switch(
-                        checked = smartPunctuation,
-                        onCheckedChange = { viewModel.smartPunctuation.value = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    Text(
+                        text = "Local Post-Processing Filters",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        color = TextPrimary
                     )
-                }
 
-                HorizontalDivider(color = BackgroundDark)
-
-                // Modifier 2: Auto capitalization
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                    // Modifier 1: Smart Punctuation
                     Row(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(imageVector = Icons.Default.FormatSize, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                        Column {
-                            Text(text = "Auto-Capitalization", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(text = "Starts sentences with uppercase automatically.", fontSize = 11.sp, color = TextSecondary)
-                        }
-                    }
-                    Switch(
-                        checked = autoCapitalization,
-                        onCheckedChange = { viewModel.autoCapitalization.value = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
-                    )
-                }
-
-                HorizontalDivider(color = BackgroundDark)
-
-                // Modifier 3: Dictionary replacements
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.BookmarkBorder, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                        Column {
-                            Text(text = "Apply Local Dictionary", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(text = "Corrects common misspellings with custom words.", fontSize = 11.sp, color = TextSecondary)
-                        }
-                    }
-                    Switch(
-                        checked = applyDictionary,
-                        onCheckedChange = { viewModel.applyDictionary.value = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
-                    )
-                }
-
-                HorizontalDivider(color = BackgroundDark)
-
-                // Modifier 4: Show only on text input
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Visibility, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                        Column {
-                            Text(text = "Smart Overlay Button", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(text = "Only show floating button when clicking text fields.", fontSize = 11.sp, color = TextSecondary)
-                        }
-                    }
-                    val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
-                    Switch(
-                        checked = showOnlyOnInput,
-                        onCheckedChange = { viewModel.setShowOnlyOnInput(it) },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor),
-                        modifier = Modifier.testTag("main_only_on_input_switch")
-                    )
-                }
-
-                HorizontalDivider(color = BackgroundDark)
-
-                // Modifier 5: AI Post-Processing (Qwen 0.5B)
-                val modelsList by viewModel.modelsList.collectAsStateWithLifecycle()
-                val qwenModel = modelsList.find { it.id == "qwen2.5_0.5b" }
-                val isQwenDownloaded = qwenModel?.isDownloaded == true
-                val isQwenDownloading = qwenModel?.isDownloading == true
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Psychology, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(text = "AI Text Polisher (Qwen 0.5B)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(text = "Cleans up filler words & polishes dictation with local LLM.", fontSize = 11.sp, color = TextSecondary)
-                            
-                            Surface(
-                                onClick = {
-                                    if (!isQwenDownloaded && !isQwenDownloading) {
-                                        viewModel.downloadModel("qwen2.5_0.5b")
-                                    }
-                                },
-                                shape = RoundedCornerShape(6.dp),
-                                color = when {
-                                    isQwenDownloaded -> PrimaryColor.copy(alpha = 0.15f)
-                                    isQwenDownloading -> SecondaryColor.copy(alpha = 0.15f)
-                                    else -> TertiaryColor.copy(alpha = 0.15f)
-                                }
-                            ) {
-                                Text(
-                                    text = when {
-                                        isQwenDownloaded -> "🟢 Model Ready (398 MB)"
-                                        isQwenDownloading -> "⏳ Downloading... ${(qwenModel?.downloadProgress?.times(100))?.toInt()}%"
-                                        else -> "⚠️ Not downloaded — Tap to download (398 MB)"
-                                    },
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = when {
-                                        isQwenDownloaded -> PrimaryColor
-                                        isQwenDownloading -> SecondaryColor
-                                        else -> TertiaryColor
-                                    },
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                            Column {
+                                Text(text = "Smart Pause Correction", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(text = "Fuses long speech pauses into logical punctuation.", fontSize = 11.sp, color = TextSecondary)
                             }
                         }
+                        Switch(
+                            checked = smartPunctuation,
+                            onCheckedChange = { viewModel.smartPunctuation.value = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                        )
                     }
-                    val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
-                    Switch(
-                        checked = useAiPolisher,
-                        onCheckedChange = { viewModel.setUseAiPolisher(it) },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
-                    )
+
+                    // Modifier 2: Auto capitalization
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.FormatSize, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                            Column {
+                                Text(text = "Auto-Capitalization", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(text = "Starts sentences with uppercase automatically.", fontSize = 11.sp, color = TextSecondary)
+                            }
+                        }
+                        Switch(
+                            checked = autoCapitalization,
+                            onCheckedChange = { viewModel.autoCapitalization.value = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                        )
+                    }
+
+                    // Modifier 3: Dictionary replacements
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.BookmarkBorder, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                            Column {
+                                Text(text = "Apply Local Dictionary", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(text = "Corrects common misspellings with custom words.", fontSize = 11.sp, color = TextSecondary)
+                            }
+                        }
+                        Switch(
+                            checked = applyDictionary,
+                            onCheckedChange = { viewModel.applyDictionary.value = it },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                        )
+                    }
+
+                    // Modifier 4: Show only on text input
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Visibility, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                            Column {
+                                Text(text = "Smart Overlay Button", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(text = "Only show floating button when clicking text fields.", fontSize = 11.sp, color = TextSecondary)
+                            }
+                        }
+                        val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
+                        Switch(
+                            checked = showOnlyOnInput,
+                            onCheckedChange = { viewModel.setShowOnlyOnInput(it) },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor),
+                            modifier = Modifier.testTag("main_only_on_input_switch")
+                        )
+                    }
+
+                    // Modifier 5: AI Post-Processing (Qwen 0.5B)
+                    val modelsList by viewModel.modelsList.collectAsStateWithLifecycle()
+                    val qwenModel = modelsList.find { it.id == "qwen2.5_0.5b" }
+                    val isQwenDownloaded = qwenModel?.isDownloaded == true
+                    val isQwenDownloading = qwenModel?.isDownloading == true
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Psychology, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(text = "AI Text Polisher (Qwen 0.5B)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(text = "Cleans up filler words & polishes dictation with local LLM.", fontSize = 11.sp, color = TextSecondary)
+                                
+                                Surface(
+                                    onClick = {
+                                        if (!isQwenDownloaded && !isQwenDownloading) {
+                                            viewModel.downloadModel("qwen2.5_0.5b")
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = when {
+                                        isQwenDownloaded -> PrimaryColor.copy(alpha = 0.15f)
+                                        isQwenDownloading -> SecondaryColor.copy(alpha = 0.15f)
+                                        else -> TertiaryColor.copy(alpha = 0.15f)
+                                    },
+                                    modifier = Modifier.pressScale()
+                                ) {
+                                    Text(
+                                        text = when {
+                                            isQwenDownloaded -> "Model Ready (398 MB)"
+                                            isQwenDownloading -> "Downloading... ${(qwenModel?.downloadProgress?.times(100))?.toInt()}%"
+                                            else -> "Download Model (398 MB)"
+                                        },
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = when {
+                                            isQwenDownloaded -> PrimaryColor
+                                            isQwenDownloading -> SecondaryColor
+                                            else -> TertiaryColor
+                                        },
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                        val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
+                        Switch(
+                            checked = useAiPolisher,
+                            onCheckedChange = { viewModel.setUseAiPolisher(it) },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                        )
+                    }
                 }
             }
         }
@@ -1120,10 +1131,12 @@ fun ModelCard(
                                 disabledContainerColor = SurfaceLightDark
                             ),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(36.dp)
+                            modifier = Modifier
+                                .height(36.dp)
+                                .pressScale()
                         ) {
                             Text(
-                                text = if (model.isSelected) "ACTIVE" else "ACTIVATE",
+                                text = if (model.isSelected) "Active" else "Activate",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = if (model.isSelected) TextSecondary else Color.Black
@@ -1134,7 +1147,9 @@ fun ModelCard(
                             onClick = onDownload,
                             colors = ButtonDefaults.buttonColors(containerColor = SecondaryColor),
                             shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier.height(36.dp)
+                            modifier = Modifier
+                                .height(36.dp)
+                                .pressScale()
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -1147,7 +1162,7 @@ fun ModelCard(
                                     tint = Color.White
                                 )
                                 Text(
-                                    text = "DOWNLOAD MODEL",
+                                    text = "Download Model",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color.White
@@ -1419,9 +1434,10 @@ fun HistoryTab(viewModel: MainViewModel) {
                 if (history.isNotEmpty()) {
                     TextButton(
                         onClick = { viewModel.clearHistory() },
-                        colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor)
+                        colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor),
+                        modifier = Modifier.pressScale()
                     ) {
-                        Text(text = "CLEAR ALL", fontWeight = FontWeight.Bold)
+                        Text(text = "Clear History", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1571,7 +1587,9 @@ fun HistoryCard(
                     }
                 }
 
-                Row {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     IconButton(onClick = onDelete) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
@@ -2151,7 +2169,7 @@ fun StatsTab(viewModel: MainViewModel) {
                         }
 
                         Icon(
-                            imageVector = Icons.Default.TrendingUp,
+                            imageVector = Icons.AutoMirrored.Filled.TrendingUp,
                             contentDescription = null,
                             tint = PrimaryColor
                         )
@@ -2296,14 +2314,15 @@ fun StatsTab(viewModel: MainViewModel) {
             item {
                 TextButton(
                     onClick = { viewModel.clearStats() },
-                    colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor)
+                    colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor),
+                    modifier = Modifier.pressScale()
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Text(text = "RESET ALL STATISTICS", fontWeight = FontWeight.Bold)
+                        Text(text = "Reset Statistics", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -2319,10 +2338,8 @@ fun SetupWizardScreen(
     viewModel: MainViewModel,
     hasMicPermission: Boolean,
     hasAccessibilityEnabled: Boolean,
-    hasOverlayPermission: Boolean,
     onRequestMicPermission: () -> Unit,
     onEnableAccessibility: () -> Unit,
-    onEnableOverlay: () -> Unit,
     onSkip: () -> Unit,
     onDone: () -> Unit
 ) {
@@ -2393,19 +2410,9 @@ fun SetupWizardScreen(
             testTag = "setup_step_accessibility"
         )
         
-        // Step 3: Draw Over Other Apps
-        SetupStepCard(
-            title = "3. Display Over Other Apps",
-            description = "Allows the floating dictation widget to be rendered on top of other applications.",
-            isGranted = hasOverlayPermission,
-            buttonText = "Allow Draw Over Apps",
-            onAction = onEnableOverlay,
-            testTag = "setup_step_overlay"
-        )
-        
         Spacer(modifier = Modifier.height(16.dp))
         
-        if (hasMicPermission && hasAccessibilityEnabled && hasOverlayPermission) {
+        if (hasMicPermission && hasAccessibilityEnabled) {
             // Configuration Card
             Card(
                 modifier = Modifier
@@ -2481,6 +2488,7 @@ fun SetupWizardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp)
+                    .pressScale()
                     .testTag("setup_done_button")
             ) {
                 Row(
@@ -2488,7 +2496,7 @@ fun SetupWizardScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color.Black)
-                    Text("START USING VOZLOCAL", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp)
+                    Text("Start Using VozLocal", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp)
                 }
             }
         } else {

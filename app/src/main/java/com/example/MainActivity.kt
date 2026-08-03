@@ -29,9 +29,9 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
-            Toast.makeText(this, "Microphone access granted for dictation!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Microphone access granted.", Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, "Microphone access denied. You will not be able to dictate voice.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Microphone access denied. Voice dictation will be unavailable.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -49,7 +49,6 @@ class MainActivity : ComponentActivity() {
 
         // Request audio recording permissions if not granted
         checkAndRequestAudioPermission()
-        checkOverlayPermission()
 
         setContent {
             MyApplicationTheme {
@@ -92,20 +91,6 @@ class MainActivity : ComponentActivity() {
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
-    }
-
-    private fun checkOverlayPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(this)) {
-                // Gentle toast explaining overlay permission requirement
-                Toast.makeText(this, "Enable 'Display over other apps' to use the floating dictation button!", Toast.LENGTH_LONG).show()
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-                startActivity(intent)
-            }
         }
     }
 }
