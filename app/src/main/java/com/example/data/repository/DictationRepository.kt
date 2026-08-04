@@ -19,6 +19,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
+import androidx.core.content.edit
+
 private const val TAG = "DictationRepository"
 
 class DictationRepository(private val context: Context) {
@@ -55,7 +57,7 @@ class DictationRepository(private val context: Context) {
     }
 
     fun saveHistoryLimit(limit: Int) {
-        prefs.edit().putInt("history_limit", limit).apply()
+        prefs.edit { putInt("history_limit", limit) }
     }
 
     fun getShowOnlyOnInput(): Boolean {
@@ -63,7 +65,7 @@ class DictationRepository(private val context: Context) {
     }
 
     fun saveShowOnlyOnInput(value: Boolean) {
-        prefs.edit().putBoolean("show_only_on_input", value).apply()
+        prefs.edit { putBoolean("show_only_on_input", value) }
     }
 
     // Language preference — "es" by default, avoids expensive auto-detection (~200-500ms)
@@ -72,7 +74,7 @@ class DictationRepository(private val context: Context) {
     }
 
     fun saveLanguage(language: String) {
-        prefs.edit().putString("whisper_language", language).apply()
+        prefs.edit { putString("whisper_language", language) }
     }
 
     fun getUseAiPolisher(): Boolean {
@@ -80,7 +82,7 @@ class DictationRepository(private val context: Context) {
     }
 
     fun saveUseAiPolisher(value: Boolean) {
-        prefs.edit().putBoolean("use_ai_polisher", value).apply()
+        prefs.edit { putBoolean("use_ai_polisher", value) }
     }
 
     suspend fun pruneHistory(limit: Int) = withContext(Dispatchers.IO) {
