@@ -44,6 +44,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
@@ -148,6 +149,10 @@ fun MainScreen(
     val isSetupComplete = hasMicPermission && hasAccessibilityEnabled
     val showSetupWizard = !isSetupComplete && !bypassSetup
 
+    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val coroutineScope = rememberCoroutineScope()
+    var showSettingsSheet by remember { mutableStateOf(false) }
+
     if (showSetupWizard) {
         SetupWizardScreen(
             viewModel = viewModel,
@@ -175,79 +180,180 @@ fun MainScreen(
             }
         )
     } else {
-        Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            drawerContent = {
+                ModalDrawerSheet(
+                    drawerContainerColor = SurfaceDark,
+                    drawerContentColor = TextPrimary,
+                    modifier = Modifier.width(300.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(36.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Brush.linearGradient(listOf(PrimaryColor, SecondaryColor)))
-                                .padding(6.dp),
-                            contentAlignment = Alignment.Center
+                        // Drawer Header
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Hearing,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(24.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Brush.linearGradient(listOf(PrimaryColor, SecondaryColor))),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Hearing,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "VozLocal AI",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 20.sp,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "On-Device Dictation Studio",
+                                    fontSize = 12.sp,
+                                    color = TextSecondary
+                                )
+                            }
                         }
-                        Text(
-                            text = "VozLocal",
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 22.sp,
-                            color = TextPrimary,
-                            letterSpacing = 0.5.sp
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .background(PrimaryColor.copy(alpha = 0.15f), RoundedCornerShape(100.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
+
+                        HorizontalDivider(color = GlassBorder)
+
+                        // Navigation Items
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "OFFLINE",
-                                color = PrimaryColor,
-                                fontSize = 10.sp,
+                                text = "STUDIO WORKSPACE",
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp
+                                color = TextMuted,
+                                letterSpacing = 1.sp,
+                                modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
                             )
+
+                            val drawerItems = listOf(
+                                Triple(Tab.DICTATE, "Live Dictate", Icons.Default.Mic),
+                                Triple(Tab.MODELS, "AI Speech Models", Icons.Default.CloudDownload),
+                                Triple(Tab.SHARED, "Shared Audio File", Icons.Default.AudioFile),
+                                Triple(Tab.DICTIONARY, "Custom Dictionary", Icons.Default.Book),
+                                Triple(Tab.STATS, "Statistics & Analytics", Icons.Default.BarChart),
+                                Triple(Tab.HISTORY, "Transcription History", Icons.Default.History)
+                            )
+
+                            drawerItems.forEach { (tab, label, icon) ->
+                                val selected = activeTab == tab
+                                NavigationDrawerItem(
+                                    icon = { Icon(imageVector = icon, contentDescription = null, tint = if (selected) Color.White else TextSecondary) },
+                                    label = { Text(text = label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 14.sp) },
+                                    selected = selected,
+                                    onClick = {
+                                        activeTab = tab
+                                        coroutineScope.launch { drawerState.close() }
+                                    },
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor = PrimaryColor,
+                                        selectedTextColor = Color.White,
+                                        unselectedContainerColor = Color.Transparent,
+                                        unselectedTextColor = TextSecondary
+                                    ),
+                                    shape = RoundedCornerShape(12.dp),
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                )
+                            }
                         }
-                    }
-                },
-                actions = {
-                    var showSettings by remember { mutableStateOf(false) }
-                    IconButton(
-                        onClick = { showSettings = true },
-                        modifier = Modifier.testTag("settings_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Open App Settings",
-                            tint = TextPrimary
+
+                        HorizontalDivider(color = GlassBorder)
+
+                        // Preferences & Settings Action
+                        NavigationDrawerItem(
+                            icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = TextPrimary) },
+                            label = { Text(text = "App Settings & Preferences", fontWeight = FontWeight.Bold, fontSize = 14.sp) },
+                            selected = false,
+                            onClick = {
+                                coroutineScope.launch { drawerState.close() }
+                                showSettingsSheet = true
+                            },
+                            colors = NavigationDrawerItemDefaults.colors(
+                                unselectedContainerColor = SurfaceCard,
+                                unselectedTextColor = TextPrimary
+                            ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.heightIn(min = 48.dp)
                         )
                     }
-                    if (showSettings) {
-                        SettingsDialog(viewModel = viewModel, onDismiss = { showSettings = false })
-                    }
+                }
+            }
+        ) {
+            Scaffold(
+                modifier = Modifier.fillMaxSize(),
+                topBar = {
+                    TopAppBar(
+                        navigationIcon = {
+                            IconButton(
+                                onClick = { coroutineScope.launch { drawerState.open() } },
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Menu,
+                                    contentDescription = "Open Drawer Menu",
+                                    tint = TextPrimary
+                                )
+                            }
+                        },
+                        title = {
+                            val titleText = when (activeTab) {
+                                Tab.DICTATE -> "Live Dictate"
+                                Tab.MODELS -> "AI Speech Models"
+                                Tab.DICTIONARY -> "Custom Dictionary"
+                                Tab.HISTORY -> "Transcription History"
+                                Tab.SHARED -> "Shared Audio File"
+                                Tab.STATS -> "Statistics & Analytics"
+                            }
+                            Text(
+                                text = titleText,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 19.sp,
+                                color = TextPrimary
+                            )
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = { showSettingsSheet = true },
+                                modifier = Modifier
+                                    .testTag("settings_button")
+                                    .heightIn(min = 48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Open App Settings",
+                                    tint = TextPrimary
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = BackgroundDark,
+                            titleContentColor = TextPrimary
+                        )
+                    )
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = BackgroundDark,
-                    titleContentColor = TextPrimary
-                )
-            )
-        },
-        bottomBar = {
-            NavigationBar(
-                containerColor = SurfaceDark,
-                tonalElevation = 8.dp,
+                bottomBar = {
+                    NavigationBar(
+                        containerColor = SurfaceDark,
+                        tonalElevation = 8.dp,
                 windowInsets = WindowInsets.navigationBars
             ) {
                 val tabs = listOf(
@@ -308,6 +414,11 @@ fun MainScreen(
                 Tab.SHARED -> SharedAudioTab(viewModel)
             }
         }
+    }
+    }
+
+    if (showSettingsSheet) {
+        SettingsSheet(viewModel = viewModel, onDismiss = { showSettingsSheet = false })
     }
 }
 }
@@ -1948,203 +2059,400 @@ fun SharedAudioTab(viewModel: MainViewModel) {
     }
 }
 
-// ==================== SETTINGS DIALOG ====================
+// ==================== SETTINGS MODAL SHEET ====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsDialog(
+fun SettingsSheet(
     viewModel: MainViewModel,
     onDismiss: () -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val historyLimit by viewModel.historyLimit.collectAsStateWithLifecycle()
     val smartPunctuation by viewModel.smartPunctuation.collectAsStateWithLifecycle()
     val autoCapitalization by viewModel.autoCapitalization.collectAsStateWithLifecycle()
     val applyDictionary by viewModel.applyDictionary.collectAsStateWithLifecycle()
+    val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
+    val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
+    val whisperLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = {
+        sheetState = sheetState,
+        containerColor = SurfaceDark,
+        contentColor = TextPrimary,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(vertical = 12.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(100.dp))
+                    .background(GlassBorder)
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 32.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            // Header Title
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(PrimaryColor.copy(alpha = 0.15f)),
-                    contentAlignment = Alignment.Center
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(PrimaryColor.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = null,
+                            tint = PrimaryColor,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "VozLocal Preferences",
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "On-Device Engine & System Customization",
+                            fontSize = 12.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.heightIn(min = 48.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = null,
-                        tint = PrimaryColor,
-                        modifier = Modifier.size(18.dp)
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close Settings",
+                        tint = TextSecondary
                     )
                 }
-                Text(
-                    text = "VozLocal Settings",
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 18.sp,
-                    color = TextPrimary
-                )
             }
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                // Retention Limit Setting
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "History Retention Limit",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Configure how many recent dictation items are retained in your visible history tab.",
-                        fontSize = 11.sp,
-                        color = TextSecondary,
-                        lineHeight = 15.sp
-                    )
 
-                    // Selection buttons with M3 48dp minimum touch target
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        val options = listOf(
-                            5 to "5",
-                            10 to "10",
-                            20 to "20",
-                            50 to "50",
-                            -1 to "All"
-                        )
-                        options.forEach { (valLimit, label) ->
-                            val isSelected = historyLimit == valLimit
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isSelected) PrimaryColor else SurfaceLightDark)
-                                    .clickable { viewModel.setHistoryLimit(valLimit) },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = label,
-                                    color = if (isSelected) Color.White else TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold
+            HorizontalDivider(color = GlassBorder)
+
+            // Section 1: Audio & Transcription Language
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "TRANSCRIPTION ENGINE LANGUAGE",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = PrimaryColor,
+                    letterSpacing = 1.sp
+                )
+
+                Text(
+                    text = "Explicitly selecting your target language avoids Whisper auto-detection latency (~200ms speedup).",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    lineHeight = 18.sp
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val languageOptions = MainViewModel.LANGUAGE_OPTIONS
+                    languageOptions.forEach { (code, label) ->
+                        val isSelected = whisperLanguage == code
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) PrimaryColor.copy(alpha = 0.2f) else SurfaceCard)
+                                .border(
+                                    BorderStroke(1.dp, if (isSelected) PrimaryColor else GlassBorder),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable { viewModel.setLanguage(code) }
+                                .padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 15.sp,
+                                fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else TextPrimary
+                            )
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Selected",
+                                    tint = PrimaryColor,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
                         }
                     }
                 }
+            }
 
-                HorizontalDivider(color = GlassBorder)
+            HorizontalDivider(color = GlassBorder)
 
-                // Post-processing options mirrored inside settings
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Text Correction Filters",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = TextPrimary
+            // Section 2: Post-Processing & AI Polisher
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "TEXT POST-PROCESSING & LOCAL AI",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = PrimaryColor,
+                    letterSpacing = 1.sp
+                )
+
+                // Smart Pause
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .toggleable(
+                            value = smartPunctuation,
+                            role = Role.Switch,
+                            onValueChange = { viewModel.smartPunctuation.value = it }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Smart Pause Correction", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Fuses speech pauses into punctuation", fontSize = 13.sp, color = TextSecondary)
+                    }
+                    Switch(
+                        checked = smartPunctuation,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                     )
+                }
 
-                    // Smart pause
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .toggleable(
-                                value = smartPunctuation,
-                                role = Role.Switch,
-                                onValueChange = { viewModel.smartPunctuation.value = it }
-                            )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Smart Pause Correction", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(text = "Fuses long speech pauses", fontSize = 10.sp, color = TextSecondary)
-                        }
-                        Switch(
-                            checked = smartPunctuation,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                // Auto-Capitalization
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .toggleable(
+                            value = autoCapitalization,
+                            role = Role.Switch,
+                            onValueChange = { viewModel.autoCapitalization.value = it }
                         )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Auto-Capitalization", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Starts sentences with uppercase", fontSize = 13.sp, color = TextSecondary)
                     }
+                    Switch(
+                        checked = autoCapitalization,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
 
-                    // Auto-cap
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .toggleable(
-                                value = autoCapitalization,
-                                role = Role.Switch,
-                                onValueChange = { viewModel.autoCapitalization.value = it }
-                            )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Auto-Capitalization", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(text = "Starts sentences with uppercase", fontSize = 10.sp, color = TextSecondary)
-                        }
-                        Switch(
-                            checked = autoCapitalization,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                // Apply Dictionary
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .toggleable(
+                            value = applyDictionary,
+                            role = Role.Switch,
+                            onValueChange = { viewModel.applyDictionary.value = it }
                         )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Apply Custom Dictionary", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Auto-replaces custom vocabulary", fontSize = 13.sp, color = TextSecondary)
                     }
+                    Switch(
+                        checked = applyDictionary,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
 
-                    // Dictionary
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .toggleable(
-                                value = applyDictionary,
-                                role = Role.Switch,
-                                onValueChange = { viewModel.applyDictionary.value = it }
-                            )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Apply Local Dictionary", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Text(text = "Corrects common misspellings", fontSize = 10.sp, color = TextSecondary)
-                        }
-                        Switch(
-                            checked = applyDictionary,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                // AI Polisher
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .toggleable(
+                            value = useAiPolisher,
+                            role = Role.Switch,
+                            onValueChange = { viewModel.setUseAiPolisher(it) }
                         )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(text = "Qwen2.5 AI Text Polisher", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Box(
+                                modifier = Modifier
+                                    .background(AccentViolet.copy(alpha = 0.2f), RoundedCornerShape(100.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(text = "LLM", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = AccentViolet)
+                            }
+                        }
+                        Text(text = "Removes stutters, filler words & enhances grammar locally", fontSize = 13.sp, color = TextSecondary)
+                    }
+                    Switch(
+                        checked = useAiPolisher,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AccentViolet)
+                    )
+                }
+            }
+
+            HorizontalDivider(color = GlassBorder)
+
+            // Section 3: System Overlay Assistant
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "FLOATING ASSISTANT OVERLAY",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = PrimaryColor,
+                    letterSpacing = 1.sp
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .toggleable(
+                            value = showOnlyOnInput,
+                            role = Role.Switch,
+                            onValueChange = { viewModel.setShowOnlyOnInput(it) }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Show Only On Input Focus", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Hides floating button when no text box is focused", fontSize = 13.sp, color = TextSecondary)
+                    }
+                    Switch(
+                        checked = showOnlyOnInput,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
+            }
+
+            HorizontalDivider(color = GlassBorder)
+
+            // Section 4: History Retention Limits
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "HISTORY STORAGE RETENTION LIMIT",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = PrimaryColor,
+                    letterSpacing = 1.sp
+                )
+
+                Text(
+                    text = "Configure maximum history items retained in your local SQLite database.",
+                    fontSize = 13.sp,
+                    color = TextSecondary
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val options = listOf(
+                        5 to "5",
+                        10 to "10",
+                        20 to "20",
+                        50 to "50",
+                        -1 to "All"
+                    )
+                    options.forEach { (valLimit, label) ->
+                        val isSelected = historyLimit == valLimit
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (isSelected) PrimaryColor else SurfaceCard)
+                                .border(
+                                    BorderStroke(1.dp, if (isSelected) PrimaryColor else GlassBorder),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable { viewModel.setHistoryLimit(valLimit) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) Color.White else TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
+
+            // Confirm Done Button
+            Button(
                 onClick = onDismiss,
-                modifier = Modifier.heightIn(min = 48.dp)
+                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
             ) {
-                Text(text = "Done", color = PrimaryColor, fontWeight = FontWeight.ExtraBold)
+                Text(text = "Save Preferences", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
             }
-        },
-        containerColor = SurfaceDark,
-        shape = RoundedCornerShape(28.dp)
-    )
+        }
+    }
 }
 
 // ==================== STATS TAB ====================
