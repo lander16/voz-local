@@ -459,16 +459,17 @@ fun DictateTab(viewModel: MainViewModel) {
                             )
                             Text(
                                 text = "Global Floating Dictation",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 15.sp,
                                 color = TextPrimary
                             )
                         }
                         Text(
                             text = "Dictate directly into WhatsApp, Slack, Chrome, or Notes with our system floating overlay.",
-                            fontSize = 12.sp,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
                             color = TextSecondary,
-                            lineHeight = 16.sp
+                            lineHeight = 18.sp
                         )
                     }
 
@@ -486,13 +487,13 @@ fun DictateTab(viewModel: MainViewModel) {
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
                         shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                         modifier = Modifier.pressScale()
                     ) {
                         Text(
                             text = "Enable Overlay",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 12.sp,
                             color = Color.White
                         )
                     }
@@ -508,7 +509,7 @@ fun DictateTab(viewModel: MainViewModel) {
                     .clip(RoundedCornerShape(14.dp))
                     .background(SurfaceDark)
                     .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -518,8 +519,8 @@ fun DictateTab(viewModel: MainViewModel) {
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
                             .background(PrimaryColor.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -527,21 +528,21 @@ fun DictateTab(viewModel: MainViewModel) {
                             imageVector = Icons.Default.GraphicEq,
                             contentDescription = null,
                             tint = PrimaryColor,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                     Column {
                         Text(
                             text = "ACTIVE WHISPER MODEL",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             color = TextMuted,
-                            letterSpacing = 1.sp
+                            letterSpacing = 1.2.sp
                         )
                         Text(
                             text = selectedModel?.name ?: "No model selected",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             color = TextPrimary
                         )
                     }
@@ -549,14 +550,15 @@ fun DictateTab(viewModel: MainViewModel) {
 
                 Box(
                     modifier = Modifier
-                        .background(AccentViolet.copy(alpha = 0.2f), RoundedCornerShape(100.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .background(SurfaceCard, RoundedCornerShape(100.dp))
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(100.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
                         text = "${selectedModel?.sizeMb?.toInt() ?: 0} MB • 100% Offline",
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = AccentViolet
+                        color = TextSecondary
                     )
                 }
             }
