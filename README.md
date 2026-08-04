@@ -13,6 +13,18 @@
 
 ---
 
+## 📱 Application Screenshots
+
+| Live Dictate | AI Speech Models | Shared Audio File |
+| :---: | :---: | :---: |
+| <img src="docs/images/screen_dictate.png" width="280"/> | <img src="docs/images/screen_models.png" width="280"/> | <img src="docs/images/screen_shared.png" width="280"/> |
+
+| Transcription History | Navigation Drawer | Settings Sheet |
+| :---: | :---: | :---: |
+| <img src="docs/images/screen_history.png" width="280"/> | <img src="docs/images/screen_drawer.png" width="280"/> | <img src="docs/images/screen_settings.png" width="280"/> |
+
+---
+
 ## ✨ Key Features
 
 - 🎙️ **On-Device Speech Recognition**: Run quantized OpenAI Whisper models locally on Android hardware via JNI C++ bindings (`whisper.cpp`). No cloud APIs or subscriptions required.
