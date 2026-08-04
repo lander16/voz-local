@@ -486,12 +486,14 @@ fun DictateTab(viewModel: MainViewModel) {
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-                        modifier = Modifier.pressScale()
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .pressScale()
                     ) {
                         Text(
-                            text = "Enable Overlay",
+                            text = "Enable Assistant",
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 12.sp,
                             color = Color.White
