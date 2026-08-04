@@ -6,6 +6,7 @@ import android.util.Log
 import kotlinx.coroutines.*
 import java.io.File
 import java.io.InputStream
+import java.util.Locale
 import java.util.concurrent.Executors
 
 private const val LOG_TAG = "LibWhisper"
@@ -189,7 +190,7 @@ private fun toTimestamp(t: Long, comma: Boolean = false): String {
     msec -= sec * 1000
 
     val delimiter = if (comma) "," else "."
-    return String.format("%02d:%02d:%02d%s%03d", hr, min, sec, delimiter, msec)
+    return String.format(Locale.US, "%02d:%02d:%02d%s%03d", hr, min, sec, delimiter, msec)
 }
 
 private fun isArmEabiV7a(): Boolean {

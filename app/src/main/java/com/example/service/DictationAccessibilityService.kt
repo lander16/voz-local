@@ -7,6 +7,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
+import androidx.core.graphics.toColorInt
 import android.graphics.PixelFormat
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
@@ -187,8 +188,8 @@ class DictationAccessibilityService : AccessibilityService() {
 
         val bg = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(Color.parseColor("#D91E222A")) // ~85% translucent dark background
-            setStroke(dpToPx(2f), Color.parseColor("#804B5563"))
+            setColor("#D91E222A".toColorInt()) // ~85% translucent dark background
+            setStroke(dpToPx(2f), "#804B5563".toColorInt())
         }
         bgDrawable = bg
 
@@ -200,7 +201,7 @@ class DictationAccessibilityService : AccessibilityService() {
 
         micIcon = ImageView(this).apply {
             setImageResource(android.R.drawable.ic_btn_speak_now)
-            setColorFilter(Color.parseColor("#38BDF8"))
+            setColorFilter("#38BDF8".toColorInt())
             scaleType = ImageView.ScaleType.CENTER_INSIDE
         }
 
@@ -213,8 +214,8 @@ class DictationAccessibilityService : AccessibilityService() {
         val panelBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dpToPx(16f).toFloat()
-            setColor(Color.parseColor("#E60F172A")) // ~90% translucent dark slate
-            setStroke(dpToPx(1.5f), Color.parseColor("#EF4444")) // Red border
+            setColor("#E60F172A".toColorInt()) // ~90% translucent dark slate
+            setStroke(dpToPx(1.5f), "#EF4444".toColorInt()) // Red border
         }
         panelBgDrawable = panelBg
 
@@ -229,7 +230,7 @@ class DictationAccessibilityService : AccessibilityService() {
 
         statusText = TextView(this).apply {
             text = "00:00"
-            setTextColor(Color.parseColor("#F8FAFC"))
+            setTextColor("#F8FAFC".toColorInt())
             textSize = 12f
             setTypeface(null, Typeface.BOLD)
             gravity = Gravity.CENTER
@@ -259,7 +260,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 val barDrawable = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
                     cornerRadius = dpToPx(2f).toFloat()
-                    setColor(Color.parseColor("#EF4444"))
+                    setColor("#EF4444".toColorInt())
                 }
                 background = barDrawable
             }
@@ -271,7 +272,7 @@ class DictationAccessibilityService : AccessibilityService() {
         val stopButtonBg = GradientDrawable().apply {
             shape = GradientDrawable.RECTANGLE
             cornerRadius = dpToPx(4f).toFloat()
-            setColor(Color.parseColor("#EF4444"))
+            setColor("#EF4444".toColorInt())
         }
 
         val stopButton = TextView(this).apply {
@@ -365,8 +366,8 @@ class DictationAccessibilityService : AccessibilityService() {
         timerJob = null
         stopWaveformAnimation()
         micIcon.setImageResource(android.R.drawable.ic_btn_speak_now)
-        micIcon.setColorFilter(Color.parseColor("#38BDF8"))
-        bgDrawable?.setColor(Color.parseColor("#D91E222A"))
+        micIcon.setColorFilter("#38BDF8".toColorInt())
+        bgDrawable?.setColor("#D91E222A".toColorInt())
         expandedPanel?.visibility = View.GONE
         updateFloatingViewVisibility()
     }
@@ -381,15 +382,15 @@ class DictationAccessibilityService : AccessibilityService() {
             startTimestamp = System.currentTimeMillis()
             micIcon.setColorFilter(Color.WHITE)
             micIcon.setImageResource(android.R.drawable.ic_media_pause)
-            bgDrawable?.setColor(Color.parseColor("#D9EF4444"))
-            panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#EF4444"))
+            bgDrawable?.setColor("#D9EF4444".toColorInt())
+            panelBgDrawable?.setStroke(dpToPx(1.5f), "#EF4444".toColorInt())
 
             statusText.visibility = View.VISIBLE
             statusText.text = "00:00"
             stopWaveformAnimation()
 
             waveBars.forEach { bar ->
-                (bar.background as? GradientDrawable)?.setColor(Color.parseColor("#EF4444"))
+                (bar.background as? GradientDrawable)?.setColor("#EF4444".toColorInt())
             }
 
             expandedPanel?.visibility = View.VISIBLE
@@ -427,13 +428,13 @@ class DictationAccessibilityService : AccessibilityService() {
             
             // Purely visual processing state (NO text words!)
             statusText.visibility = View.GONE
-            panelBgDrawable?.setStroke(dpToPx(1.5f), Color.parseColor("#38BDF8"))
+            panelBgDrawable?.setStroke(dpToPx(1.5f), "#38BDF8".toColorInt())
             micIcon.setImageResource(android.R.drawable.ic_btn_speak_now)
-            micIcon.setColorFilter(Color.parseColor("#38BDF8"))
-            bgDrawable?.setColor(Color.parseColor("#D91E222A"))
+            micIcon.setColorFilter("#38BDF8".toColorInt())
+            bgDrawable?.setColor("#D91E222A".toColorInt())
 
             waveBars.forEach { bar ->
-                (bar.background as? GradientDrawable)?.setColor(Color.parseColor("#38BDF8"))
+                (bar.background as? GradientDrawable)?.setColor("#38BDF8".toColorInt())
             }
 
             startWaveformAnimation()
@@ -537,6 +538,7 @@ class DictationAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val source = event.source
         if (source != null && isInputNode(source)) {
+            @Suppress("DEPRECATION")
             lastFocusedNode?.recycle()
             lastFocusedNode = source
         }
