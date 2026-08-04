@@ -125,30 +125,6 @@ Models are downloaded on-demand from Hugging Face directly to internal app stora
 
 ---
 
-## 📸 Capturing Real Screenshots
-
-To capture actual screenshots directly from a running Android device or emulator:
-
-1. **Connect your Android device or start an emulator** via Android Studio.
-2. **Run the app** on the device:
-   ```bash
-   ./gradlew installDebug
-   ```
-3. **Capture screen images using ADB**:
-   ```bash
-   mkdir -p docs/screenshots
-   adb exec-out screencap -p > docs/screenshots/dictate_screen.png
-   ```
-4. Place the saved screenshots in `docs/screenshots/` and update the markdown links below:
-
-```markdown
-| 🎙️ Dictation Screen | 🎈 Global Floating Assistant |
-| :---: | :---: |
-| ![Dictation Screen](docs/screenshots/dictate_screen.png) | ![Floating Assistant](docs/screenshots/floating_assistant.png) |
-```
-
----
-
 ## 📱 How to Use
 
 ### 1. Initial Permissions Setup
