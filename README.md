@@ -26,7 +26,8 @@
   - **Smart Input Field Visibility**: Shows floating dictation button only when an active text field is focused.
 - 📊 **Performance Stats & Analytics**: Real-time metrics tracking dictation speed (WPM), total words dictated, estimated time saved vs. typing, and accuracy breakdown per model.
 - 💾 **Persistent Transcription History**: Built-in Room database storing past dictations and shared audio transcriptions with instant one-tap copy to clipboard.
-- 🎨 **Modern Material 3 Jetpack Compose UI**: Dynamic dark aesthetic with fluid micro-animations, canvas audio waveform visualizer, and custom press scaling.
+- 🎨 **Modern Material 3 Jetpack Compose UI**: Dynamic dark aesthetic with Material 3 Hamburger Navigation Drawer (`ModalNavigationDrawer`), Modal Settings Sheet (`SettingsSheet`), fluid micro-animations, canvas audio waveform visualizer, and custom press scaling.
+- 🇲🇽 🇧🇷 **Multi-Language Support**: Explicit language target selection (Spanish 🇲🇽, English 🇺🇸, French 🇫🇷, German 🇩🇪, Portuguese 🇧🇷, Italian 🇮🇹, Auto-detect 🌐) eliminating model language auto-detection latency.
 
 ---
 
@@ -37,8 +38,14 @@ VozLocal System Architecture
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        Jetpack Compose UI (MVVM)                       │
 │ ┌───────────────┐ ┌───────────────┐ ┌───────────────┐ ┌──────────────┐ │
-│ │  DictateTab   │ │  ModelsTab    │ │ DictionaryTab │ │  HistoryTab  │ │
+│ │  DictateTab   │ │  ModelsTab    │ │   SharedTab   │ │  HistoryTab  │ │
 │ └───────────────┘ └───────────────┘ └───────────────┘ └──────────────┘ │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │   ModalNavigationDrawer (Custom Dictionary, Stats & Analytics)     │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
+│ ┌────────────────────────────────────────────────────────────────────┐ │
+│ │     SettingsSheet (ModalBottomSheet for Language & System AI)      │ │
+│ └────────────────────────────────────────────────────────────────────┘ │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Flow / State
 ┌───────────────────────────────────▼────────────────────────────────────┐
