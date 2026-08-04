@@ -15,6 +15,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -335,47 +336,58 @@ fun DictateTab(viewModel: MainViewModel) {
             .fillMaxSize()
             .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
-        item { Spacer(modifier = Modifier.height(10.dp)) }
+        item { Spacer(modifier = Modifier.height(6.dp)) }
 
-        // Floating Dictation Onboarding Banner
+        // Hero Floating Assistant Onboarding Banner
         item {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("accessibility_card"),
                 colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                shape = RoundedCornerShape(24.dp),
-                border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(SecondaryColor.copy(alpha = 0.5f), Color.Transparent)))
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, Brush.linearGradient(listOf(PrimaryColor.copy(alpha = 0.4f), Color.Transparent)))
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.Launch,
-                            contentDescription = null,
-                            tint = PrimaryColor,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF10B981))
+                            )
+                            Text(
+                                text = "Global Floating Dictation",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = TextPrimary
+                            )
+                        }
                         Text(
-                            text = "Global Floating Assistant",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = TextPrimary
+                            text = "Dictate directly into WhatsApp, Slack, Chrome, or Notes with our system floating overlay.",
+                            fontSize = 12.sp,
+                            color = TextSecondary,
+                            lineHeight = 16.sp
                         )
                     }
-                    Text(
-                        text = "VozLocal dictation can float over ANY app (independent of your keyboard). Click below to enable our custom accessibility feature.",
-                        fontSize = 13.sp,
-                        color = TextSecondary,
-                        lineHeight = 18.sp
-                    )
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
                     Button(
                         onClick = {
                             try {
@@ -387,30 +399,30 @@ fun DictateTab(viewModel: MainViewModel) {
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .align(Alignment.End)
-                            .pressScale()
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                        modifier = Modifier.pressScale()
                     ) {
                         Text(
-                            text = "Enable Floating Button",
+                            text = "Enable Overlay",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = Color.Black
+                            fontSize = 11.sp,
+                            color = Color.White
                         )
                     }
                 }
             }
         }
 
-        // Active Model Indicator Info
+        // Active Engine Status Bar
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(RoundedCornerShape(14.dp))
                     .background(SurfaceDark)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -418,110 +430,151 @@ fun DictateTab(viewModel: MainViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.SettingsSystemDaydream, // hardware setting
-                        contentDescription = null,
-                        tint = SecondaryColor,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(PrimaryColor.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = null,
+                            tint = PrimaryColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                     Column {
                         Text(
-                            text = "Active Local Model",
-                            fontSize = 11.sp,
+                            text = "ACTIVE WHISPER MODEL",
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextSecondary
+                            color = TextMuted,
+                            letterSpacing = 1.sp
                         )
                         Text(
                             text = selectedModel?.name ?: "No model selected",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
                             color = TextPrimary
                         )
                     }
                 }
+
                 Box(
                     modifier = Modifier
-                        .background(SecondaryColor.copy(alpha = 0.2f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .background(AccentViolet.copy(alpha = 0.2f), RoundedCornerShape(100.dp))
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     Text(
-                        text = "${selectedModel?.sizeMb?.toInt() ?: 0} MB",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SecondaryColor
+                        text = "${selectedModel?.sizeMb?.toInt() ?: 0} MB • 100% Offline",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = AccentViolet
                     )
                 }
             }
         }
 
-        // Transcription Display / Feedback Box
+        // Live Transcription Output Canvas
         item {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(180.dp)
-                    .clip(RoundedCornerShape(16.dp))
+                    .height(190.dp)
+                    .clip(RoundedCornerShape(20.dp))
                     .background(SurfaceDark)
+                    .border(
+                        BorderStroke(
+                            1.dp,
+                            if (isRecording) TertiaryColor.copy(alpha = 0.6f) else GlassBorder
+                        ),
+                        RoundedCornerShape(20.dp)
+                    )
                     .padding(16.dp)
             ) {
                 if (liveText.isNotEmpty() || isRecording) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        Column(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalArrangement = Arrangement.SpaceBetween
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        // Header Stats Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = liveText,
-                                fontSize = 15.sp,
-                                color = TextPrimary,
-                                fontWeight = FontWeight.Medium,
-                                lineHeight = 22.sp,
-                                modifier = Modifier.weight(1f)
-                            )
-
-                            if (isRecording) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(TertiaryColor)
-                                    )
-                                    Text(
-                                        text = "Live Transcription Feed...",
-                                        fontSize = 11.sp,
-                                        color = TertiaryColor,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(7.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isRecording) TertiaryColor else Color(0xFF10B981))
+                                )
+                                Text(
+                                    text = if (isRecording) "LIVE TRANSCRIPTION FEED" else "DICTATION READY",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    letterSpacing = 1.sp,
+                                    color = if (isRecording) TertiaryColor else Color(0xFF10B981)
+                                )
                             }
+
+                            val wordsCount = if (liveText.isBlank()) 0 else liveText.trim().split(Regex("\\s+")).size
+                            Text(
+                                text = "$wordsCount words • ${liveText.length} chars",
+                                fontSize = 10.sp,
+                                color = TextMuted,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
 
+                        // Output Text
+                        Text(
+                            text = liveText.ifEmpty { "Listening..." },
+                            fontSize = 15.sp,
+                            color = if (liveText.isEmpty()) TextMuted else TextPrimary,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 22.sp,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .padding(vertical = 8.dp)
+                        )
+
+                        // Bottom Actions Row
                         if (!isRecording && liveText.isNotEmpty()) {
-                            IconButton(
-                                onClick = {
-                                    try {
-                                        clipboardManager.setText(AnnotatedString(liveText))
-                                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
-                                    }
-                                },
-                                modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .size(36.dp)
-                                    .testTag("copy_transcription_button")
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Copy to Clipboard",
-                                    tint = PrimaryColor,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                Button(
+                                    onClick = {
+                                        try {
+                                            clipboardManager.setText(AnnotatedString(liveText))
+                                            Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor.copy(alpha = 0.2f), contentColor = PrimaryColor),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier
+                                        .pressScale()
+                                        .testTag("copy_transcription_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ContentCopy,
+                                        contentDescription = "Copy to Clipboard",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(text = "Copy Text", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
                     }
@@ -532,37 +585,38 @@ fun DictateTab(viewModel: MainViewModel) {
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Gesture,
+                            imageVector = Icons.Default.GraphicEq,
                             contentDescription = null,
-                            tint = TextSecondary.copy(alpha = 0.4f),
-                            modifier = Modifier.size(40.dp)
+                            tint = PrimaryColor.copy(alpha = 0.4f),
+                            modifier = Modifier.size(44.dp)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Your voice dictates here locally.",
+                            text = "Tap mic button to dictate on-device",
                             fontSize = 14.sp,
-                            color = TextSecondary,
-                            fontWeight = FontWeight.Medium
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Press the mic button below to speak.",
+                            text = "Speech is processed locally in realtime with 0 latency.",
                             fontSize = 12.sp,
-                            color = TextSecondary.copy(alpha = 0.7f)
+                            color = TextMuted
                         )
                     }
                 }
             }
         }
 
-        // Live Audio Waveform (Jetpack Compose Canvas)
+        // Dynamic Waveform Audio Visualizer
         item {
             if (isRecording && liveWaveform.isNotEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
+                        .height(50.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceLightDark)
+                        .background(SurfaceDark)
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
                         .padding(horizontal = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -572,27 +626,27 @@ fun DictateTab(viewModel: MainViewModel) {
                         for (i in liveWaveform.indices) {
                             val x = i * spacing
                             val amp = liveWaveform[i]
-                            val barHeight = size.height * amp * 0.9f
+                            val barHeight = (size.height * amp * 0.95f).coerceAtLeast(4.dp.toPx())
                             drawLine(
                                 color = TertiaryColor,
                                 start = Offset(x, centerY - barHeight / 2),
                                 end = Offset(x, centerY + barHeight / 2),
-                                strokeWidth = 5.dp.toPx(),
+                                strokeWidth = 4.dp.toPx(),
                                 cap = StrokeCap.Round
                             )
                         }
                     }
                 }
             } else {
-                Spacer(modifier = Modifier.height(56.dp))
+                Spacer(modifier = Modifier.height(2.dp))
             }
         }
 
-        // Massive Pulse Voice Button
+        // Hero Pulsing Mic Button
         item {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 val infiniteTransition = rememberInfiniteTransition(label = "pulse")
                 val pulseScale by infiniteTransition.animateFloat(
@@ -606,43 +660,48 @@ fun DictateTab(viewModel: MainViewModel) {
                 )
 
                 Box(
-                    modifier = Modifier
-                        .size(100.dp)
-                        .shadow(
-                            elevation = 12.dp,
-                            shape = CircleShape,
-                            ambientColor = if (isRecording) TertiaryColor else PrimaryColor,
-                            spotColor = if (isRecording) TertiaryColor else PrimaryColor
-                        )
-                        .clip(CircleShape)
-                        .clickable { viewModel.toggleRecording() }
-                        .background(
-                            Brush.radialGradient(
-                                colors = if (isRecording) {
-                                    listOf(TertiaryColor, TertiaryColor.copy(alpha = 0.7f))
-                                } else {
-                                    listOf(PrimaryColor, PrimaryColor.copy(alpha = 0.7f))
-                                }
-                            )
-                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Pulsing Ring under the mic button
+                    // Pulsing Outer Aura Ring
                     if (isRecording) {
                         Box(
                             modifier = Modifier
-                                .fillMaxSize()
+                                .size(126.dp)
                                 .clip(CircleShape)
-                                .background(TertiaryColor.copy(alpha = 0.15f * pulseScale))
+                                .background(TertiaryColor.copy(alpha = 0.2f * pulseScale))
                         )
                     }
 
-                    Icon(
-                        imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
-                        contentDescription = "Voice dictation action button",
-                        tint = Color.Black,
-                        modifier = Modifier.size(44.dp)
-                    )
+                    // Main Button Core
+                    Box(
+                        modifier = Modifier
+                            .size(100.dp)
+                            .shadow(
+                                elevation = 16.dp,
+                                shape = CircleShape,
+                                ambientColor = if (isRecording) TertiaryColor else PrimaryColor,
+                                spotColor = if (isRecording) TertiaryColor else PrimaryColor
+                            )
+                            .clip(CircleShape)
+                            .clickable { viewModel.toggleRecording() }
+                            .background(
+                                Brush.linearGradient(
+                                    colors = if (isRecording) {
+                                        listOf(TertiaryColor, Color(0xFFD97706))
+                                    } else {
+                                        listOf(PrimaryColor, AccentViolet)
+                                    }
+                                )
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
+                            contentDescription = "Voice dictation action button",
+                            tint = Color.White,
+                            modifier = Modifier.size(46.dp)
+                        )
+                    }
                 }
 
                 Text(
@@ -651,11 +710,11 @@ fun DictateTab(viewModel: MainViewModel) {
                         val sec = recordDurationSec % 60
                         String.format(Locale.US, "RECORDING  %02d:%02d", min, sec)
                     } else {
-                        "Start Dictating"
+                        "TAP TO DICTATE"
                     },
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 12.sp,
-                    letterSpacing = 1.5.sp,
+                    letterSpacing = 1.8.sp,
                     color = if (isRecording) TertiaryColor else PrimaryColor,
                     style = Typography.labelSmall.withTabularNumbers(),
                     modifier = Modifier.semantics {
@@ -672,19 +731,20 @@ fun DictateTab(viewModel: MainViewModel) {
             }
         }
 
-        // Post-Processing Modifiers Configuration
+        // Post-Processing Filters Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                shape = RoundedCornerShape(24.dp)
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, GlassBorder)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Text(
-                        text = "Local Post-Processing Filters",
+                        text = "AI Post-Processing Filters",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
                         color = TextPrimary

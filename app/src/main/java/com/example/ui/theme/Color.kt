@@ -2,19 +2,21 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// VozLocal Cosmic Slate Theme Colors
-val PrimaryColor = Color(0xFF38BDF8)       // Vivid Sky Blue
-val SecondaryColor = Color(0xFF818CF8)     // Modern Indigo
-val TertiaryColor = Color(0xFFF43F5E)      // Crimson Rose (Recording)
+// VozLocal Modern Premium Theme Colors
+val PrimaryColor = Color(0xFF6366F1)       // Vibrant Electric Indigo
+val SecondaryColor = Color(0xFF38BDF8)     // Modern Vivid Sky Blue
+val AccentViolet = Color(0xFF8B5CF6)       // Deep Violet Accent
+val TertiaryColor = Color(0xFFFF3B30)      // Pure Crimson Red (Active Dictation)
 
-val BackgroundDark = Color(0xFF0B0F19)     // Deep Obsidian Slate
-val SurfaceDark = Color(0xFF161F30)        // Layered Card Dark Blue-Grey
-val SurfaceLightDark = Color(0xFF1E293B)   // Secondary card slate
+val BackgroundDark = Color(0xFF07090E)     // Deep Midnight Obsidian
+val SurfaceDark = Color(0xFF0F1420)        // Premium Dark Card Surface
+val SurfaceCard = Color(0xFF161C2C)       // Elevated Card Surface
+val SurfaceLightDark = Color(0xFF1E263B)   // Sub-surface Slate
 
-val TextPrimary = Color(0xFFF8FAFC)        // Slate Off-White
-val TextSecondary = Color(0xFF94A3B8)      // Slate Grey
-val TextMuted = Color(0xFF64748B)          // Medium Slate Grey (High-contrast captions)
+val TextPrimary = Color(0xFFF8FAFC)        // Slate Off-White Header
+val TextSecondary = Color(0xFF94A3B8)      // Muted Subtitle Slate
+val TextMuted = Color(0xFF64748B)          // Caption Grey
 
-val AccentGlow = Color(0x1F38BDF8)         // Glow Sky Blue
-val RecordingGlow = Color(0x1FF43F5E)      // Glow active Red
-
+val AccentGlow = Color(0x336366F1)         // Glowing Indigo Aura
+val RecordingGlow = Color(0x40FF3B30)      // Glowing Crimson Aura
+val GlassBorder = Color(0x26FFFFFF)         // 15% White Translucent Glass Border
