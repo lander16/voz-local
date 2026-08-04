@@ -6,13 +6,12 @@ import androidx.lifecycle.ViewModelProvider
 import com.example.data.repository.DictationRepository
 
 class MainViewModelFactory(
-    private val context: Context,
     private val repository: DictationRepository
 ) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return MainViewModel(context.applicationContext, repository) as T
+            return MainViewModel(repository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
 
         // Initialize Repository and ViewModel from Application singleton
         val repository = (applicationContext as VozLocalApp).repository
-        val factory = MainViewModelFactory(this, repository)
+        val factory = MainViewModelFactory(repository)
         viewModel = ViewModelProvider(this, factory)[MainViewModel::class.java]
 
         // Handle possible incoming Shared Audio Intent

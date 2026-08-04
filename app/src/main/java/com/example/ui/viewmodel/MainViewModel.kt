@@ -19,7 +19,6 @@ import java.util.*
 private const val TAG = "MainViewModel"
 
 class MainViewModel(
-    context: Context,
     private val repository: DictationRepository
 ) : ViewModel() {
 

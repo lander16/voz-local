@@ -210,6 +210,7 @@ class DictationRepository(private val context: Context) {
         modelDao.selectModel(modelId)
     }
 
+    @Suppress("unused")
     suspend fun updateModel(model: DictationModel) = withContext(Dispatchers.IO) {
         modelDao.updateModel(model)
     }
