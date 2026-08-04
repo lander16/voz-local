@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Launch
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
@@ -752,7 +754,16 @@ fun DictateTab(viewModel: MainViewModel) {
 
                     // Modifier 1: Smart Punctuation
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .toggleable(
+                                value = smartPunctuation,
+                                role = Role.Switch,
+                                onValueChange = { viewModel.smartPunctuation.value = it }
+                            )
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -769,14 +780,23 @@ fun DictateTab(viewModel: MainViewModel) {
                         }
                         Switch(
                             checked = smartPunctuation,
-                            onCheckedChange = { viewModel.smartPunctuation.value = it },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                         )
                     }
 
                     // Modifier 2: Auto capitalization
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .toggleable(
+                                value = autoCapitalization,
+                                role = Role.Switch,
+                                onValueChange = { viewModel.autoCapitalization.value = it }
+                            )
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -793,14 +813,23 @@ fun DictateTab(viewModel: MainViewModel) {
                         }
                         Switch(
                             checked = autoCapitalization,
-                            onCheckedChange = { viewModel.autoCapitalization.value = it },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                         )
                     }
 
                     // Modifier 3: Dictionary replacements
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .toggleable(
+                                value = applyDictionary,
+                                role = Role.Switch,
+                                onValueChange = { viewModel.applyDictionary.value = it }
+                            )
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -817,14 +846,24 @@ fun DictateTab(viewModel: MainViewModel) {
                         }
                         Switch(
                             checked = applyDictionary,
-                            onCheckedChange = { viewModel.applyDictionary.value = it },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                         )
                     }
 
                     // Modifier 4: Show only on text input
+                    val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .toggleable(
+                                value = showOnlyOnInput,
+                                role = Role.Switch,
+                                onValueChange = { viewModel.setShowOnlyOnInput(it) }
+                            )
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -839,10 +878,9 @@ fun DictateTab(viewModel: MainViewModel) {
                                 Text(text = "Only show floating button when clicking text fields.", fontSize = 11.sp, color = TextSecondary)
                             }
                         }
-                        val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
                         Switch(
                             checked = showOnlyOnInput,
-                            onCheckedChange = { viewModel.setShowOnlyOnInput(it) },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor),
                             modifier = Modifier.testTag("main_only_on_input_switch")
                         )
@@ -853,9 +891,19 @@ fun DictateTab(viewModel: MainViewModel) {
                     val qwenModel = modelsList.find { it.id == "qwen2.5_0.5b" }
                     val isQwenDownloaded = qwenModel?.isDownloaded == true
                     val isQwenDownloading = qwenModel?.isDownloading == true
+                    val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
 
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .toggleable(
+                                value = useAiPolisher,
+                                role = Role.Switch,
+                                onValueChange = { viewModel.setUseAiPolisher(it) }
+                            )
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -901,10 +949,9 @@ fun DictateTab(viewModel: MainViewModel) {
                                 }
                             }
                         }
-                        val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
                         Switch(
                             checked = useAiPolisher,
-                            onCheckedChange = { viewModel.setUseAiPolisher(it) },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                         )
                     }
@@ -1923,16 +1970,25 @@ fun SettingsDialog(
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = null,
-                    tint = PrimaryColor
-                )
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(PrimaryColor.copy(alpha = 0.15f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = null,
+                        tint = PrimaryColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
                 Text(
                     text = "VozLocal Settings",
-                    fontWeight = FontWeight.Bold,
+                    fontWeight = FontWeight.ExtraBold,
                     fontSize = 18.sp,
                     color = TextPrimary
                 )
@@ -1958,7 +2014,7 @@ fun SettingsDialog(
                         lineHeight = 15.sp
                     )
 
-                    // Selection buttons
+                    // Selection buttons with M3 48dp minimum touch target
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -1975,24 +2031,24 @@ fun SettingsDialog(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .heightIn(min = 48.dp)
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(if (isSelected) PrimaryColor else SurfaceLightDark)
-                                    .clickable { viewModel.setHistoryLimit(valLimit) }
-                                    .padding(vertical = 8.dp),
+                                    .clickable { viewModel.setHistoryLimit(valLimit) },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = label,
-                                    color = if (isSelected) Color.Black else TextPrimary,
+                                    color = if (isSelected) Color.White else TextPrimary,
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.ExtraBold
                                 )
                             }
                         }
                     }
                 }
 
-                HorizontalDivider(color = Color.DarkGray.copy(alpha = 0.5f))
+                HorizontalDivider(color = GlassBorder)
 
                 // Post-processing options mirrored inside settings
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -2005,7 +2061,16 @@ fun SettingsDialog(
 
                     // Smart pause
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .toggleable(
+                                value = smartPunctuation,
+                                role = Role.Switch,
+                                onValueChange = { viewModel.smartPunctuation.value = it }
+                            )
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -2015,14 +2080,23 @@ fun SettingsDialog(
                         }
                         Switch(
                             checked = smartPunctuation,
-                            onCheckedChange = { viewModel.smartPunctuation.value = it },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                         )
                     }
 
                     // Auto-cap
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .toggleable(
+                                value = autoCapitalization,
+                                role = Role.Switch,
+                                onValueChange = { viewModel.autoCapitalization.value = it }
+                            )
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -2032,14 +2106,23 @@ fun SettingsDialog(
                         }
                         Switch(
                             checked = autoCapitalization,
-                            onCheckedChange = { viewModel.autoCapitalization.value = it },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                         )
                     }
 
                     // Dictionary
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .toggleable(
+                                value = applyDictionary,
+                                role = Role.Switch,
+                                onValueChange = { viewModel.applyDictionary.value = it }
+                            )
+                            .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -2049,7 +2132,7 @@ fun SettingsDialog(
                         }
                         Switch(
                             checked = applyDictionary,
-                            onCheckedChange = { viewModel.applyDictionary.value = it },
+                            onCheckedChange = null,
                             colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                         )
                     }
@@ -2057,12 +2140,15 @@ fun SettingsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text(text = "Done", color = PrimaryColor, fontWeight = FontWeight.Bold)
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.heightIn(min = 48.dp)
+            ) {
+                Text(text = "Done", color = PrimaryColor, fontWeight = FontWeight.ExtraBold)
             }
         },
         containerColor = SurfaceDark,
-        shape = RoundedCornerShape(16.dp)
+        shape = RoundedCornerShape(28.dp)
     )
 }
 
