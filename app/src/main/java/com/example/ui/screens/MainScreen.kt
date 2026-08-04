@@ -231,27 +231,23 @@ fun MainScreen(
 
                         HorizontalDivider(color = GlassBorder)
 
-                        // Navigation Items
+                        // Drawer Navigation Items - Secondary Tools & Analytics
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "STUDIO WORKSPACE",
+                                text = "TOOLS & ANALYTICS",
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontWeight = FontWeight.ExtraBold,
                                 color = TextMuted,
                                 letterSpacing = 1.sp,
                                 modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
                             )
 
                             val drawerItems = listOf(
-                                Triple(Tab.DICTATE, "Live Dictate", Icons.Default.Mic),
-                                Triple(Tab.MODELS, "AI Speech Models", Icons.Default.CloudDownload),
-                                Triple(Tab.SHARED, "Shared Audio File", Icons.Default.AudioFile),
                                 Triple(Tab.DICTIONARY, "Custom Dictionary", Icons.Default.Book),
-                                Triple(Tab.STATS, "Statistics & Analytics", Icons.Default.BarChart),
-                                Triple(Tab.HISTORY, "Transcription History", Icons.Default.History)
+                                Triple(Tab.STATS, "Statistics & Analytics", Icons.Default.BarChart)
                             )
 
                             drawerItems.forEach { (tab, label, icon) ->
@@ -278,7 +274,7 @@ fun MainScreen(
 
                         HorizontalDivider(color = GlassBorder)
 
-                        // Preferences & Settings Action
+                        // App Preferences Action
                         NavigationDrawerItem(
                             icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = TextPrimary) },
                             label = { Text(text = "App Settings & Preferences", fontWeight = FontWeight.Bold, fontSize = 14.sp) },
@@ -358,9 +354,8 @@ fun MainScreen(
             ) {
                 val tabs = listOf(
                     Triple(Tab.DICTATE, "Dictate", Icons.Default.KeyboardVoice),
-                    Triple(Tab.STATS, "Stats", Icons.Default.BarChart),
-                    Triple(Tab.MODELS, "Models", Icons.Default.Analytics),
-                    Triple(Tab.DICTIONARY, "Dictionary", Icons.Default.Spellcheck),
+                    Triple(Tab.MODELS, "Models", Icons.Default.CloudDownload),
+                    Triple(Tab.SHARED, "Shared", Icons.Default.AudioFile),
                     Triple(Tab.HISTORY, "History", Icons.Default.History)
                 )
 
@@ -369,28 +364,11 @@ fun MainScreen(
                         selected = activeTab == tab,
                         onClick = { activeTab = tab },
                         icon = { Icon(imageVector = icon, contentDescription = label) },
-                        label = { Text(text = label, fontWeight = FontWeight.SemiBold) },
+                        label = { Text(text = label, fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = Color.White,
                             selectedTextColor = PrimaryColor,
-                            indicatorColor = PrimaryColor.copy(alpha = 0.4f),
-                            unselectedIconColor = TextSecondary,
-                            unselectedTextColor = TextSecondary
-                        )
-                    )
-                }
-
-                // Show Shared Tab in navigation only if a file is currently active/selected
-                if (sharedUri != null) {
-                    NavigationBarItem(
-                        selected = activeTab == Tab.SHARED,
-                        onClick = { activeTab = Tab.SHARED },
-                        icon = { Icon(imageVector = Icons.Default.AudioFile, contentDescription = "Shared") },
-                        label = { Text(text = "Shared", fontWeight = FontWeight.SemiBold) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Color.White,
-                            selectedTextColor = PrimaryColor,
-                            indicatorColor = PrimaryColor.copy(alpha = 0.4f),
+                            indicatorColor = PrimaryColor.copy(alpha = 0.35f),
                             unselectedIconColor = TextSecondary,
                             unselectedTextColor = TextSecondary
                         )
@@ -2095,6 +2073,7 @@ fun SettingsSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp)
                 .verticalScroll(rememberScrollState()),

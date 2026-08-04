@@ -4,9 +4,9 @@ import androidx.compose.ui.graphics.Color
 
 // VozLocal High-Readability & Modern Premium Theme Colors
 val PrimaryColor = Color(0xFF6366F1)       // Vibrant Electric Indigo
-val SecondaryColor = Color(0xFF38BDF8)     // Modern Vivid Sky Blue
+val SecondaryColor = Color(0xFF0284C7)     // Deep Cobalt Blue (high text contrast)
 val AccentViolet = Color(0xFF8B5CF6)       // Deep Violet Accent
-val TertiaryColor = Color(0xFFFF3B30)      // Pure Crimson Red (Active Dictation)
+val TertiaryColor = Color(0xFFEF4444)      // Pure Crimson Red (Active Dictation)
 
 val BackgroundDark = Color(0xFF090D16)     // Deep Midnight Obsidian Floor
 val SurfaceDark = Color(0xFF131B2E)        // Crisp Dark Card Surface
