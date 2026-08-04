@@ -10,11 +10,11 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "dev.sebastian.vozlocal"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.vozlocal.xdwql"
+    applicationId = "dev.sebastian.vozlocal"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
