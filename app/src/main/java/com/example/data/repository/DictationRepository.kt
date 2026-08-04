@@ -362,7 +362,7 @@ class DictationRepository(private val context: Context) {
         var result = text
 
         // 1. Clean extra spaces
-        result = result.replace(Regex("\\s+"), " ").trim()
+        result = result.replace(REGEX_SPACES, " ").trim()
 
         // 2. Dictionary Replacements & Misheard Vocabulary Biasing
         if (applyDict) {
@@ -386,47 +386,45 @@ class DictationRepository(private val context: Context) {
         // 3. Smart Punctuation & Spoken Commands (Verbalized punctuation & Pause formatting)
         if (smartPunctuation) {
             // Verbalized Punctuation - Spanish
-            result = result.replace(Regex("(?i)\\bpunto\\b"), ".")
-            result = result.replace(Regex("(?i)\\bcoma\\b"), ",")
-            result = result.replace(Regex("(?i)\\bdos puntos\\b"), ":")
-            result = result.replace(Regex("(?i)\\bsigno de (interrogacion|interrogación)\\b"), "?")
-            result = result.replace(Regex("(?i)\\bsigno de (exclamacion|exclamación)\\b"), "!")
-            result = result.replace(Regex("(?i)\\bnueva l[ií]nea\\b"), "\n")
-            result = result.replace(Regex("(?i)\\bnuevo p[aá]rrafo\\b"), "\n\n")
+            result = result.replace(REGEX_ES_PUNTO, ".")
+            result = result.replace(REGEX_ES_COMA, ",")
+            result = result.replace(REGEX_ES_DOS_PUNTOS, ":")
+            result = result.replace(REGEX_ES_INTERROGACION, "?")
+            result = result.replace(REGEX_ES_EXCLAMACION, "!")
+            result = result.replace(REGEX_ES_NUEVA_LINEA, "\n")
+            result = result.replace(REGEX_ES_NUEVO_PARRAFO, "\n\n")
 
             // Verbalized Punctuation - English
-            result = result.replace(Regex("(?i)\\bperiod\\b"), ".")
-            result = result.replace(Regex("(?i)\\bfull stop\\b"), ".")
-            result = result.replace(Regex("(?i)\\bcomma\\b"), ",")
-            result = result.replace(Regex("(?i)\\bcolon\\b"), ":")
-            result = result.replace(Regex("(?i)\\bquestion mark\\b"), "?")
-            result = result.replace(Regex("(?i)\\bexclamation (mark|point)\\b"), "!")
-            result = result.replace(Regex("(?i)\\bnew line\\b"), "\n")
-            result = result.replace(Regex("(?i)\\bnew paragraph\\b"), "\n\n")
+            result = result.replace(REGEX_EN_PERIOD, ".")
+            result = result.replace(REGEX_EN_FULL_STOP, ".")
+            result = result.replace(REGEX_EN_COMMA, ",")
+            result = result.replace(REGEX_EN_COLON, ":")
+            result = result.replace(REGEX_EN_QUESTION_MARK, "?")
+            result = result.replace(REGEX_EN_EXCLAMATION_MARK, "!")
+            result = result.replace(REGEX_EN_NEW_LINE, "\n")
+            result = result.replace(REGEX_EN_NEW_PARAGRAPH, "\n\n")
 
             // Clean spaces BEFORE punctuation: "hola ," -> "hola,"
-            result = result.replace(Regex("\\s+([,.?!:])"), "$1")
+            result = result.replace(REGEX_SPACES_BEFORE_PUNCT, "$1")
 
             // Ensure single space AFTER punctuation if followed by a letter: "hola,mundo" -> "hola, mundo"
-            result = result.replace(Regex("([,.?!:])([^\\s\\d,.?!:])"), "$1 $2")
+            result = result.replace(REGEX_SPACE_AFTER_PUNCT, "$1 $2")
 
             // Clean duplicate commas or periods
-            result = result.replace(Regex(",\\s*,"), ",")
-            result = result.replace(Regex("\\.\\s*\\.(?!\\.)"), ".")
+            result = result.replace(REGEX_DUP_COMMAS, ",")
+            result = result.replace(REGEX_DUP_PERIODS, ".")
 
             // 3.5. Grammatical Intent & Question Detection (Spanish + English)
-            val rawSentences = result.split(Regex("(?<=[.\\n])\\s*")).toMutableList()
+            val rawSentences = result.split(REGEX_SENTENCE_SPLIT).toMutableList()
             for (i in rawSentences.indices) {
                 val sentence = rawSentences[i].trim()
                 if (sentence.isEmpty() || sentence.endsWith("?") || sentence.endsWith("!")) continue
 
                 // Check Spanish Question Intent
-                val isSpanishQuestion = Regex("(?i)^\\s*([¿]|qu[eé]|cu[aá]l|cu[aá]les|qui[eé]n|qui[eé]nes|d[oó]nde|cu[aá]ndo|por\\s*qu[eé]|c[oó]mo|cu[aá]nto|cu[aá]ntos|cu[aá]nta|cu[aá]ntas|sabes|sabes\\s+si|ser[aá]|te\\s+parece|puedes|podr[ií]as|quieres|tienes|crees|te\\s+gustar[ií]a)\\b").containsMatchIn(sentence) ||
-                        Regex("(?i)\\b(verdad|cierto|no\\s+crees|o\\s+no)\\s*[.]?$").containsMatchIn(sentence)
+                val isSpanishQuestion = REGEX_ES_QUESTION_START.containsMatchIn(sentence) || REGEX_ES_QUESTION_END.containsMatchIn(sentence)
 
                 // Check English Question Intent
-                val isEnglishQuestion = Regex("(?i)^\\s*(what|why|where|when|who|whom|whose|which|how|is|are|was|were|do|does|did|can|could|would|should|will|shall|have|has|had|am|isnt|arent|wasnt|werent|dont|doesnt|didnt|cant|couldnt|wouldnt|shouldnt|wont)\\s+(you|i|we|it|he|she|they|this|that|there)\\b").containsMatchIn(sentence) ||
-                        Regex("(?i)\\b(right|correct|is\\s+it|don't\\s+you|don't\\s+you\\s+think)\\s*[.]?$").containsMatchIn(sentence)
+                val isEnglishQuestion = REGEX_EN_QUESTION_START.containsMatchIn(sentence) || REGEX_EN_QUESTION_END.containsMatchIn(sentence)
 
                 if (isSpanishQuestion || isEnglishQuestion) {
                     var formatted = sentence.removeSuffix(".")
@@ -445,12 +443,43 @@ class DictationRepository(private val context: Context) {
             result = result.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
             // Capitalize first letter after sentence ending punctuation (. ! ? ¿) or newlines
-            val pattern = Regex("([.!?¿\\n]\\s*)([a-zñáéíóú])")
-            result = pattern.replace(result) { matchResult ->
+            result = REGEX_AUTO_CAPITALIZE.replace(result) { matchResult ->
                 matchResult.groupValues[1] + matchResult.groupValues[2].uppercase()
             }
         }
 
         result.trim()
+    }
+
+    companion object {
+        private val REGEX_SPACES = Regex("\\s+")
+        private val REGEX_ES_PUNTO = Regex("(?i)\\bpunto\\b")
+        private val REGEX_ES_COMA = Regex("(?i)\\bcoma\\b")
+        private val REGEX_ES_DOS_PUNTOS = Regex("(?i)\\bdos puntos\\b")
+        private val REGEX_ES_INTERROGACION = Regex("(?i)\\bsigno de (interrogacion|interrogación)\\b")
+        private val REGEX_ES_EXCLAMACION = Regex("(?i)\\bsigno de (exclamacion|exclamación)\\b")
+        private val REGEX_ES_NUEVA_LINEA = Regex("(?i)\\bnueva l[ií]nea\\b")
+        private val REGEX_ES_NUEVO_PARRAFO = Regex("(?i)\\bnuevo p[aá]rrafo\\b")
+
+        private val REGEX_EN_PERIOD = Regex("(?i)\\bperiod\\b")
+        private val REGEX_EN_FULL_STOP = Regex("(?i)\\bfull stop\\b")
+        private val REGEX_EN_COMMA = Regex("(?i)\\bcomma\\b")
+        private val REGEX_EN_COLON = Regex("(?i)\\bcolon\\b")
+        private val REGEX_EN_QUESTION_MARK = Regex("(?i)\\bquestion mark\\b")
+        private val REGEX_EN_EXCLAMATION_MARK = Regex("(?i)\\bexclamation (mark|point)\\b")
+        private val REGEX_EN_NEW_LINE = Regex("(?i)\\bnew line\\b")
+        private val REGEX_EN_NEW_PARAGRAPH = Regex("(?i)\\bnew paragraph\\b")
+
+        private val REGEX_SPACES_BEFORE_PUNCT = Regex("\\s+([,.?!:])")
+        private val REGEX_SPACE_AFTER_PUNCT = Regex("([,.?!:])([^\\s\\d,.?!:])")
+        private val REGEX_DUP_COMMAS = Regex(",\\s*,")
+        private val REGEX_DUP_PERIODS = Regex("\\.\\s*\\.(?!\\.)")
+        private val REGEX_SENTENCE_SPLIT = Regex("(?<=[.\\n])\\s*")
+
+        private val REGEX_ES_QUESTION_START = Regex("(?i)^\\s*([¿]|qu[eé]|cu[aá]l|cu[aá]les|qui[eé]n|qui[eé]nes|d[oó]nde|cu[aá]ndo|por\\s*qu[eé]|c[oó]mo|cu[aá]nto|cu[aá]ntos|cu[aá]nta|cu[aá]ntas|sabes|sabes\\s+si|ser[aá]|te\\s+parece|puedes|podr[ií]as|quieres|tienes|crees|te\\s+gustar[ií]a)\\b")
+        private val REGEX_ES_QUESTION_END = Regex("(?i)\\b(verdad|cierto|no\\s+crees|o\\s+no)\\s*[.]?$")
+        private val REGEX_EN_QUESTION_START = Regex("(?i)^\\s*(what|why|where|when|who|whom|whose|which|how|is|are|was|were|do|does|did|can|could|would|should|will|shall|have|has|had|am|isnt|arent|wasnt|werent|dont|doesnt|didnt|cant|couldnt|wouldnt|shouldnt|wont)\\s+(you|i|we|it|he|she|they|this|that|there)\\b")
+        private val REGEX_EN_QUESTION_END = Regex("(?i)\\b(right|correct|is\\s+it|don't\\s+you|don't\\s+you\\s+think)\\s*[.]?$")
+        private val REGEX_AUTO_CAPITALIZE = Regex("([.!?¿\\n]\\s*)([a-zñáéíóú])")
     }
 }

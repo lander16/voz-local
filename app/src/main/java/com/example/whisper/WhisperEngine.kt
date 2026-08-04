@@ -51,7 +51,7 @@ class WhisperEngine(private val context: Context) {
             return@withContext ""
         }
 
-        if (audioSamples.isEmpty()) {
+        if (audioSamples.size < 3200) { // < 200ms audio sample
             return@withContext ""
         }
 

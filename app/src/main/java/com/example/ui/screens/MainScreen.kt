@@ -881,7 +881,7 @@ fun DictateTab(viewModel: MainViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 4.dp)
                 ) {
-                    items(languageOptions) { (code, label) ->
+                    items(languageOptions, key = { it.first }) { (code, label) ->
                         val isSelected = currentLanguage == code
                         Surface(
                             onClick = { viewModel.setLanguage(code) },
@@ -939,7 +939,7 @@ fun ModelsTab(viewModel: MainViewModel) {
             }
         }
 
-        items(models) { model ->
+        items(models, key = { it.id }) { model ->
             ModelCard(
                 model = model,
                 onSelect = { viewModel.selectModel(model.id) },
@@ -1325,7 +1325,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                 }
             }
         } else {
-            items(words) { word ->
+            items(words, key = { it.id }) { word ->
                 DictionaryRow(word = word, onDelete = { viewModel.deleteWord(word.id) })
             }
         }
@@ -1468,7 +1468,7 @@ fun HistoryTab(viewModel: MainViewModel) {
                 }
             }
         } else {
-            items(history) { item ->
+            items(history, key = { it.id }) { item ->
                 HistoryCard(
                     item = item,
                     onCopy = {
