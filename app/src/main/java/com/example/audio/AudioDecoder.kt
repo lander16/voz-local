@@ -8,11 +8,30 @@ import android.net.Uri
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 private const val TAG = "AudioDecoder"
 private const val TARGET_SAMPLE_RATE = 16000
+
+/**
+ * High-performance primitive float list to prevent JVM Object boxing during MediaCodec decoding.
+ */
+private class PrimitiveFloatList(initialCapacity: Int = 16000 * 60) {
+    var array = FloatArray(initialCapacity)
+    var size = 0
+        private set
+
+    fun add(value: Float) {
+        if (size >= array.size) {
+            array = array.copyOf(array.size * 2)
+        }
+        array[size++] = value
+    }
+
+    fun toFloatArray(): FloatArray {
+        return array.copyOf(size)
+    }
+}
 
 class AudioDecoder(private val context: Context) {
 
@@ -56,7 +75,7 @@ class AudioDecoder(private val context: Context) {
         val channelCount = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 1
         val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 1L
 
-        val pcmSampleList = ArrayList<Float>()
+        val pcmSampleList = PrimitiveFloatList()
         val info = MediaCodec.BufferInfo()
         var isEOS = false
 

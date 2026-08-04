@@ -410,14 +410,8 @@ class DictationAccessibilityService : AccessibilityService() {
             audioRecorder.startRecording(serviceScope) { amplitude ->
                 Handler(Looper.getMainLooper()).post {
                     waveBars.forEachIndexed { index, bar ->
-                        val heightPx = TypedValue.applyDimension(
-                            TypedValue.COMPLEX_UNIT_DIP,
-                            6f + (amplitude * 18f * (1f + (index % 3) * 0.2f)),
-                            resources.displayMetrics
-                        ).toInt()
-                        val layoutParams = bar.layoutParams as LinearLayout.LayoutParams
-                        layoutParams.height = heightPx
-                        bar.layoutParams = layoutParams
+                        val scaleFactor = 1.0f + (amplitude * 3.5f * (1f + (index % 3) * 0.25f))
+                        bar.scaleY = scaleFactor
                     }
                 }
             }

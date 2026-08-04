@@ -6,18 +6,53 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
 import kotlinx.coroutines.*
-import java.io.ByteArrayOutputStream
 import kotlin.math.max
 import kotlin.math.sqrt
 
 private const val TAG = "AudioRecorder"
 const val SAMPLE_RATE = 16000
 
+/**
+ * High-performance, zero-allocation primitive float buffer for raw PCM recording.
+ * Avoids Java Object boxing and byte array stream conversions for smooth 60fps recording.
+ */
+private class FastFloatBuffer(initialCapacity: Int = SAMPLE_RATE * 15) {
+    private var buffer = FloatArray(initialCapacity)
+    var size = 0
+        private set
+
+    fun appendPCM16(shorts: ShortArray, count: Int): Double {
+        val requiredCapacity = size + count
+        if (requiredCapacity > buffer.size) {
+            var newCap = buffer.size * 2
+            if (newCap < requiredCapacity) newCap = requiredCapacity
+            buffer = buffer.copyOf(newCap)
+        }
+
+        var sumSquares = 0.0
+        for (i in 0 until count) {
+            val sample = shorts[i]
+            val floatVal = sample / 32768.0f
+            buffer[size++] = floatVal
+            sumSquares += (sample.toDouble() * sample.toDouble())
+        }
+        return sumSquares
+    }
+
+    fun toFloatArray(): FloatArray {
+        return buffer.copyOf(size)
+    }
+
+    fun reset() {
+        size = 0
+    }
+}
+
 class AudioRecorder {
     private var audioRecord: AudioRecord? = null
     private var recordingJob: Job? = null
     private var isRecording = false
-    private val pcmOutputStream = ByteArrayOutputStream()
+    private val floatBuffer = FastFloatBuffer()
 
     @SuppressLint("MissingPermission")
     fun startRecording(
@@ -49,32 +84,22 @@ class AudioRecorder {
             return
         }
 
-        pcmOutputStream.reset()
+        synchronized(floatBuffer) {
+            floatBuffer.reset()
+        }
         isRecording = true
         audioRecord?.startRecording()
 
         recordingJob = scope.launch(Dispatchers.IO) {
             val buffer = ShortArray(minBufferSize / 2)
-            val tempByteStream = ByteArrayOutputStream()
 
             while (isActive && isRecording) {
                 val readCount = audioRecord?.read(buffer, 0, buffer.size) ?: -1
                 if (readCount > 0) {
-                    var sumSquares = 0.0
-                    for (i in 0 until readCount) {
-                        val sample = buffer[i]
-                        sumSquares += (sample * sample).toDouble()
-
-                        // Convert short to 2 bytes (little endian)
-                        val b0 = (sample.toInt() and 0xFF).toByte()
-                        val b1 = ((sample.toInt() shr 8) and 0xFF).toByte()
-                        tempByteStream.write(byteArrayOf(b0, b1), 0, 2)
+                    val sumSquares: Double
+                    synchronized(floatBuffer) {
+                        sumSquares = floatBuffer.appendPCM16(buffer, readCount)
                     }
-
-                    synchronized(pcmOutputStream) {
-                        pcmOutputStream.write(tempByteStream.toByteArray())
-                    }
-                    tempByteStream.reset()
 
                     // Calculate RMS amplitude for live waveform UI
                     val rms = sqrt(sumSquares / readCount).toFloat()
@@ -99,23 +124,11 @@ class AudioRecorder {
         }
         audioRecord = null
 
-        val pcmBytes: ByteArray
-        synchronized(pcmOutputStream) {
-            pcmBytes = pcmOutputStream.toByteArray()
-            pcmOutputStream.reset()
+        synchronized(floatBuffer) {
+            val samples = floatBuffer.toFloatArray()
+            floatBuffer.reset()
+            return samples
         }
-
-        // Convert 16-bit PCM bytes (little endian) to FloatArray (-1.0 to 1.0)
-        val numSamples = pcmBytes.size / 2
-        val floatSamples = FloatArray(numSamples)
-        for (i in 0 until numSamples) {
-            val low = pcmBytes[i * 2].toInt() and 0xFF
-            val high = pcmBytes[i * 2 + 1].toInt()
-            val sample = (high shl 8) or low
-            floatSamples[i] = sample.toShort() / 32768.0f
-        }
-
-        return floatSamples
     }
 
     fun isRecording(): Boolean = isRecording
