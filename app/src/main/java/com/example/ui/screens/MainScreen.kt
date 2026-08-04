@@ -1819,6 +1819,14 @@ fun SharedAudioTab(viewModel: MainViewModel) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
+    val filePickerLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.setSharedAudio(context, uri)
+        }
+    }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -1839,62 +1847,126 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                     color = TextPrimary
                 )
                 Text(
-                    text = "VozLocal received an audio track shared from another application. Choose a local Whisper model to transcribe it offline.",
+                    text = "Transcribe voice notes from WhatsApp/Telegram, or select local audio files directly from your phone storage.",
                     fontSize = 13.sp,
                     color = TextSecondary
                 )
             }
         }
 
-        // Selected File Details Card
+        // File Selection / Audio Picker Card
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+            if (audioUri == null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { filePickerLauncher.launch("audio/*") },
+                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.5.dp, PrimaryColor.copy(alpha = 0.4f))
                 ) {
-                    Box(
+                    Column(
                         modifier = Modifier
-                            .size(48.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(SecondaryColor.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Audiotrack,
-                            contentDescription = null,
-                            tint = SecondaryColor,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(PrimaryColor.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FolderOpen,
+                                contentDescription = null,
+                                tint = PrimaryColor,
+                                modifier = Modifier.size(28.dp)
+                            )
+                        }
 
-                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = audioName,
+                            text = "Select Local Audio File",
+                            fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = TextPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            color = TextPrimary
                         )
-                        Text(
-                            text = "Size: $audioSize",
-                            fontSize = 12.sp,
-                            color = TextSecondary
-                        )
-                    }
 
-                    IconButton(onClick = { viewModel.clearSharedFile() }) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Clear selected shared file",
-                            tint = TextSecondary
+                        Text(
+                            text = "Tap to pick any .wav, .mp3, .m4a, or .ogg file from storage, or share a voice note directly from another app.",
+                            fontSize = 13.sp,
+                            color = TextSecondary,
+                            textAlign = TextAlign.Center
                         )
+
+                        Button(
+                            onClick = { filePickerLauncher.launch("audio/*") },
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.heightIn(min = 44.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.UploadFile,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(text = "Browse Storage Files", fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            } else {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    shape = RoundedCornerShape(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(PrimaryColor.copy(alpha = 0.2f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Audiotrack,
+                                contentDescription = null,
+                                tint = PrimaryColor,
+                                modifier = Modifier.size(26.dp)
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = audioName,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                color = TextPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "Size: $audioSize",
+                                fontSize = 12.sp,
+                                color = TextSecondary
+                            )
+                        }
+
+                        IconButton(onClick = { viewModel.clearSharedFile() }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Clear selected shared file",
+                                tint = TextSecondary
+                            )
+                        }
                     }
                 }
             }
