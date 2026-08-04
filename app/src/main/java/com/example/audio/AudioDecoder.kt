@@ -132,7 +132,7 @@ class AudioDecoder(private val context: Context) {
 
         // Resample to 16kHz if source sample rate differs
         val finalSamples = if (sampleRate != TARGET_SAMPLE_RATE && sampleRate > 0) {
-            resampleLinear(decodedSamples, sampleRate, TARGET_SAMPLE_RATE)
+            resampleLinear(decodedSamples, sampleRate)
         } else {
             decodedSamples
         }
@@ -140,9 +140,9 @@ class AudioDecoder(private val context: Context) {
         return@withContext finalSamples
     }
 
-    private fun resampleLinear(input: FloatArray, srcRate: Int, targetRate: Int): FloatArray {
+    private fun resampleLinear(input: FloatArray, srcRate: Int): FloatArray {
         if (input.isEmpty()) return FloatArray(0)
-        val ratio = srcRate.toDouble() / targetRate.toDouble()
+        val ratio = srcRate.toDouble() / TARGET_SAMPLE_RATE.toDouble()
         val outputLen = (input.size / ratio).toInt()
         val output = FloatArray(outputLen)
 

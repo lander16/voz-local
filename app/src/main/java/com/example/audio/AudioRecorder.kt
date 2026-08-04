@@ -103,7 +103,7 @@ class AudioRecorder {
 
                     // Calculate RMS amplitude for live waveform UI
                     val rms = sqrt(sumSquares / readCount).toFloat()
-                    val rmsDb = if (rms > 0) (20 * Math.log10(rms.toDouble())).toFloat() else 0f
+                    val rmsDb = if (rms > 0) (20 * kotlin.math.log10(rms.toDouble())).toFloat() else 0f
                     val normalizedAmp = (rmsDb / 90f).coerceIn(0.05f, 1.0f)
                     onRmsChanged?.invoke(normalizedAmp)
                 }

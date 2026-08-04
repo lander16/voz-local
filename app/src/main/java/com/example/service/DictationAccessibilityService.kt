@@ -34,6 +34,7 @@ import com.example.data.repository.DictationRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlin.math.max
+import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "DictationService"
 
@@ -402,7 +403,7 @@ class DictationAccessibilityService : AccessibilityService() {
                     val m = seconds / 60
                     val s = seconds % 60
                     statusText.text = "%02d:%02d".format(m, s)
-                    delay(1000)
+                    delay(1.seconds)
                     seconds++
                 }
             }

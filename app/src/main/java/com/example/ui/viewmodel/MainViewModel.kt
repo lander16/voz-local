@@ -14,7 +14,10 @@ import com.example.data.model.TranscriptionHistory
 import com.example.data.repository.DictationRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
-import java.util.*
+import java.util.Locale
+import kotlin.math.log10
+import kotlin.math.pow
+import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "MainViewModel"
 
@@ -197,7 +200,7 @@ class MainViewModel(
         // Start duration timer
         timerJob = viewModelScope.launch {
             while (isActive) {
-                delay(1000)
+                delay(1.seconds)
                 _recordDurationSec.value += 1
             }
         }
@@ -354,7 +357,7 @@ class MainViewModel(
     private fun formatFileSize(bytes: Long): String {
         if (bytes <= 0) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB")
-        val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt()
-        return String.format(Locale.US, "%.1f %s", bytes / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+        val digitGroups = (log10(bytes.toDouble()) / log10(1024.0)).toInt()
+        return String.format(Locale.US, "%.1f %s", bytes / 1024.0.pow(digitGroups.toDouble()), units[digitGroups])
     }
 }
