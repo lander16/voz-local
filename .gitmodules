@@ -1,0 +1,3 @@
+[submodule "app/src/main/jni/whisper"]
+	path = app/src/main/jni/whisper
+	url = https://github.com/ggerganov/whisper.cpp.git

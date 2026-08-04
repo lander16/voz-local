@@ -34,7 +34,7 @@ android {
 
   externalNativeBuild {
     cmake {
-      path = file("src/main/jni/whisper/CMakeLists.txt")
+      path = file("src/main/jni/whisper/examples/whisper.android/lib/src/main/jni/whisper/CMakeLists.txt")
     }
   }
 
