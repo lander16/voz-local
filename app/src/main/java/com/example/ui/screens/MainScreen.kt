@@ -35,6 +35,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -2194,6 +2195,7 @@ fun SettingsSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val historyLimit by viewModel.historyLimit.collectAsStateWithLifecycle()
+    val saveHistory by viewModel.saveHistory.collectAsStateWithLifecycle()
     val smartPunctuation by viewModel.smartPunctuation.collectAsStateWithLifecycle()
     val autoCapitalization by viewModel.autoCapitalization.collectAsStateWithLifecycle()
     val applyDictionary by viewModel.applyDictionary.collectAsStateWithLifecycle()
@@ -2524,14 +2526,46 @@ fun SettingsSheet(
                     letterSpacing = 1.sp
                 )
 
+                // Save History toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .semantics(mergeDescendants = true) {}
+                        .toggleable(
+                            value = saveHistory,
+                            role = Role.Switch,
+                            onValueChange = { viewModel.setSaveHistory(it) }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Save Transcription History", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "When off, transcriptions are never written to local storage", fontSize = 13.sp, color = TextSecondary)
+                    }
+                    Switch(
+                        checked = saveHistory,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
+
+                // Retention limit chips (dimmed when saving is off)
                 Text(
                     text = "Configure maximum history items retained in your local SQLite database.",
                     fontSize = 13.sp,
-                    color = TextSecondary
+                    color = if (saveHistory) TextSecondary else TextSecondary.copy(alpha = 0.4f)
                 )
 
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .alpha(if (saveHistory) 1f else 0.35f),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val options = listOf(

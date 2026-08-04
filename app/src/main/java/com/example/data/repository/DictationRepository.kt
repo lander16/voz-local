@@ -60,6 +60,14 @@ class DictationRepository(private val context: Context) {
         prefs.edit { putInt("history_limit", limit) }
     }
 
+    fun getSaveHistory(): Boolean {
+        return prefs.getBoolean("save_history", true)
+    }
+
+    fun saveSaveHistory(value: Boolean) {
+        prefs.edit { putBoolean("save_history", value) }
+    }
+
     fun getShowOnlyOnInput(): Boolean {
         return prefs.getBoolean("show_only_on_input", true)
     }
@@ -319,6 +327,7 @@ class DictationRepository(private val context: Context) {
 
     // History Operations
     suspend fun insertHistory(history: TranscriptionHistory) = withContext(Dispatchers.IO) {
+        if (!getSaveHistory()) return@withContext
         historyDao.insertHistory(history)
         pruneHistory(getHistoryLimit())
     }

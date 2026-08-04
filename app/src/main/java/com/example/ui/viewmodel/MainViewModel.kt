@@ -84,6 +84,7 @@ class MainViewModel(
     val autoCapitalization = MutableStateFlow(true)
     val applyDictionary = MutableStateFlow(true)
     val historyLimit = MutableStateFlow(repository.getHistoryLimit())
+    val saveHistory = MutableStateFlow(repository.getSaveHistory())
     val showOnlyOnInput = MutableStateFlow(repository.getShowOnlyOnInput())
     val whisperLanguage = MutableStateFlow(repository.getLanguage())
     val useAiPolisher = MutableStateFlow(repository.getUseAiPolisher())
@@ -114,6 +115,11 @@ class MainViewModel(
     fun setUseAiPolisher(value: Boolean) {
         repository.saveUseAiPolisher(value)
         useAiPolisher.value = value
+    }
+
+    fun setSaveHistory(value: Boolean) {
+        repository.saveSaveHistory(value)
+        saveHistory.value = value
     }
 
     fun setHistoryLimit(limit: Int) {
