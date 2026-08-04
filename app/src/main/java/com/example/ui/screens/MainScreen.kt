@@ -49,7 +49,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -536,7 +538,7 @@ fun DictateTab(viewModel: MainViewModel) {
                     Column {
                         Text(
                             text = "ACTIVE WHISPER MODEL",
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = TextMuted,
                             letterSpacing = 1.2.sp
@@ -606,7 +608,7 @@ fun DictateTab(viewModel: MainViewModel) {
                                 )
                                 Text(
                                     text = if (isRecording) "LIVE TRANSCRIPTION FEED" else "DICTATION READY",
-                                    fontSize = 10.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 1.sp,
                                     color = if (isRecording) TertiaryColor else Color(0xFF10B981)
@@ -688,7 +690,7 @@ fun DictateTab(viewModel: MainViewModel) {
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Speech is processed locally in realtime with 0 latency.",
+                            text = "Speech is processed 100% on-device with near-zero latency.",
                             fontSize = 12.sp,
                             color = TextMuted
                         )
@@ -773,6 +775,11 @@ fun DictateTab(viewModel: MainViewModel) {
                                 spotColor = if (isRecording) TertiaryColor else PrimaryColor
                             )
                             .clip(CircleShape)
+                            .semantics {
+                                role = Role.Button
+                                stateDescription = if (isRecording) "Recording" else "Ready"
+                                contentDescription = if (isRecording) "Stop recording" else "Start recording"
+                            }
                             .clickable { viewModel.toggleRecording() }
                             .background(
                                 Brush.linearGradient(
@@ -787,7 +794,7 @@ fun DictateTab(viewModel: MainViewModel) {
                     ) {
                         Icon(
                             imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
-                            contentDescription = "Voice dictation action button",
+                            contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(46.dp)
                         )
@@ -846,6 +853,7 @@ fun DictateTab(viewModel: MainViewModel) {
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(10.dp))
+                            .semantics(mergeDescendants = true) {}
                             .toggleable(
                                 value = smartPunctuation,
                                 role = Role.Switch,
@@ -879,6 +887,7 @@ fun DictateTab(viewModel: MainViewModel) {
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(10.dp))
+                            .semantics(mergeDescendants = true) {}
                             .toggleable(
                                 value = autoCapitalization,
                                 role = Role.Switch,
@@ -912,6 +921,7 @@ fun DictateTab(viewModel: MainViewModel) {
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(10.dp))
+                            .semantics(mergeDescendants = true) {}
                             .toggleable(
                                 value = applyDictionary,
                                 role = Role.Switch,
@@ -946,6 +956,7 @@ fun DictateTab(viewModel: MainViewModel) {
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(10.dp))
+                            .semantics(mergeDescendants = true) {}
                             .toggleable(
                                 value = showOnlyOnInput,
                                 role = Role.Switch,
@@ -986,6 +997,7 @@ fun DictateTab(viewModel: MainViewModel) {
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(10.dp))
+                            .semantics(mergeDescendants = true) {}
                             .toggleable(
                                 value = useAiPolisher,
                                 role = Role.Switch,
@@ -1299,20 +1311,26 @@ fun ModelCard(
                 ) {
                     if (model.isDownloaded) {
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            IconButton(onClick = onDelete) {
+                            IconButton(
+                                onClick = onDelete,
+                                modifier = Modifier.heightIn(min = 44.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.DeleteOutline,
-                                    contentDescription = "Delete downloaded model files",
+                                    contentDescription = "Delete ${model.name}",
                                     tint = TertiaryColor
                                 )
                             }
-                            IconButton(onClick = onRedownload) {
+                            IconButton(
+                                onClick = onRedownload,
+                                modifier = Modifier.heightIn(min = 44.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Re-download model weights",
+                                    contentDescription = "Re-download ${model.name}",
                                     tint = PrimaryColor
                                 )
                             }
@@ -1327,7 +1345,7 @@ fun ModelCard(
                             ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
-                                .height(36.dp)
+                                .heightIn(min = 44.dp)
                                 .pressScale()
                         ) {
                             Text(
@@ -1632,6 +1650,12 @@ fun HistoryTab(viewModel: MainViewModel) {
                         colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor),
                         modifier = Modifier.pressScale()
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(text = "Clear History", fontWeight = FontWeight.Bold)
                     }
                 }
@@ -1958,7 +1982,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Size: $audioSize",
+                                text = "Size: ${audioSize.ifBlank { "Loading…" }}",
                                 fontSize = 12.sp,
                                 color = TextSecondary
                             )
@@ -2103,6 +2127,54 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        // How it works info card — fills empty space, provides guidance when idle
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GlassBorder)
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "HOW IT WORKS",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = PrimaryColor,
+                        letterSpacing = 1.2.sp
+                    )
+                    listOf(
+                        Pair(Icons.Default.Share, "Share any audio from WhatsApp, Telegram, or Voice Memos — or pick a local file above."),
+                        Pair(Icons.Default.GraphicEq, "VozLocal processes the audio 100% on-device using your active Whisper model."),
+                        Pair(Icons.Default.ContentCopy, "Copy the completed transcript to your clipboard in one tap.")
+                    ).forEach { (icon, stepText) ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = PrimaryColor.copy(alpha = 0.7f),
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .padding(top = 2.dp)
+                            )
+                            Text(
+                                text = stepText,
+                                fontSize = 13.sp,
+                                color = TextSecondary,
+                                lineHeight = 18.sp
+                            )
                         }
                     }
                 }
