@@ -3,6 +3,7 @@ package dev.sebastian.vozlocal.polish
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Local rule-based text polisher. Strips filler words, collapses
@@ -10,28 +11,46 @@ import java.util.Locale
  * Pure Kotlin — no model file required. Designed as the v1 of the
  * "AI Polisher" feature while a future llama.cpp + Qwen 2.5 inference
  * path is still in the roadmap.
+ *
+ * The polisher is intentionally conservative: it only removes pure
+ * vocalizations (um, uh, hm, …) that are never words in the target
+ * language. Discourse markers and common short words are NOT removed
+ * because they are ambiguous — removing "este", "bueno", "so" or
+ * "well" destroys legitimate text ("este libro" must stay "este libro").
  */
 class QwenEngine {
+    // Only never-legitimate vocalizations per language. Everything else from
+    // the original list (este, bueno, vamos, claro, so, well, like, …) was
+    // dropped because those are real words in normal prose.
     private val fillersByLang: Map<String, List<String>> = mapOf(
-        "es" to listOf("\\beh\\b", "\\beste\\b", "\\bpues\\b", "\\bo sea\\b", "\\bvale\\b", "\\bbueno\\b", "\\bvamos\\b", "\\bclaro\\b", "\\bmira\\b"),
-        "en" to listOf("\\bum\\b", "\\buh\\b", "\\ber\\b", "\\buhm\\b", "\\blike\\b", "\\byou know\\b", "\\bi mean\\b", "\\bbasically\\b", "\\bliterally\\b", "\\bkinda\\b", "\\bsort of\\b", "\\bso\\b", "\\bwell\\b"),
-        "fr" to listOf("\\beuh\\b", "\\bhein\\b", "\\btu vois\\b", "\\ben fait\\b", "\\bdu coup\\b"),
-        "de" to listOf("\\bähm\\b", "\\bäh\\b", "\\balso\\b", "\\bquasi\\b", "\\bhalt\\b"),
-        "pt" to listOf("\\bné\\b", "\\btipo\\b", "\\bah\\b", "\\bentão\\b"),
-        "it" to listOf("\\behm\\b", "\\bcioè\\b", "\\ballora\\b", "\\bdiciamo\\b"),
-        "auto" to listOf("\\bum\\b", "\\buh\\b", "\\beh\\b")
+        "es" to listOf("eh", "ehm"),
+        "en" to listOf("um", "uh", "er", "uhm", "hmm", "mm"),
+        "fr" to listOf("euh", "euhm"),
+        "de" to listOf("ähm", "äh", "hm", "hmm"),
+        "pt" to listOf("ah", "hm", "hmm"),
+        "it" to listOf("ehm", "hm", "hmm"),
+        "auto" to listOf("um", "uh", "er", "hm", "hmm", "mm")
     )
 
-    private val fillerRegexes: List<Regex> = fillersByLang.values.flatten().distinct().map { Regex(it, RegexOption.IGNORE_CASE) }
+    private val fillerRegexCache: MutableMap<String, List<Regex>> = ConcurrentHashMap()
     private val repeatWordRegex = Regex("\\b(\\w+)(?:\\s+\\1\\b)+", RegexOption.IGNORE_CASE)
     private val multiSpaceRegex = Regex("\\s+")
+
+    private fun fillerRegexesFor(language: String): List<Regex> {
+        val resolved = if (fillersByLang.containsKey(language)) language else "auto"
+        return fillerRegexCache.getOrPut(resolved) {
+            fillersByLang.getValue(resolved).map { filler ->
+                Regex("\\b${Regex.escape(filler)}\\b", RegexOption.IGNORE_CASE)
+            }
+        }
+    }
 
     suspend fun polish(text: String, language: String = "auto"): String = withContext(Dispatchers.Default) {
         if (text.isBlank()) return@withContext text
         var result = text
 
-        // 1. Remove filler words.
-        for (re in fillerRegexes) {
+        // 1. Remove filler words (only safe, never-legitimate vocalizations).
+        for (re in fillerRegexesFor(language)) {
             result = re.replace(result, " ")
         }
 

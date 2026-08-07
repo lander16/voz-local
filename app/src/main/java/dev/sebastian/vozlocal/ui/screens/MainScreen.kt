@@ -72,7 +72,7 @@ fun MainScreen(
     var activeTab by remember { mutableStateOf(initialTab) }
 
     // Theme mode is collected here so MainScreen can re-apply the theme.
-    // MainActivity should ideally observe this and pass it to MyApplicationTheme directly.
+    // "system" is resolved inside MyApplicationTheme via isSystemInDarkTheme().
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
 
     // Observe shared audio loaded intent to automatically navigate to the SHARED tab
@@ -163,8 +163,7 @@ fun MainScreen(
             }
         )
     } else {
-        // Re-apply the theme from the ViewModel. This is a nested theme override;
-        // MainActivity should eventually observe themeMode and pass it to MyApplicationTheme.
+        // Re-apply the theme from the ViewModel (nested theme override).
         MyApplicationTheme(themeMode = themeMode) {
             ModalNavigationDrawer(
                 drawerState = drawerState,

@@ -1,6 +1,7 @@
 package dev.sebastian.vozlocal.ui.theme
 
 import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -48,12 +49,11 @@ fun MyApplicationTheme(
     themeMode: String? = null, // "light" / "dark" / "system" — overrides darkTheme when provided
     content: @Composable () -> Unit
 ) {
-    // Resolve explicit theme mode. "system" falls back to the darkTheme param for now;
-    // a future pass can wire isSystemInDarkTheme() here from MainActivity.
+    // Resolve the theme mode; "system" defers to the OS setting.
     val effectiveDarkTheme = when (themeMode) {
         "light" -> false
         "dark" -> true
-        "system" -> darkTheme // TODO: use isSystemInDarkTheme() once available in caller
+        "system" -> isSystemInDarkTheme()
         else -> darkTheme
     }
 

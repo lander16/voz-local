@@ -66,7 +66,7 @@ VozLocal System Architecture (v2)
 │  AudioRecorder     │  │  DictationRepository      │  │  DictationAccessibility   │
 │  (process-wide     │  │  - WhisperEngine (load)   │  │  Service                  │
 │   singleton,       │  │  - AudioDecoder (decode)  │  │  - Floating overlay       │
-│   Mutex-serialized)│  │  - QwenEngine (polish)    │  │  - Text injection         │
+│  synchronized(this)│  │  - QwenEngine (polish)    │  │  - Text injection         │
 └─────────┬──────────┘  │  - Room (DAO) + Prefs     │  │  - Same singleton         │
           │             │  - postProcessText()      │  │    recorder               │
           │             └────────────┬─────────────┘  └────────────┬──────────────┘
@@ -94,7 +94,7 @@ VozLocal System Architecture (v2)
 | Field | Type | Notes |
 |---|---|---|
 | `repository` | `DictationRepository` | Lazy-initialized; owns the `WhisperEngine`, `ModelDownloader`, `AudioDecoder`, `QwenEngine`, and Room database. |
-| `audioRecorder` | `AudioRecorder` | Process-wide singleton. Both `MainViewModel` and `DictationAccessibilityService` read this same instance, serialized internally with a `Mutex` so the two can never open `AudioRecord` on the same mic. |
+| `audioRecorder` | `AudioRecorder` | Process-wide singleton. Both `MainViewModel` and `DictationAccessibilityService` read this same instance; state transitions are guarded by `synchronized(this)` and the IO reader thread reads `@Volatile` fields, so the two can never open `AudioRecord` on the same mic. |
 | `applicationScope` | `CoroutineScope` | `SupervisorJob() + Dispatchers.IO`. Owns the long-lived `repository.initializeModels()` call (seed default model rows, prune stale ones, refresh download state). |
 
 `MainViewModel.onCleared()` calls `audioRecorder.release()` and the repository's `shutdown()` (which releases the native `WhisperContext`) so the multi-hundred-MB native buffer is freed on `Activity` destruction / configuration change.
@@ -212,7 +212,7 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 - **Dictionary** tab — add custom brand names or technical terms. Compiled regexes are cached and invalidated on insert/delete.
 
 ### 6. Settings
-- **Appearance** — Light, Dark, or System. (System currently maps to dark until `MainActivity` learns to read `isSystemInDarkTheme()`; see the TODO in `MainScreen.kt`.)
+- **Appearance** — Light, Dark, or System. ("System" follows the OS setting via `isSystemInDarkTheme()` inside `MyApplicationTheme`.)
 - **Language** — the same set as in the Dictate tab.
 - **Post-processing** — Smart pause correction, auto-capitalization, dictionary, optional polisher. **All four are persisted to SharedPreferences.**
 - **Overlay** — show floating button only when a text field is focused.
@@ -236,7 +236,7 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 
 | Area | Before | After |
 |---|---|---|
-| `AudioRecorder` | Two instances (ViewModel + Service), raced for the mic | Process-wide singleton in `VozLocalApp`, `Mutex`-serialized |
+| `AudioRecorder` | Two instances (ViewModel + Service), raced for the mic | Process-wide singleton in `VozLocalApp`; state transitions guarded by `synchronized(this)` and the IO reader thread reads `@Volatile` fields |
 | `WhisperContext` cleanup | `runBlocking` on the GC finalizer thread | `Cleaner`-based backstop + explicit `release()` from `ViewModel.onCleared()` and `repository.shutdown()` |
 | CPU thread count | Re-read `/proc/cpuinfo` on every transcription | `by lazy { … }` — read once |
 | Smart-punctuation | Two implementations, one dead | Kotlin `postProcessText` is the single source of truth; the JNI pause-joiner is removed |

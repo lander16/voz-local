@@ -48,10 +48,22 @@ private class FastFloatBuffer(initialCapacity: Int = SAMPLE_RATE * 15) {
     }
 }
 
+/**
+ * Locking discipline:
+ *  - State transitions (`isRecording`, `audioRecord`, `recordingJob`) are guarded by
+ *    `synchronized(this)`. Kotlin's intrinsic monitors are reentrant, so a call that
+ *    arrives on a thread already holding the monitor (e.g. the accessibility service
+ *    posting back to the main thread) is safe.
+ *  - The IO reader thread reads `isRecording` and `audioRecord` directly inside its
+ *    `while` loop; both are `@Volatile` so it always sees fresh writes without holding
+ *    the monitor.
+ *  - The float buffer is independently synchronized on its own monitor so the lock is
+ *    held only for the (cheap) state mutations, never while draining PCM.
+ */
 class AudioRecorder {
-    private var audioRecord: AudioRecord? = null
-    private var recordingJob: Job? = null
-    private var isRecording = false
+    @Volatile private var audioRecord: AudioRecord? = null
+    @Volatile private var recordingJob: Job? = null
+    @Volatile private var isRecording = false
     private val floatBuffer = FastFloatBuffer()
 
     @SuppressLint("MissingPermission")
@@ -63,70 +75,75 @@ class AudioRecorder {
         if (!hasRecordPermission) {
             throw SecurityException("RECORD_AUDIO permission not granted")
         }
-        if (isRecording) return
 
-        val minBufferSize = max(
-            AudioRecord.getMinBufferSize(
+        synchronized(this) {
+            if (isRecording) return
+
+            val minBufferSize = max(
+                AudioRecord.getMinBufferSize(
+                    SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                ),
+                4096
+            )
+
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.VOICE_RECOGNITION,
                 SAMPLE_RATE,
                 AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
-            ),
-            4096
-        )
+                AudioFormat.ENCODING_PCM_16BIT,
+                minBufferSize
+            )
 
-        audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.VOICE_RECOGNITION,
-            SAMPLE_RATE,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            minBufferSize
-        )
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                Log.e(TAG, "AudioRecord initialization failed!")
+                audioRecord = null
+                return
+            }
 
-        if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-            Log.e(TAG, "AudioRecord initialization failed!")
-            audioRecord = null
-            return
-        }
+            synchronized(floatBuffer) {
+                floatBuffer.reset()
+            }
+            isRecording = true
+            audioRecord?.startRecording()
 
-        synchronized(floatBuffer) {
-            floatBuffer.reset()
-        }
-        isRecording = true
-        audioRecord?.startRecording()
+            recordingJob = scope.launch(Dispatchers.IO) {
+                val buffer = ShortArray(minBufferSize / 2)
 
-        recordingJob = scope.launch(Dispatchers.IO) {
-            val buffer = ShortArray(minBufferSize / 2)
+                while (isActive && isRecording) {
+                    val readCount = audioRecord?.read(buffer, 0, buffer.size) ?: -1
+                    if (readCount > 0) {
+                        val sumSquares: Double
+                        synchronized(floatBuffer) {
+                            sumSquares = floatBuffer.appendPCM16(buffer, readCount)
+                        }
 
-            while (isActive && isRecording) {
-                val readCount = audioRecord?.read(buffer, 0, buffer.size) ?: -1
-                if (readCount > 0) {
-                    val sumSquares: Double
-                    synchronized(floatBuffer) {
-                        sumSquares = floatBuffer.appendPCM16(buffer, readCount)
+                        // Calculate RMS amplitude for live waveform UI
+                        val rms = sqrt(sumSquares / readCount).toFloat()
+                        val rmsDb = if (rms > 0) (20 * kotlin.math.log10(rms.toDouble())).toFloat() else 0f
+                        val normalizedAmp = (rmsDb / 90f).coerceIn(0.05f, 1.0f)
+                        onRmsChanged?.invoke(normalizedAmp)
                     }
-
-                    // Calculate RMS amplitude for live waveform UI
-                    val rms = sqrt(sumSquares / readCount).toFloat()
-                    val rmsDb = if (rms > 0) (20 * kotlin.math.log10(rms.toDouble())).toFloat() else 0f
-                    val normalizedAmp = (rmsDb / 90f).coerceIn(0.05f, 1.0f)
-                    onRmsChanged?.invoke(normalizedAmp)
                 }
             }
         }
     }
 
     fun stopRecording(): FloatArray {
-        isRecording = false
-        recordingJob?.cancel()
-        recordingJob = null
+        synchronized(this) {
+            isRecording = false
+            recordingJob?.cancel()
+            recordingJob = null
 
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping AudioRecord", e)
+            try {
+                audioRecord?.stop()
+                audioRecord?.release()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping AudioRecord", e)
+            }
+            audioRecord = null
         }
-        audioRecord = null
 
         synchronized(floatBuffer) {
             val samples = floatBuffer.toFloatArray()
@@ -141,17 +158,19 @@ class AudioRecorder {
      * Frees all recorder resources. Safe to call whether or not recording is active.
      */
     fun release() {
-        isRecording = false
-        recordingJob?.cancel()
-        recordingJob = null
+        synchronized(this) {
+            isRecording = false
+            recordingJob?.cancel()
+            recordingJob = null
 
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error releasing AudioRecord", e)
+            try {
+                audioRecord?.stop()
+                audioRecord?.release()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error releasing AudioRecord", e)
+            }
+            audioRecord = null
         }
-        audioRecord = null
 
         synchronized(floatBuffer) {
             floatBuffer.reset()
