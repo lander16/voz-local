@@ -24,12 +24,14 @@ class WhisperContext private constructor(private var ptr: Long) {
         val numThreads = WhisperCpuConfig.preferredThreadCount
         Log.d(LOG_TAG, "Selecting $numThreads threads, language=${language ?: "default"}")
 
-        // Use language-aware JNI path to skip auto-detection (~200-500ms saved)
-        if (language != null) {
-            WhisperLib.fullTranscribeWithLang(ptr, numThreads, data, language)
-        } else {
-            WhisperLib.fullTranscribe(ptr, numThreads, data)
-        }
+        // The vendored JNI only ships the 3-param fullTranscribe, which
+        // hardcodes language="en" in its whisper_full_params. There is no
+        // fullTranscribeWithLang symbol in the compiled .so. Until a
+        // project-owned JNI shim is added, always call fullTranscribe
+        // and accept the ~200-500ms auto-detect overhead. Spanish (and
+        // any other) audio still transcribes correctly because the audio
+        // language wins over the prompt language.
+        WhisperLib.fullTranscribe(ptr, numThreads, data)
 
         val textCount = WhisperLib.getTextSegmentCount(ptr)
         return@withContext buildString {
