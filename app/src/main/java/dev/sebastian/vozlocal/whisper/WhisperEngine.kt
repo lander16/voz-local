@@ -11,6 +11,24 @@ import java.io.File
 
 private const val TAG = "WhisperEngine"
 
+/**
+ * Default priming prompt for Spanish dictation: forces Whisper to stay in
+ * Spanish and prefer correct accents/punctuation. Substituted automatically
+ * when no explicit initial prompt is configured.
+ */
+internal const val SPANISH_PROMPT =
+    "Hola, ¿cómo estás? Voy a dictar en español. Uso acentos y puntuación correcta."
+
+/**
+ * Resolves the effective initial prompt: an explicitly-configured prompt wins;
+ * otherwise Spanish gets the default priming prompt and other languages get
+ * none (let Whisper auto-prompt).
+ */
+internal fun effectivePrompt(language: String, initialPrompt: String?): String? {
+    if (initialPrompt != null) return initialPrompt
+    return if (language == "es") SPANISH_PROMPT else null
+}
+
 class WhisperEngine(private val context: Context) {
     private var whisperContext: WhisperContext? = null
     private var currentModelId: String? = null
@@ -44,7 +62,8 @@ class WhisperEngine(private val context: Context) {
 
     suspend fun transcribe(
         audioSamples: FloatArray,
-        language: String = "es"
+        language: String = "es",
+        params: WhisperParams = WhisperParams()
     ): String = withContext(Dispatchers.Default) {
         val wContext = whisperContext
         if (wContext == null) {
@@ -57,14 +76,22 @@ class WhisperEngine(private val context: Context) {
         }
 
         try {
+            // Backward-compat resolution: an explicitly-passed positional language
+            // (legacy callers) wins; otherwise params.language is used.
+            val effectiveLanguage = if (language == "es") params.language else language
+            val effectiveParams = params.copy(
+                language = effectiveLanguage,
+                initialPrompt = effectivePrompt(effectiveLanguage, params.initialPrompt)
+            )
+
             val startMs = System.currentTimeMillis()
             val durationSec = audioSamples.size / 16000f
-            Log.d(TAG, "Running transcription: ${audioSamples.size} samples (${String.format("%.1f", durationSec)}s audio), lang=$language")
-            val result = wContext.transcribeData(audioSamples, printTimestamp = false, language = language)
+            Log.d(TAG, "Running transcription: ${audioSamples.size} samples (${String.format("%.1f", durationSec)}s audio), lang=$effectiveLanguage")
+            val result = wContext.transcribeData(audioSamples, effectiveParams)
             val elapsedMs = System.currentTimeMillis() - startMs
             Log.i(TAG, "Transcription completed in ${elapsedMs}ms (${String.format("%.1fx", durationSec * 1000 / elapsedMs)} realtime)")
             if (BuildConfig.DEBUG) Log.d(TAG, "Raw transcription output: $result")
-            result.trim()
+            HallucinationFilter.filter(result).trim()
         } catch (e: Exception) {
             Log.e(TAG, "Error transcribing audio samples", e)
             ""

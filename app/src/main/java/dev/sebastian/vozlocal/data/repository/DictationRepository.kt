@@ -11,9 +11,13 @@ import dev.sebastian.vozlocal.data.model.DictionaryWord
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.polish.QwenEngine
 import dev.sebastian.vozlocal.whisper.WhisperEngine
+import dev.sebastian.vozlocal.whisper.WhisperParams
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -42,6 +46,17 @@ class DictationRepository(private val context: Context) {
     private var cachedWordRegexes: List<Regex> = emptyList()
     private var cachedWordReplacements: List<String> = emptyList()
     private var lastDictHash: Int = 0
+
+    // Silero VAD model state: populated at app start by ensureVadModel().
+    private val _vadModelReady = MutableStateFlow(false)
+    val isVadModelReady: StateFlow<Boolean> = _vadModelReady.asStateFlow()
+
+    private val _vadModelPath = MutableStateFlow<String?>(null)
+    val vadModelPath: StateFlow<String?> = _vadModelPath.asStateFlow()
+
+    // True once a model has been preloaded (or the preload attempt finished).
+    private val _modelLoaded = MutableStateFlow(false)
+    val modelLoaded: StateFlow<Boolean> = _modelLoaded.asStateFlow()
 
     val allModels: Flow<List<DictationModel>> = modelDao.getAllModels().map { list ->
         list.sortedBy { model -> when (model.id) {
@@ -133,8 +148,76 @@ class DictationRepository(private val context: Context) {
         prefs.edit { putString("theme_mode", value) }
     }
 
+    fun getNoSpeechThold(): Float {
+        return prefs.getFloat("no_speech_thold", 0.4f)
+    }
+
+    fun saveNoSpeechThold(value: Float) {
+        prefs.edit { putFloat("no_speech_thold", value) }
+    }
+
+    fun getLogprobThold(): Float {
+        return prefs.getFloat("logprob_thold", -0.5f)
+    }
+
+    fun saveLogprobThold(value: Float) {
+        prefs.edit { putFloat("logprob_thold", value) }
+    }
+
+    fun getEntropyThold(): Float {
+        return prefs.getFloat("entropy_thold", 2.4f)
+    }
+
+    fun saveEntropyThold(value: Float) {
+        prefs.edit { putFloat("entropy_thold", value) }
+    }
+
+    fun getInitialPrompt(): String? {
+        val value = prefs.getString("initial_prompt", null) ?: return null
+        return value.ifBlank { null }
+    }
+
+    fun saveInitialPrompt(value: String?) {
+        prefs.edit { putString("initial_prompt", value?.ifBlank { null }) }
+    }
+
     suspend fun shutdown() {
         whisperEngine.release()
+    }
+
+    fun setModelLoaded(value: Boolean) {
+        _modelLoaded.value = value
+    }
+
+    /**
+     * Downloads the Silero VAD model if not already present and publishes its
+     * absolute path + readiness. The VAD model is small (~2 MB), so this is
+     * kicked off at app start and finishes in the background.
+     */
+    suspend fun ensureVadModel() {
+        val path = modelDownloader.downloadVadModel()
+        if (path != null) {
+            _vadModelPath.value = path
+            _vadModelReady.value = true
+        }
+    }
+
+    /**
+     * Waits until the model table has a selected model (initializeModels seeds it)
+     * and preloads it into the engine so the first dictation has zero load latency.
+     */
+    suspend fun preloadModel() = withContext(Dispatchers.IO) {
+        try {
+            val selected = allModels
+                .map { list -> list.find { it.isSelected } ?: list.firstOrNull() }
+                .first { it != null }
+            val ok = selected != null && whisperEngine.loadModel(selected.id)
+            Log.i(TAG, "Preload of model '${selected?.id}' -> loaded=$ok")
+            _modelLoaded.value = true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error preloading model", e)
+            _modelLoaded.value = true
+        }
     }
 
     suspend fun pruneHistory(limit: Int) = withContext(Dispatchers.IO) {
@@ -150,6 +233,13 @@ class DictationRepository(private val context: Context) {
     }
 
     init {
+        // If the VAD model is already on disk (e.g. from a previous run), publish it now.
+        val vadFile = modelDownloader.vadModelFile()
+        if (vadFile.exists() && vadFile.length() > 0L) {
+            _vadModelPath.value = vadFile.absolutePath
+            _vadModelReady.value = true
+        }
+
         // Backward-compat: kick off the seed work on the repository's own IO scope
         // for callers that don't manage their own scope. The application also calls
         // initializeModels() from its own long-lived scope.
@@ -337,8 +427,11 @@ class DictationRepository(private val context: Context) {
             return@withContext "Model not downloaded. Please download $modelId in the Models tab first."
         }
 
-        val language = getLanguage()
-        whisperEngine.transcribe(samples, language)
+        whisperEngine.transcribe(
+            samples,
+            language = getLanguage(),
+            params = currentWhisperParams()
+        )
     }
 
     suspend fun transcribeSharedFile(
@@ -362,11 +455,33 @@ class DictationRepository(private val context: Context) {
         }
 
         onProgress(0.70f, "Running local Whisper inference...")
-        val language = getLanguage()
-        val rawResult = whisperEngine.transcribe(samples, language)
+        val rawResult = whisperEngine.transcribe(
+            samples,
+            language = getLanguage(),
+            params = currentWhisperParams().copy(
+                singleSegment = false,
+                printTimestamps = true
+            )
+        )
         onProgress(0.95f, "Applying local post-processing...")
 
         rawResult
+    }
+
+    /**
+     * Builds the transcription params from the persisted AI-engine settings.
+     * Live dictation keeps single_segment=true; the shared-file path overrides
+     * that (multi-segment + timestamps) for the timeline UI.
+     */
+    private fun currentWhisperParams(): WhisperParams {
+        return WhisperParams(
+            language = getLanguage(),
+            initialPrompt = getInitialPrompt(),
+            noSpeechThold = getNoSpeechThold(),
+            logprobThold = getLogprobThold(),
+            entropyThold = getEntropyThold(),
+            vadModelPath = _vadModelPath.value
+        )
     }
 
     // History Operations

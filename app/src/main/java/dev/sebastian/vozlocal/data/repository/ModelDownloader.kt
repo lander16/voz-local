@@ -18,7 +18,8 @@ object ModelUrls {
         "whisper_base" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q8_0.bin",
         "whisper_small" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q8_0.bin",
         "whisper_medium" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q8_0.bin",
-        "whisper_large_v3_turbo" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin"
+        "whisper_large_v3_turbo" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+        "silero_vad" to "https://huggingface.co/ggml-org/whisper.cpp/resolve/main/ggml-silero-v6.2.0.bin"
     )
 
     fun getModelFile(context: Context, modelId: String): File {
@@ -44,7 +45,8 @@ class ModelDownloader(private val context: Context) {
         "whisper_base" to "placeholder-whisper_base",
         "whisper_small" to "placeholder-whisper_small",
         "whisper_medium" to "placeholder-whisper_medium",
-        "whisper_large_v3_turbo" to "placeholder-whisper_large_v3_turbo"
+        "whisper_large_v3_turbo" to "placeholder-whisper_large_v3_turbo",
+        "silero_vad" to "placeholder-silero_vad"
     )
 
     suspend fun downloadModel(
@@ -53,13 +55,50 @@ class ModelDownloader(private val context: Context) {
     ): Boolean {
         val url = ModelUrls.URL_MAP[modelId] ?: return false
         val outputFile = ModelUrls.getModelFile(context, modelId)
+        return downloadTo(url, outputFile, sha256Map[modelId], onProgress)
+    }
 
+    /**
+     * Absolute path to the Silero VAD model file (distinct name from the ASR
+     * models so the two never collide).
+     */
+    fun vadModelFile(): File {
+        val modelsDir = File(context.filesDir, "models")
+        if (!modelsDir.exists()) {
+            modelsDir.mkdirs()
+        }
+        return File(modelsDir, "ggml-silero-vad.bin")
+    }
+
+    /**
+     * Downloads the Silero VAD model (~2 MB) if not already present. Returns the
+     * absolute local path on success, null on failure.
+     */
+    suspend fun downloadVadModel(): String? {
+        val file = vadModelFile()
+        if (file.exists() && file.length() > 0L) {
+            Log.i(TAG, "VAD model already present at ${file.absolutePath}")
+            return file.absolutePath
+        }
+        val url = ModelUrls.URL_MAP["silero_vad"] ?: return null
+        val ok = downloadTo(url, file, sha256Map["silero_vad"]) { }
+        if (!ok) return null
+        Log.i(TAG, "VAD model downloaded to ${file.absolutePath}")
+        return file.absolutePath
+    }
+
+    private suspend fun downloadTo(
+        url: String,
+        outputFile: File,
+        expectedSha: String?,
+        onProgress: suspend (Float) -> Unit
+    ): Boolean {
         try {
             val request = Request.Builder().url(url).build()
             val response = client.newCall(request).execute()
 
             if (!response.isSuccessful) {
-                Log.e(TAG, "Failed to download model $modelId: ${response.code}")
+                Log.e(TAG, "Failed to download from $url: ${response.code}")
                 return false
             }
 
@@ -91,15 +130,14 @@ class ModelDownloader(private val context: Context) {
             onProgress(1.0f)
 
             // Integrity check: verify the downloaded file against the expected SHA-256.
-            val expectedSha = sha256Map[modelId]
             if (!expectedSha.isNullOrEmpty() && !verifySha256(outputFile, expectedSha)) {
                 return false
             }
 
-            Log.i(TAG, "Model $modelId downloaded successfully to ${outputFile.absolutePath}")
+            Log.i(TAG, "Downloaded ${outputFile.name} successfully to ${outputFile.absolutePath}")
             return true
         } catch (e: Exception) {
-            Log.e(TAG, "Exception downloading model $modelId", e)
+            Log.e(TAG, "Exception downloading to ${outputFile.absolutePath}", e)
             if (outputFile.exists()) {
                 outputFile.delete()
             }

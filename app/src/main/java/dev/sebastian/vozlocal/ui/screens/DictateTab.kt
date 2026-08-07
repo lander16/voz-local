@@ -60,6 +60,7 @@ fun DictateTab(
     val liveWaveform by viewModel.liveWaveform.collectAsStateWithLifecycle()
     val liveText by viewModel.currentLiveTranscription.collectAsStateWithLifecycle()
     val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
+    val isModelLoading by viewModel.isModelLoading.collectAsStateWithLifecycle()
 
     // Modifier Switches
     val smartPunctuation by viewModel.smartPunctuation.collectAsStateWithLifecycle()
@@ -454,7 +455,7 @@ fun DictateTab(
                                 stateDescription = if (isRecording) "Recording" else "Ready"
                                 contentDescription = if (isRecording) "Stop recording" else "Start recording"
                             }
-                            .clickable { viewModel.toggleRecording() }
+                            .clickable(enabled = !isModelLoading) { viewModel.toggleRecording() }
                             .background(
                                 Brush.linearGradient(
                                     colors = if (isRecording) {
@@ -476,12 +477,14 @@ fun DictateTab(
                 }
 
                 Text(
-                    text = if (isRecording) {
-                        val min = recordDurationSec / 60
-                        val sec = recordDurationSec % 60
-                        String.format(Locale.US, "Recording %02d:%02d", min, sec)
-                    } else {
-                        "Tap to dictate"
+                    text = when {
+                        isRecording -> {
+                            val min = recordDurationSec / 60
+                            val sec = recordDurationSec % 60
+                            String.format(Locale.US, "Recording %02d:%02d", min, sec)
+                        }
+                        isModelLoading -> "Loading model..."
+                        else -> "Tap to dictate"
                     },
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 12.sp,
@@ -494,6 +497,8 @@ fun DictateTab(
                         val sec = recordDurationSec % 60
                         contentDescription = if (isRecording) {
                             "Recording in progress: $min minutes $sec seconds"
+                        } else if (isModelLoading) {
+                            "Loading model"
                         } else {
                             "Start dictating"
                         }

@@ -31,6 +31,7 @@
 - 🎈 **Global Floating Dictation Overlay** — Accessibility Service + `WindowManager` show a floating microphone button over **any application** (WhatsApp, Gmail, Chrome, Notes). Recognized text is injected directly into the focused input field. The button is hidden when no text field is focused.
 - 📁 **Shared Audio File Transcription** — Receives shared audio files via Android `SEND` intents (WhatsApp voice notes, Voice Memos, podcast snippets) and transcribes them offline with `MediaCodec` + PCM.
 - 🧹 **Local Text Polisher** — A pure-Kotlin rule-based engine strips filler words ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies smart capitalization/punctuation. Runs on `Dispatchers.Default`, no model file required. The `QwenEngine` is the final implementation — the LLM backend was scoped out.
+- 🎯 **Optimized On-Device STT** — The project-owned JNI shim (`app/src/main/jni/vozlocal-jni/vozlocal-jni.c`) exposes the full `whisper_full_params` surface to Kotlin via `WhisperParams`: explicit language, an optional initial prompt (Spanish gets a default priming prompt), `single_segment` for low-latency live dictation, tunable no-speech / log-probability / entropy rejection thresholds, optional beam search, and native **Silero VAD** (auto-downloaded at app start, ~2 MB). A post-transcription `HallucinationFilter` strips looped outro phrases ("gracias por ver", "thanks for watching", "[music]", …) and collapses verbatim repeated sentences. Thresholds and the initial prompt are configurable in **Settings → AI Engine**, persisted to SharedPreferences. The model is preloaded in the background at process start so the first dictation has no load latency.
 - 📚 **Personal Dictation Dictionary** — Vocabulary biasing and phonetic-replacement rules. Compiled regexes are cached and invalidated on insert/delete, so post-processing stays O(words) per transcription.
 - ⚡ **Local Post-Processing Pipeline** — Smart pause correction, auto-capitalization, dictionary replacement, and optional polisher — all stitched together in `DictationRepository.postProcessText`.
 - 📊 **Performance Stats & Analytics** — Per-day WPM, total speak time, and accuracy breakdown per model, backed by Room.
@@ -250,10 +251,19 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 | Dependencies | Firebase BOM, Retrofit, Moshi, logging-interceptor (all unused) | Removed; only Compose, Lifecycle, Room, Coroutines, OkHttp, Accompanist, Robolectric/Roborazzi |
 | `minSdk` / `targetSdk` | 24 / 36 (unreleased) | 26 / 36 (with a comment to pin to 35 once AGP 9.3.1 is verified on 35) |
 | `compileSdk` | `release(36) { minorApiLevel = 1 }` | Same (SDK 36 still tracked) |
+| `WhisperEngine` | Hardcoded `language="en"`, no VAD, no initial_prompt, no threshold tuning, single_segment=false | Project-owned JNI shim exposes the full `whisper_full_params` surface: language, initial_prompt, single_segment, no_speech_thold / logprob_thold / entropy_thold, beam_size, native Silero VAD. Defaults tuned for Spanish dictation (no_speech_thold 0.4, logprob_thold -0.5). Live dictation uses `single_segment=true`; shared-file keeps multi-segment for the timeline UI. Hallucination post-filter strips known loop phrases ("gracias por ver", "thanks for watching", etc.). |
 
 ---
 
 ## 🛣️ Roadmap
+
+**Deferred from the STT optimization pass (intentionally out of scope — see commit `3d1307c` and the `[J]` notes below):**
+
+- [ ] **[J] GPU / Vulkan / OpenCL delegate on Android** — vendored whisper.cpp is CPU-only. Switching to GPU would require forking the build, adding `GGML_VULKAN=ON` / `GGML_OPENCL=ON` to the project-owned CMakeLists, and shipping per-driver fallbacks. Vulkan on Android is immature, the community has reports of bad WER regressions on some Adreno/Mali GPUs, and it adds ~15 MB to the APK. Net benefit is unclear.
+- [ ] **[J] Word-by-word streaming for long recordings** — VAD + `single_segment=true` already gives the per-utterance latency win that matters for dictation. Real token-by-token streaming requires a persistent decoder state (`whisper_full_with_state`), a token-diffing renderer in Compose, and a small `WhisperContext` per session. Significant complexity for marginal UX value at the typical 10-30 s dictation length.
+- [ ] **[J] Audio resampling quality** — `AudioDecoder.resampleLinear` uses linear interpolation which aliases on 44.1 / 48 kHz → 16 kHz downsample. A windowed-sinc (Kaiser) resampler would be better; for speech the aliasing is rarely user-perceptible. Low-priority polish.
+
+**Open items:**
 
 - [ ] **Foreground service for background recording** — add a `<service android:foregroundServiceType="microphone">` so the mic can stay open when the user navigates away mid-dictation. Re-add the `FOREGROUND_SERVICE_MICROPHONE` permission at the same time.
 - [ ] **Real SHA-256 hashes** for the 5 Whisper model download map entries (currently `placeholder-…`).

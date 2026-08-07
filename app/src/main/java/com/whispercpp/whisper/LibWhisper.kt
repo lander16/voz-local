@@ -3,6 +3,7 @@ package com.whispercpp.whisper
 import android.content.res.AssetManager
 import android.os.Build
 import android.util.Log
+import dev.sebastian.vozlocal.whisper.WhisperParams
 import kotlinx.coroutines.*
 import java.io.InputStream
 import java.util.Locale
@@ -15,25 +16,34 @@ class WhisperContext private constructor(private var ptr: Long) {
     private val executor = Executors.newSingleThreadExecutor()
     private val scope: CoroutineScope = CoroutineScope(executor.asCoroutineDispatcher())
 
+    /**
+     * Full-parameter transcription pass. Backed by the project-owned JNI shim's
+     * `fullTranscribeWithParams`, which exposes the entire high-value
+     * `whisper_full_params` surface (language, initial_prompt, single_segment,
+     * thresholds, beam_size, native Silero VAD).
+     */
     suspend fun transcribeData(
         data: FloatArray,
-        printTimestamp: Boolean = true,
-        language: String? = null
+        params: WhisperParams
     ): String = withContext(scope.coroutineContext) {
         require(ptr != 0L)
         val numThreads = WhisperCpuConfig.preferredThreadCount
-        Log.d(LOG_TAG, "Selecting $numThreads threads, language=${language ?: "default"}")
+        Log.d(LOG_TAG, "Selecting $numThreads threads, language=${params.language}")
 
-        // The project-owned JNI shim at
-        // app/src/main/jni/vozlocal-jni/vozlocal-jni.c adds the
-        // fullTranscribeWithLang symbol to the same .so as the vendored
-        // fullTranscribe, so the user's selected language is honored
-        // (~200-500ms saved on Whisper's auto-detect).
-        if (language != null) {
-            WhisperLib.fullTranscribeWithLang(ptr, numThreads, data, language)
-        } else {
-            WhisperLib.fullTranscribe(ptr, numThreads, data)
-        }
+        WhisperLib.fullTranscribeWithParams(
+            ptr,
+            numThreads,
+            data,
+            params.language,
+            params.initialPrompt,
+            params.singleSegment,
+            params.printTimestamps,
+            params.noSpeechThold,
+            params.logprobThold,
+            params.entropyThold,
+            params.vadModelPath,
+            params.beamSize
+        )
 
         val textCount = WhisperLib.getTextSegmentCount(ptr)
         return@withContext buildString {
@@ -44,6 +54,23 @@ class WhisperContext private constructor(private var ptr: Long) {
                 append(segText)
             }
         }
+    }
+
+    /**
+     * Backward-compatible 3-arg overload. `null` language maps to "auto"
+     * (matching the old fullTranscribe auto-detect path).
+     */
+    suspend fun transcribeData(
+        data: FloatArray,
+        printTimestamp: Boolean = true,
+        language: String? = null
+    ): String {
+        val params = WhisperParams(
+            language = language ?: "auto",
+            singleSegment = !printTimestamp,
+            printTimestamps = printTimestamp
+        )
+        return transcribeData(data, params)
     }
 
     suspend fun benchMemory(nthreads: Int): String = withContext(scope.coroutineContext) {
@@ -131,6 +158,20 @@ private class WhisperLib {
         external fun freeContext(contextPtr: Long)
         external fun fullTranscribe(contextPtr: Long, numThreads: Int, audioData: FloatArray)
         external fun fullTranscribeWithLang(contextPtr: Long, numThreads: Int, audioData: FloatArray, language: String)
+        external fun fullTranscribeWithParams(
+            contextPtr: Long,
+            numThreads: Int,
+            audioData: FloatArray,
+            language: String?,
+            initialPrompt: String?,
+            singleSegment: Boolean,
+            printTimestamps: Boolean,
+            noSpeechThold: Float,
+            logprobThold: Float,
+            entropyThold: Float,
+            vadModelPath: String?,
+            beamSize: Int
+        )
         external fun getTextSegmentCount(contextPtr: Long): Int
         external fun getTextSegment(contextPtr: Long, index: Int): String
         external fun getTextSegmentT0(contextPtr: Long, index: Int): Long

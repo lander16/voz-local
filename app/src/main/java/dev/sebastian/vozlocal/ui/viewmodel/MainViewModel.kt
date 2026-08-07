@@ -103,6 +103,20 @@ class MainViewModel(
     val whisperLanguage = MutableStateFlow(repository.getLanguage())
     val useAiPolisher = MutableStateFlow(repository.getUseAiPolisher())
 
+    // AI Engine Settings (whisper_full_params surface)
+    val noSpeechThold = MutableStateFlow(repository.getNoSpeechThold())
+    val logprobThold = MutableStateFlow(repository.getLogprobThold())
+    val entropyThold = MutableStateFlow(repository.getEntropyThold())
+    val initialPrompt = MutableStateFlow(repository.getInitialPrompt() ?: "")
+
+    // Silero VAD + model-loading state (updated by the app-start background work)
+    val isVadModelReady: StateFlow<Boolean> = repository.isVadModelReady
+    val vadModelPath: StateFlow<String?> = repository.vadModelPath
+
+    val isModelLoading: StateFlow<Boolean> = repository.modelLoaded
+        .map { loaded -> !loaded }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
     companion object {
         // Supported whisper.cpp language codes for the selector
         val LANGUAGE_OPTIONS = listOf(
@@ -149,6 +163,26 @@ class MainViewModel(
     fun setUseAiPolisher(value: Boolean) {
         repository.saveUseAiPolisher(value)
         useAiPolisher.value = value
+    }
+
+    fun setNoSpeechThold(value: Float) {
+        repository.saveNoSpeechThold(value)
+        noSpeechThold.value = value
+    }
+
+    fun setLogprobThold(value: Float) {
+        repository.saveLogprobThold(value)
+        logprobThold.value = value
+    }
+
+    fun setEntropyThold(value: Float) {
+        repository.saveEntropyThold(value)
+        entropyThold.value = value
+    }
+
+    fun setInitialPrompt(value: String) {
+        repository.saveInitialPrompt(value)
+        initialPrompt.value = value
     }
 
     fun setSaveHistory(value: Boolean) {

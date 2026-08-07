@@ -28,6 +28,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
+import java.util.Locale
+import kotlin.math.roundToInt
+
+/** Snaps a slider value to the nearest [step] within [min]..[max]. */
+private fun snapSlider(value: Float, min: Float, max: Float, step: Float): Float {
+    val snapped = (value / step).roundToInt() * step
+    return snapped.coerceIn(min, max)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +53,11 @@ fun SettingsSheet(
     val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
     val whisperLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val noSpeechThold by viewModel.noSpeechThold.collectAsStateWithLifecycle()
+    val logprobThold by viewModel.logprobThold.collectAsStateWithLifecycle()
+    val entropyThold by viewModel.entropyThold.collectAsStateWithLifecycle()
+    val initialPrompt by viewModel.initialPrompt.collectAsStateWithLifecycle()
+    val isVadModelReady by viewModel.isVadModelReady.collectAsStateWithLifecycle()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -484,6 +497,146 @@ fun SettingsSheet(
                             )
                         }
                     }
+                }
+            }
+
+            HorizontalDivider(color = GlassBorder)
+
+            // Section 6: AI Engine
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "AI Engine",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = PrimaryColor,
+                    letterSpacing = 1.sp
+                )
+
+                Text(
+                    text = "Tune whisper_full_params (initial prompt, VAD, and the segment rejection thresholds).",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    lineHeight = 18.sp
+                )
+
+                // No-speech threshold
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "No-speech threshold", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(
+                            text = String.format(Locale.US, "%.2f", noSpeechThold),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = PrimaryColor
+                        )
+                    }
+                    Slider(
+                        value = noSpeechThold.coerceIn(0f, 1f),
+                        onValueChange = { viewModel.setNoSpeechThold(snapSlider(it, 0f, 1f, 0.05f)) },
+                        valueRange = 0.0f..1.0f,
+                        steps = 19
+                    )
+                }
+
+                // Log-probability threshold
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "Log-probability threshold", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(
+                            text = String.format(Locale.US, "%.2f", logprobThold),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = PrimaryColor
+                        )
+                    }
+                    Slider(
+                        value = logprobThold.coerceIn(-2f, 0f),
+                        onValueChange = { viewModel.setLogprobThold(snapSlider(it, -2f, 0f, 0.1f)) },
+                        valueRange = -2.0f..0.0f,
+                        steps = 19
+                    )
+                }
+
+                // Entropy threshold
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "Entropy threshold", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(
+                            text = String.format(Locale.US, "%.2f", entropyThold),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = PrimaryColor
+                        )
+                    }
+                    Slider(
+                        value = entropyThold.coerceIn(0f, 5f),
+                        onValueChange = { viewModel.setEntropyThold(snapSlider(it, 0f, 5f, 0.1f)) },
+                        valueRange = 0.0f..5.0f,
+                        steps = 49
+                    )
+                }
+
+                // Initial prompt
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(text = "Initial prompt", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    OutlinedTextField(
+                        value = initialPrompt,
+                        onValueChange = { viewModel.setInitialPrompt(it) },
+                        placeholder = {
+                            Text(
+                                text = dev.sebastian.vozlocal.whisper.SPANISH_PROMPT,
+                                fontSize = 13.sp,
+                                color = TextSecondary.copy(alpha = 0.6f)
+                            )
+                        },
+                        supportingText = {
+                            Text("Optional. Primes Whisper with this text before transcription.", fontSize = 12.sp, color = TextSecondary)
+                        },
+                        minLines = 4,
+                        maxLines = 6,
+                        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp, color = TextPrimary),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = PrimaryColor,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedContainerColor = SurfaceCard,
+                            unfocusedContainerColor = SurfaceCard,
+                            cursorColor = PrimaryColor
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                // VAD model status
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Silero VAD model", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Voice-activity detection removes silence before inference", fontSize = 13.sp, color = TextSecondary)
+                    }
+                    Text(
+                        text = if (isVadModelReady) "Ready" else "Downloading...",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isVadModelReady) Color(0xFF10B981) else TextSecondary
+                    )
                 }
             }
 
