@@ -37,7 +37,11 @@ android {
 
   externalNativeBuild {
     cmake {
-      path = file("src/main/jni/whisper/examples/whisper.android/lib/src/main/jni/whisper/CMakeLists.txt")
+      // Project-owned CMakeLists that adds the fullTranscribeWithLang JNI
+      // shim on top of the vendored whisper.cpp + jni.c. The vendored
+      // CMakeLists at the previous path is left in the tree for reference
+      // but is no longer used.
+      path = file("src/main/jni/vozlocal-jni/CMakeLists.txt")
     }
   }
 
