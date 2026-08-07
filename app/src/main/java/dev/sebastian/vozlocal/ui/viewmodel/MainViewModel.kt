@@ -227,7 +227,9 @@ class MainViewModel(
     }
 
     fun downloadModel(modelId: String) {
-        repository.startModelDownload(modelId, viewModelScope)
+        repository.startModelDownload(modelId, viewModelScope) { progress ->
+            _downloadProgressMap.update { it + (modelId to progress) }
+        }
     }
 
     fun deleteModel(modelId: String) {
@@ -239,7 +241,9 @@ class MainViewModel(
     fun redownloadModel(modelId: String) {
         viewModelScope.launch {
             repository.deleteDownloadedModel(modelId)
-            repository.startModelDownload(modelId, viewModelScope)
+            repository.startModelDownload(modelId, viewModelScope) { progress ->
+                _downloadProgressMap.update { it + (modelId to progress) }
+            }
         }
     }
 

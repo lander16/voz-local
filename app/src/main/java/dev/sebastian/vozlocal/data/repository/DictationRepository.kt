@@ -357,7 +357,11 @@ class DictationRepository(private val context: Context) {
         modelDao.updateModel(model)
     }
 
-    fun startModelDownload(modelId: String, scope: CoroutineScope) {
+    fun startModelDownload(
+        modelId: String,
+        scope: CoroutineScope,
+        onProgress: (Float) -> Unit = {}
+    ) {
         scope.launch(Dispatchers.IO) {
             try {
                 val models = allModels.first()
@@ -366,8 +370,14 @@ class DictationRepository(private val context: Context) {
 
                 model = model.copy(isDownloading = true, downloadProgress = 0.01f)
                 modelDao.updateModel(model)
+                onProgress(0.01f)
 
                 val success = modelDownloader.downloadModel(modelId) { progress ->
+                    // Route the tick to the caller (e.g. the ViewModel's
+                    // in-memory _downloadProgressMap) BEFORE writing Room,
+                    // so the progress bar updates within the same frame
+                    // instead of waiting for the Flow re-emission.
+                    onProgress(progress)
                     model = model.copy(isDownloading = true, downloadProgress = progress)
                     modelDao.updateModel(model)
                 }
@@ -378,12 +388,14 @@ class DictationRepository(private val context: Context) {
                         isDownloaded = true,
                         downloadProgress = 1.0f
                     ))
+                    onProgress(1.0f)
                 } else {
                     modelDao.updateModel(model.copy(
                         isDownloading = false,
                         isDownloaded = false,
                         downloadProgress = 0.0f
                     ))
+                    onProgress(0.0f)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error downloading model $modelId", e)
@@ -392,6 +404,7 @@ class DictationRepository(private val context: Context) {
                 if (model != null) {
                     modelDao.updateModel(model.copy(isDownloading = false, downloadProgress = 0.0f))
                 }
+                onProgress(0.0f)
             }
         }
     }
