@@ -4,7 +4,6 @@ import android.content.res.AssetManager
 import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.*
-import java.io.File
 import java.io.InputStream
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -34,46 +33,11 @@ class WhisperContext private constructor(private var ptr: Long) {
 
         val textCount = WhisperLib.getTextSegmentCount(ptr)
         return@withContext buildString {
-            var prevT1 = 0L
             for (i in 0 until textCount) {
-                val t0 = WhisperLib.getTextSegmentT0(ptr, i)
-                val t1 = WhisperLib.getTextSegmentT1(ptr, i)
-                val segText = WhisperLib.getTextSegment(ptr, i)
-
-                if (printTimestamp) {
-                    val textTimestamp = "[${toTimestamp(t0)} --> ${toTimestamp(t1)}]"
-                    append("$textTimestamp: $segText\n")
-                } else {
-                    val trimmed = segText.trim()
-                    if (trimmed.isNotEmpty()) {
-                        if (i > 0 && prevT1 > 0) {
-                            val pauseMs = (t0 - prevT1) * 10
-                            val currentText = this.toString().trimEnd()
-
-                            if (pauseMs >= 1200) {
-                                // Long pause (>= 1.2s): add period if not already punctuated
-                                if (!currentText.endsWith(".") && !currentText.endsWith("?") && !currentText.endsWith("!") && !currentText.endsWith(",")) {
-                                    append(". ")
-                                } else if (!currentText.endsWith(" ")) {
-                                    append(" ")
-                                }
-                            } else if (pauseMs >= 500) {
-                                // Medium pause (500ms - 1200ms): add comma if not already punctuated
-                                if (!currentText.endsWith(",") && !currentText.endsWith(".") && !currentText.endsWith("?") && !currentText.endsWith("!")) {
-                                    append(", ")
-                                } else if (!currentText.endsWith(" ")) {
-                                    append(" ")
-                                }
-                            } else {
-                                if (!currentText.endsWith(" ")) {
-                                    append(" ")
-                                }
-                            }
-                        }
-                        append(trimmed)
-                        prevT1 = t1
-                    }
-                }
+                val segText = WhisperLib.getTextSegment(ptr, i).trim()
+                if (segText.isEmpty()) continue
+                if (isNotEmpty() && !endsWith(' ')) append(' ')
+                append(segText)
             }
         }
     }
@@ -93,12 +57,6 @@ class WhisperContext private constructor(private var ptr: Long) {
         }
         scope.cancel()
         executor.shutdown()
-    }
-
-    protected fun finalize() {
-        runBlocking {
-            release()
-        }
     }
 
     companion object {
@@ -200,15 +158,4 @@ private fun isArmEabiV7a(): Boolean {
 
 private fun isArmEabiV8a(): Boolean {
     return Build.SUPPORTED_ABIS[0].equals("arm64-v8a")
-}
-
-private fun cpuInfo(): String? {
-    return try {
-        File("/proc/cpuinfo").inputStream().bufferedReader().use {
-            it.readText()
-        }
-    } catch (e: Exception) {
-        Log.w(LOG_TAG, "Couldn't read /proc/cpuinfo", e)
-        null
-    }
 }

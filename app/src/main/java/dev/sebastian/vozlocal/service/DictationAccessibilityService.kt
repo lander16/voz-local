@@ -20,6 +20,7 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -29,7 +30,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import dev.sebastian.vozlocal.VozLocalApp
-import dev.sebastian.vozlocal.audio.AudioRecorder
 import dev.sebastian.vozlocal.data.repository.DictationRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -48,9 +48,13 @@ class DictationAccessibilityService : AccessibilityService() {
     private var startTimestamp: Long = 0
     private var timerJob: Job? = null
 
-    private val audioRecorder = AudioRecorder()
+    // Process-wide singleton recorder (has an internal Mutex); shared with the main app.
+    private val audioRecorder get() = (applicationContext as VozLocalApp).audioRecorder
     private lateinit var repository: DictationRepository
     private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // Reused for marshalling the live amplitude callback to the main thread
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     // UI elements inside floating overlay
     private lateinit var micIcon: ImageView
@@ -108,6 +112,50 @@ class DictationAccessibilityService : AccessibilityService() {
             panel.translationX = (btnSize + margin).toFloat()
         }
         params.y = buttonScreenY
+    }
+
+    /**
+     * Clamps the floating button to the safe area (system bars + display cutout),
+     * using WindowMetrics/WindowInsets on API 30+ and full display bounds otherwise.
+     * Keeps the whole window (panel + button) inside the safe region.
+     */
+    private fun clampButtonToSafeArea() {
+        val dpToPx = { dp: Float ->
+            TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics).toInt()
+        }
+        val btnSize = dpToPx(56f)
+        val panelWidth = dpToPx(80f)
+        val margin = dpToPx(8f)
+        val offset = panelWidth + margin
+        val totalWidth = btnSize + offset
+
+        val isRightSide = buttonScreenX > (resources.displayMetrics.widthPixels / 2)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val metrics = windowManager.currentWindowMetrics
+            val insets = metrics.windowInsets.getInsetsIgnoringVisibility(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+            )
+            val screenWidth = metrics.bounds.width()
+            val screenHeight = metrics.bounds.height()
+            val minX = if (isRightSide) insets.left + offset else insets.left
+            val maxX = if (isRightSide) {
+                screenWidth - insets.right - btnSize
+            } else {
+                screenWidth - insets.right - totalWidth
+            }
+            buttonScreenX = buttonScreenX.coerceIn(minX, maxX)
+            val minY = insets.top
+            val maxY = (screenHeight - insets.bottom - btnSize).coerceAtLeast(minY)
+            buttonScreenY = buttonScreenY.coerceIn(minY, maxY)
+        } else {
+            val maxX = (
+                resources.displayMetrics.widthPixels - (if (isRightSide) btnSize else totalWidth)
+                ).coerceAtLeast(0)
+            val maxY = (resources.displayMetrics.heightPixels - btnSize).coerceAtLeast(0)
+            buttonScreenX = buttonScreenX.coerceIn(0, maxX)
+            buttonScreenY = buttonScreenY.coerceIn(0, maxY)
+        }
     }
 
     private fun isInputNode(node: AccessibilityNodeInfo?): Boolean {
@@ -209,6 +257,9 @@ class DictationAccessibilityService : AccessibilityService() {
         val btnSize = dpToPx(56f)
         val iconSize = dpToPx(28f)
         val panelWidth = dpToPx(80f)
+        val margin = dpToPx(8f)
+        val offset = panelWidth + margin
+        val totalWidth = btnSize + offset
 
         buttonContainer.addView(micIcon, FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER))
 
@@ -277,13 +328,17 @@ class DictationAccessibilityService : AccessibilityService() {
         }
 
         val stopButton = TextView(this).apply {
-            text = "⏹"
+            text = "Stop"
             setTextColor(Color.WHITE)
-            textSize = 10f
+            textSize = 12f
             setTypeface(null, Typeface.BOLD)
             gravity = Gravity.CENTER
             background = stopButtonBg
-            setPadding(dpToPx(8f), dpToPx(3f), dpToPx(8f), dpToPx(3f))
+            // Accessible 48dp minimum touch target
+            minWidth = dpToPx(48f)
+            minHeight = dpToPx(48f)
+            setPadding(dpToPx(12f), dpToPx(4f), dpToPx(12f), dpToPx(4f))
+            contentDescription = "Stop dictation"
             setOnClickListener {
                 if (isRecording) {
                     toggleDictation()
@@ -297,7 +352,7 @@ class DictationAccessibilityService : AccessibilityService() {
         rootLayout.addView(buttonContainer, FrameLayout.LayoutParams(btnSize, btnSize))
 
         val layoutParams = WindowManager.LayoutParams(
-            dpToPx(144f),
+            totalWidth,
             btnSize,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
@@ -311,8 +366,15 @@ class DictationAccessibilityService : AccessibilityService() {
             gravity = Gravity.TOP or Gravity.START
             x = buttonScreenX
             y = buttonScreenY
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                // Allow the floating button into display cutout areas on API 30+.
+                layoutInDisplayCutoutMode =
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            }
         }
 
+        updatePanelPositioning(layoutParams)
+        clampButtonToSafeArea()
         updatePanelPositioning(layoutParams)
 
         buttonContainer.setOnTouchListener(object : View.OnTouchListener {
@@ -347,7 +409,12 @@ class DictationAccessibilityService : AccessibilityService() {
                         return true
                     }
                     MotionEvent.ACTION_UP -> {
-                        if (!isDragging) {
+                        if (isDragging) {
+                            // Snap back into the safe area after the drag ends.
+                            clampButtonToSafeArea()
+                            updatePanelPositioning(layoutParams)
+                            windowManager.updateViewLayout(floatingView, layoutParams)
+                        } else {
                             toggleDictation()
                         }
                         return true
@@ -409,7 +476,7 @@ class DictationAccessibilityService : AccessibilityService() {
             }
 
             audioRecorder.startRecording(serviceScope) { amplitude ->
-                Handler(Looper.getMainLooper()).post {
+                mainHandler.post {
                     waveBars.forEachIndexed { index, bar ->
                         val scaleFactor = 1.0f + (amplitude * 3.5f * (1f + (index % 3) * 0.25f))
                         bar.scaleY = scaleFactor
@@ -492,7 +559,8 @@ class DictationAccessibilityService : AccessibilityService() {
             text = rawText,
             smartPunctuation = true,
             autoCapitalize = true,
-            applyDict = true
+            applyDict = true,
+            useAiPolisher = repository.getUseAiPolisher()
         )
 
         repository.insertHistory(

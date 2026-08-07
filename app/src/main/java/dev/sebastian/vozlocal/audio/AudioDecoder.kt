@@ -140,6 +140,11 @@ class AudioDecoder(private val context: Context) {
         return@withContext finalSamples
     }
 
+    // NOTE: Linear interpolation aliases when downsampling — there is no
+    // anti-aliasing low-pass filter before decimation. For speech this is
+    // acceptable in practice (Whisper is robust to mild aliasing), but a
+    // future pass should replace this with a windowed-sinc kernel (e.g.
+    // Kaiser-windowed resampler) for best fidelity on 44.1/48kHz sources.
     private fun resampleLinear(input: FloatArray, srcRate: Int): FloatArray {
         if (input.isEmpty()) return FloatArray(0)
         val ratio = srcRate.toDouble() / TARGET_SAMPLE_RATE.toDouble()

@@ -30,6 +30,9 @@ interface HistoryDao {
     @Query("SELECT * FROM transcription_history ORDER BY timestamp DESC")
     fun getAllHistory(): Flow<List<TranscriptionHistory>>
 
+    @Query("SELECT * FROM transcription_history ORDER BY timestamp DESC LIMIT :limit")
+    fun getHistoryPaged(limit: Int): Flow<List<TranscriptionHistory>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertHistory(history: TranscriptionHistory)
 

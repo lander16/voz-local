@@ -57,8 +57,12 @@ class AudioRecorder {
     @SuppressLint("MissingPermission")
     fun startRecording(
         scope: CoroutineScope,
+        hasRecordPermission: Boolean = true,
         onRmsChanged: ((Float) -> Unit)? = null
     ) {
+        if (!hasRecordPermission) {
+            throw SecurityException("RECORD_AUDIO permission not granted")
+        }
         if (isRecording) return
 
         val minBufferSize = max(
@@ -132,4 +136,25 @@ class AudioRecorder {
     }
 
     fun isRecording(): Boolean = isRecording
+
+    /**
+     * Frees all recorder resources. Safe to call whether or not recording is active.
+     */
+    fun release() {
+        isRecording = false
+        recordingJob?.cancel()
+        recordingJob = null
+
+        try {
+            audioRecord?.stop()
+            audioRecord?.release()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error releasing AudioRecord", e)
+        }
+        audioRecord = null
+
+        synchronized(floatBuffer) {
+            floatBuffer.reset()
+        }
+    }
 }

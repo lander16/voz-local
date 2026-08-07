@@ -38,8 +38,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         // Initialize Repository and ViewModel from Application singleton
-        val repository = (applicationContext as VozLocalApp).repository
-        val factory = MainViewModelFactory(repository)
+        val app = applicationContext as VozLocalApp
+        val repository = app.repository
+        val factory = MainViewModelFactory(repository, app.audioRecorder)
         viewModel = ViewModelProvider(this, factory)[MainViewModel::class.java]
 
         // Handle possible incoming Shared Audio Intent

@@ -9,6 +9,7 @@ import dev.sebastian.vozlocal.data.model.DictationModel
 import dev.sebastian.vozlocal.data.model.DictationStat
 import dev.sebastian.vozlocal.data.model.DictionaryWord
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
+import dev.sebastian.vozlocal.polish.QwenEngine
 import dev.sebastian.vozlocal.whisper.WhisperEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,12 @@ class DictationRepository(private val context: Context) {
     val whisperEngine = WhisperEngine(context)
     val modelDownloader = ModelDownloader(context)
     val audioDecoder = AudioDecoder(context)
+    val qwenEngine = QwenEngine()
+
+    // Regex cache for the dictionary replacement pass, invalidated whenever words change.
+    private var cachedWordRegexes: List<Regex> = emptyList()
+    private var cachedWordReplacements: List<String> = emptyList()
+    private var lastDictHash: Int = 0
 
     val allModels: Flow<List<DictationModel>> = modelDao.getAllModels().map { list ->
         list.sortedBy { model ->
@@ -51,6 +58,9 @@ class DictationRepository(private val context: Context) {
     val allHistory: Flow<List<TranscriptionHistory>> = historyDao.getAllHistory()
     val allWords: Flow<List<DictionaryWord>> = dictionaryDao.getAllWords()
     val allStats: Flow<List<DictationStat>> = statsDao.getAllStats()
+
+    fun pagedHistory(limit: Int = 200): Flow<List<TranscriptionHistory>> =
+        historyDao.getHistoryPaged(limit)
 
     fun getHistoryLimit(): Int {
         return prefs.getInt("history_limit", -1)
@@ -93,6 +103,42 @@ class DictationRepository(private val context: Context) {
         prefs.edit { putBoolean("use_ai_polisher", value) }
     }
 
+    fun getSmartPunctuation(): Boolean {
+        return prefs.getBoolean("smart_punctuation", true)
+    }
+
+    fun saveSmartPunctuation(value: Boolean) {
+        prefs.edit { putBoolean("smart_punctuation", value) }
+    }
+
+    fun getAutoCapitalization(): Boolean {
+        return prefs.getBoolean("auto_capitalization", true)
+    }
+
+    fun saveAutoCapitalization(value: Boolean) {
+        prefs.edit { putBoolean("auto_capitalization", value) }
+    }
+
+    fun getApplyDictionary(): Boolean {
+        return prefs.getBoolean("apply_dictionary", true)
+    }
+
+    fun saveApplyDictionary(value: Boolean) {
+        prefs.edit { putBoolean("apply_dictionary", value) }
+    }
+
+    fun getThemeMode(): String {
+        return prefs.getString("theme_mode", "dark") ?: "dark"
+    }
+
+    fun saveThemeMode(value: String) {
+        prefs.edit { putString("theme_mode", value) }
+    }
+
+    suspend fun shutdown() {
+        whisperEngine.release()
+    }
+
     suspend fun pruneHistory(limit: Int) = withContext(Dispatchers.IO) {
         if (limit > 0) {
             val currentHistory = historyDao.getAllHistory().first()
@@ -106,110 +152,120 @@ class DictationRepository(private val context: Context) {
     }
 
     init {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val defaultModels = listOf(
-                    DictationModel(
-                        id = "whisper_tiny",
-                        name = "Whisper Tiny (Multi-Language)",
-                        sizeMb = 42f,  // q8_0 quantized
-                        accuracySpanish = 72,
-                        accuracyEnglish = 79,
-                        speedMultiplier = 8.5f,
-                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_tiny"),
-                        isSelected = true
-                    ),
-                    DictationModel(
-                        id = "whisper_base",
-                        name = "Whisper Base (Standard)",
-                        sizeMb = 78f,  // q8_0 quantized
-                        accuracySpanish = 83,
-                        accuracyEnglish = 89,
-                        speedMultiplier = 5.0f,
-                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_base"),
-                        isSelected = false
-                    ),
-                    DictationModel(
-                        id = "whisper_small",
-                        name = "Whisper Small (High Precision)",
-                        sizeMb = 252f,  // q8_0 quantized
-                        accuracySpanish = 92,
-                        accuracyEnglish = 95,
-                        speedMultiplier = 2.5f,
-                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_small"),
-                        isSelected = false
-                    ),
-                    DictationModel(
-                        id = "whisper_medium",
-                        name = "Whisper Medium (Ultra Quality)",
-                        sizeMb = 823f,  // q8_0 quantized
-                        accuracySpanish = 97,
-                        accuracyEnglish = 99,
-                        speedMultiplier = 1.0f,
-                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_medium"),
-                        isSelected = false
-                    ),
-                    DictationModel(
-                        id = "whisper_large_v3_turbo",
-                        name = "Whisper Large v3 Turbo (SOTA Quality)",
-                        sizeMb = 547f,  // q5_0 mobile optimized
-                        accuracySpanish = 99,
-                        accuracyEnglish = 99,
-                        speedMultiplier = 3.5f,
-                        isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_large_v3_turbo"),
-                        isSelected = false
-                    ),
-                    DictationModel(
-                        id = "qwen2.5_0.5b",
-                        name = "Qwen2.5 0.5B (AI Text Polisher)",
-                        sizeMb = 398f,  // Q4_K_M quantized
-                        accuracySpanish = 99,
-                        accuracyEnglish = 99,
-                        speedMultiplier = 12.0f,
-                        isDownloaded = ModelUrls.isModelDownloaded(context, "qwen2.5_0.5b"),
-                        isSelected = false
-                    )
+        // Backward-compat: kick off the seed work on the repository's own IO scope
+        // for callers that don't manage their own scope. The application also calls
+        // initializeModels() from its own long-lived scope.
+        CoroutineScope(Dispatchers.IO).launch { initializeModels() }
+    }
+
+    /**
+     * Seeds the model table on first launch and reconciles the metadata + download
+     * state on every launch. Suspends on Dispatchers.IO via the caller; safe to
+     * invoke from a long-lived application scope.
+     */
+    suspend fun initializeModels() = withContext(Dispatchers.IO) {
+        try {
+            val defaultModels = listOf(
+                DictationModel(
+                    id = "whisper_tiny",
+                    name = "Whisper Tiny (Multi-Language)",
+                    sizeMb = 42f,  // q8_0 quantized
+                    accuracySpanish = 72,
+                    accuracyEnglish = 79,
+                    speedMultiplier = 8.5f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_tiny"),
+                    isSelected = true
+                ),
+                DictationModel(
+                    id = "whisper_base",
+                    name = "Whisper Base (Standard)",
+                    sizeMb = 78f,  // q8_0 quantized
+                    accuracySpanish = 83,
+                    accuracyEnglish = 89,
+                    speedMultiplier = 5.0f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_base"),
+                    isSelected = false
+                ),
+                DictationModel(
+                    id = "whisper_small",
+                    name = "Whisper Small (High Precision)",
+                    sizeMb = 252f,  // q8_0 quantized
+                    accuracySpanish = 92,
+                    accuracyEnglish = 95,
+                    speedMultiplier = 2.5f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_small"),
+                    isSelected = false
+                ),
+                DictationModel(
+                    id = "whisper_medium",
+                    name = "Whisper Medium (Ultra Quality)",
+                    sizeMb = 823f,  // q8_0 quantized
+                    accuracySpanish = 97,
+                    accuracyEnglish = 99,
+                    speedMultiplier = 1.0f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_medium"),
+                    isSelected = false
+                ),
+                DictationModel(
+                    id = "whisper_large_v3_turbo",
+                    name = "Whisper Large v3 Turbo (SOTA Quality)",
+                    sizeMb = 547f,  // q5_0 mobile optimized
+                    accuracySpanish = 99,
+                    accuracyEnglish = 99,
+                    speedMultiplier = 3.5f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_large_v3_turbo"),
+                    isSelected = false
+                ),
+                DictationModel(
+                    id = "qwen2.5_0.5b",
+                    name = "Qwen2.5 0.5B (AI Text Polisher)",
+                    sizeMb = 398f,  // Q4_K_M quantized
+                    accuracySpanish = 99,
+                    accuracyEnglish = 99,
+                    speedMultiplier = 12.0f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "qwen2.5_0.5b"),
+                    isSelected = false
                 )
+            )
 
-                val current = allModels.first()
-                if (current.isEmpty()) {
-                    modelDao.insertModels(defaultModels)
-                } else {
-                    // Prune any deprecated placeholder models (e.g. whisper_es_optimized) from SQLite
-                    val validIds = defaultModels.map { it.id }
-                    modelDao.pruneStaleModels(validIds)
+            val current = allModels.first()
+            if (current.isEmpty()) {
+                modelDao.insertModels(defaultModels)
+            } else {
+                // Prune any deprecated placeholder models (e.g. whisper_es_optimized) from SQLite
+                val validIds = defaultModels.map { it.id }
+                modelDao.pruneStaleModels(validIds)
 
-                    // Insert any newly added default models (e.g. whisper_large_v3_turbo, qwen2.5_0.5b)
-                    val currentIds = current.map { it.id }.toSet()
-                    val missingModels = defaultModels.filter { it.id !in currentIds }
-                    if (missingModels.isNotEmpty()) {
-                        modelDao.insertModels(missingModels)
-                    }
+                // Insert any newly added default models (e.g. whisper_large_v3_turbo, qwen2.5_0.5b)
+                val currentIds = current.map { it.id }.toSet()
+                val missingModels = defaultModels.filter { it.id !in currentIds }
+                if (missingModels.isNotEmpty()) {
+                    modelDao.insertModels(missingModels)
+                }
 
-                    // Update metadata and download status for existing models in database
-                    val updatedList = allModels.first()
-                    for (model in updatedList) {
-                        val downloaded = ModelUrls.isModelDownloaded(context, model.id)
-                        val defaultModel = defaultModels.find { it.id == model.id }
-                        val targetSize = defaultModel?.sizeMb ?: model.sizeMb
-                        val targetName = defaultModel?.name ?: model.name
-                        val targetSpeed = defaultModel?.speedMultiplier ?: model.speedMultiplier
+                // Update metadata and download status for existing models in database
+                val updatedList = allModels.first()
+                for (model in updatedList) {
+                    val downloaded = ModelUrls.isModelDownloaded(context, model.id)
+                    val defaultModel = defaultModels.find { it.id == model.id }
+                    val targetSize = defaultModel?.sizeMb ?: model.sizeMb
+                    val targetName = defaultModel?.name ?: model.name
+                    val targetSpeed = defaultModel?.speedMultiplier ?: model.speedMultiplier
 
-                        if (model.isDownloaded != downloaded || model.isDownloading || model.sizeMb != targetSize || model.name != targetName) {
-                            modelDao.updateModel(model.copy(
-                                name = targetName,
-                                sizeMb = targetSize,
-                                speedMultiplier = targetSpeed,
-                                isDownloaded = downloaded,
-                                isDownloading = false,
-                                downloadProgress = if (downloaded) 1.0f else 0.0f
-                            ))
-                        }
+                    if (model.isDownloaded != downloaded || model.isDownloading || model.sizeMb != targetSize || model.name != targetName) {
+                        modelDao.updateModel(model.copy(
+                            name = targetName,
+                            sizeMb = targetSize,
+                            speedMultiplier = targetSpeed,
+                            isDownloaded = downloaded,
+                            isDownloading = false,
+                            downloadProgress = if (downloaded) 1.0f else 0.0f
+                        ))
                     }
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error initializing default models", e)
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing default models", e)
         }
     }
 
@@ -352,14 +408,22 @@ class DictationRepository(private val context: Context) {
     // Dictionary Operations
     suspend fun insertWord(word: DictionaryWord) = withContext(Dispatchers.IO) {
         dictionaryDao.insertWord(word)
+        invalidateRegexCache()
     }
 
     suspend fun deleteWordById(id: Int) = withContext(Dispatchers.IO) {
         dictionaryDao.deleteWordById(id)
+        invalidateRegexCache()
     }
 
     suspend fun getWordsList(): List<DictionaryWord> = withContext(Dispatchers.IO) {
         dictionaryDao.getWordsList()
+    }
+
+    fun invalidateRegexCache() {
+        lastDictHash = 0
+        cachedWordRegexes = emptyList()
+        cachedWordReplacements = emptyList()
     }
 
     // Advanced Local Post-Processing Pipeline
@@ -367,7 +431,8 @@ class DictationRepository(private val context: Context) {
         text: String,
         smartPunctuation: Boolean,
         autoCapitalize: Boolean,
-        applyDict: Boolean
+        applyDict: Boolean,
+        useAiPolisher: Boolean = false
     ): String = withContext(Dispatchers.Default) {
         var result = text
 
@@ -377,19 +442,30 @@ class DictationRepository(private val context: Context) {
         // 2. Dictionary Replacements & Misheard Vocabulary Biasing
         if (applyDict) {
             val words = getWordsList()
-            for (dictWord in words) {
-                if (dictWord.replacement.isNotBlank()) {
-                    val variants = dictWord.replacement.split(",")
-                    for (variant in variants) {
-                        val trimmedVariant = variant.trim()
-                        if (trimmedVariant.isNotEmpty()) {
-                            val regex = Regex("(?i)\\b${Regex.escape(trimmedVariant)}\\b")
-                            result = result.replace(regex, dictWord.word)
+            val dictHash = words.fold(0) { acc, w -> 31 * acc + w.id + w.word.hashCode() }
+            if (dictHash != lastDictHash) {
+                val regexes = mutableListOf<Regex>()
+                val replacements = mutableListOf<String>()
+                for (dictWord in words) {
+                    if (dictWord.replacement.isNotBlank()) {
+                        val variants = dictWord.replacement.split(",")
+                        for (variant in variants) {
+                            val trimmedVariant = variant.trim()
+                            if (trimmedVariant.isNotEmpty()) {
+                                regexes.add(Regex("(?i)\\b${Regex.escape(trimmedVariant)}\\b"))
+                                replacements.add(dictWord.word)
+                            }
                         }
                     }
+                    regexes.add(Regex("(?i)\\b${Regex.escape(dictWord.word)}\\b"))
+                    replacements.add(dictWord.word)
                 }
-                val directRegex = Regex("(?i)\\b${Regex.escape(dictWord.word)}\\b")
-                result = result.replace(directRegex, dictWord.word)
+                cachedWordRegexes = regexes
+                cachedWordReplacements = replacements
+                lastDictHash = dictHash
+            }
+            for (i in cachedWordRegexes.indices) {
+                result = result.replace(cachedWordRegexes[i], cachedWordReplacements[i])
             }
         }
 
@@ -458,7 +534,14 @@ class DictationRepository(private val context: Context) {
             }
         }
 
-        result.trim()
+        result = result.trim()
+
+        // 5. Optional local rule-based "AI" polisher pass (filler removal, punctuation polish)
+        if (useAiPolisher) {
+            result = qwenEngine.polish(result, getLanguage())
+        }
+
+        result
     }
 
     companion object {

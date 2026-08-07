@@ -2,6 +2,7 @@ package dev.sebastian.vozlocal.whisper
 
 import android.content.Context
 import android.util.Log
+import dev.sebastian.vozlocal.BuildConfig
 import dev.sebastian.vozlocal.data.repository.ModelUrls
 import com.whispercpp.whisper.WhisperContext
 import kotlinx.coroutines.Dispatchers
@@ -62,7 +63,7 @@ class WhisperEngine(private val context: Context) {
             val result = wContext.transcribeData(audioSamples, printTimestamp = false, language = language)
             val elapsedMs = System.currentTimeMillis() - startMs
             Log.i(TAG, "Transcription completed in ${elapsedMs}ms (${String.format("%.1fx", durationSec * 1000 / elapsedMs)} realtime)")
-            Log.d(TAG, "Raw transcription output: $result")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Raw transcription output: $result")
             result.trim()
         } catch (e: Exception) {
             Log.e(TAG, "Error transcribing audio samples", e)

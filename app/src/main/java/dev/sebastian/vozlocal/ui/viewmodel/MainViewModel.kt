@@ -14,6 +14,7 @@ import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.data.repository.DictationRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.util.ArrayList
 import java.util.Locale
 import kotlin.math.log10
 import kotlin.math.pow
@@ -22,10 +23,9 @@ import kotlin.time.Duration.Companion.seconds
 private const val TAG = "MainViewModel"
 
 class MainViewModel(
-    private val repository: DictationRepository
+    private val repository: DictationRepository,
+    private val audioRecorder: AudioRecorder
 ) : ViewModel() {
-
-    private val audioRecorder = AudioRecorder()
 
     // Models & Data Flows
     val modelsList: StateFlow<List<DictationModel>> = repository.allModels
@@ -35,7 +35,7 @@ class MainViewModel(
         .map { list -> list.find { it.isSelected } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    val transcriptionHistory: StateFlow<List<TranscriptionHistory>> = repository.allHistory
+    val transcriptionHistory: StateFlow<List<TranscriptionHistory>> = repository.pagedHistory()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val dictionaryWords: StateFlow<List<DictionaryWord>> = repository.allWords
@@ -53,6 +53,11 @@ class MainViewModel(
 
     private val _liveWaveform = MutableStateFlow<List<Float>>(emptyList())
     val liveWaveform: StateFlow<List<Float>> = _liveWaveform.asStateFlow()
+
+    // Zero-allocation ring buffer for live waveform (size 32); snapshot list created per emission.
+    private val waveformBuffer = FloatArray(32) { 0.05f }
+    private var waveformSize = 25
+    private var waveformWrite = 0
 
     private val _currentLiveTranscription = MutableStateFlow("")
     val currentLiveTranscription: StateFlow<String> = _currentLiveTranscription.asStateFlow()
@@ -79,10 +84,19 @@ class MainViewModel(
     private val _sharedResultText = MutableStateFlow("")
     val sharedResultText: StateFlow<String> = _sharedResultText.asStateFlow()
 
+    // In-memory map of per-model download progress, exposed to the UI via downloadProgressFor().
+    private val _downloadProgressMap = MutableStateFlow<Map<String, Float>>(emptyMap())
+
+    fun downloadProgressFor(modelId: String): StateFlow<Float> =
+        _downloadProgressMap
+            .map { map -> map[modelId] ?: 0f }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
+
     // Settings State
-    val smartPunctuation = MutableStateFlow(true)
-    val autoCapitalization = MutableStateFlow(true)
-    val applyDictionary = MutableStateFlow(true)
+    val smartPunctuation = MutableStateFlow(repository.getSmartPunctuation())
+    val autoCapitalization = MutableStateFlow(repository.getAutoCapitalization())
+    val applyDictionary = MutableStateFlow(repository.getApplyDictionary())
+    val themeMode = MutableStateFlow(repository.getThemeMode())
     val historyLimit = MutableStateFlow(repository.getHistoryLimit())
     val saveHistory = MutableStateFlow(repository.getSaveHistory())
     val showOnlyOnInput = MutableStateFlow(repository.getShowOnlyOnInput())
@@ -105,6 +119,26 @@ class MainViewModel(
     fun setShowOnlyOnInput(value: Boolean) {
         repository.saveShowOnlyOnInput(value)
         showOnlyOnInput.value = value
+    }
+
+    fun setSmartPunctuation(value: Boolean) {
+        repository.saveSmartPunctuation(value)
+        smartPunctuation.value = value
+    }
+
+    fun setAutoCapitalization(value: Boolean) {
+        repository.saveAutoCapitalization(value)
+        autoCapitalization.value = value
+    }
+
+    fun setApplyDictionary(value: Boolean) {
+        repository.saveApplyDictionary(value)
+        applyDictionary.value = value
+    }
+
+    fun setThemeMode(value: String) {
+        repository.saveThemeMode(value)
+        themeMode.value = value
     }
 
     fun setLanguage(language: String) {
@@ -201,7 +235,7 @@ class MainViewModel(
         _isRecording.value = true
         _recordDurationSec.value = 0
         _currentLiveTranscription.value = "Recording mic audio (PCM 16kHz)..."
-        _liveWaveform.value = List(25) { 0.05f }
+        resetWaveform()
 
         // Start duration timer
         timerJob = viewModelScope.launch {
@@ -211,11 +245,16 @@ class MainViewModel(
             }
         }
 
-        audioRecorder.startRecording(viewModelScope) { amplitude ->
-            val newWaves = _liveWaveform.value.toMutableList()
-            if (newWaves.size > 25) newWaves.removeAt(0)
-            newWaves.add(amplitude)
-            _liveWaveform.value = newWaves
+        try {
+            audioRecorder.startRecording(viewModelScope) { amplitude ->
+                pushWaveform(amplitude)
+            }
+        } catch (e: SecurityException) {
+            timerJob?.cancel()
+            timerJob = null
+            _isRecording.value = false
+            _currentLiveTranscription.value = e.message ?: "Microphone permission not granted."
+            _liveWaveform.value = emptyList()
         }
     }
 
@@ -256,7 +295,8 @@ class MainViewModel(
                 text = rawOutput,
                 smartPunctuation = smartPunctuation.value,
                 autoCapitalize = autoCapitalization.value,
-                applyDict = applyDictionary.value
+                applyDict = applyDictionary.value,
+                useAiPolisher = useAiPolisher.value
             )
 
             val wordCount = processedText.split(Regex("\\s+")).filter { it.isNotBlank() }.size
@@ -329,7 +369,8 @@ class MainViewModel(
                 text = result,
                 smartPunctuation = smartPunctuation.value,
                 autoCapitalize = autoCapitalization.value,
-                applyDict = applyDictionary.value
+                applyDict = applyDictionary.value,
+                useAiPolisher = useAiPolisher.value
             )
 
             repository.insertHistory(
@@ -365,5 +406,34 @@ class MainViewModel(
         val units = arrayOf("B", "KB", "MB", "GB")
         val digitGroups = (log10(bytes.toDouble()) / log10(1024.0)).toInt()
         return String.format(Locale.US, "%.1f %s", bytes / 1024.0.pow(digitGroups.toDouble()), units[digitGroups])
+    }
+
+    private fun resetWaveform() {
+        waveformBuffer.fill(0.05f)
+        waveformSize = 25
+        waveformWrite = 0
+        _liveWaveform.value = snapshotWaveform()
+    }
+
+    private fun pushWaveform(amplitude: Float) {
+        waveformBuffer[waveformWrite] = amplitude
+        waveformWrite = (waveformWrite + 1) % waveformBuffer.size
+        if (waveformSize < waveformBuffer.size) waveformSize++
+        _liveWaveform.value = snapshotWaveform()
+    }
+
+    private fun snapshotWaveform(): List<Float> {
+        val snapshot = ArrayList<Float>(waveformSize)
+        var idx = if (waveformSize < waveformBuffer.size) 0 else waveformWrite
+        repeat(waveformSize) {
+            snapshot.add(waveformBuffer[idx])
+            idx = (idx + 1) % waveformBuffer.size
+        }
+        return snapshot
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        audioRecorder.release()
     }
 }

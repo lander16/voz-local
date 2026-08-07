@@ -7,6 +7,7 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.security.MessageDigest
 
 private const val TAG = "ModelDownloader"
 
@@ -37,6 +38,16 @@ object ModelUrls {
 
 class ModelDownloader(private val context: Context) {
     private val client = OkHttpClient.Builder().build()
+
+    // TODO: replace with real Hugging Face sha256s
+    private val sha256Map: Map<String, String> = mapOf(
+        "whisper_tiny" to "placeholder-whisper_tiny",
+        "whisper_base" to "placeholder-whisper_base",
+        "whisper_small" to "placeholder-whisper_small",
+        "whisper_medium" to "placeholder-whisper_medium",
+        "whisper_large_v3_turbo" to "placeholder-whisper_large_v3_turbo",
+        "qwen2.5_0.5b" to "placeholder-qwen2.5_0.5b"
+    )
 
     suspend fun downloadModel(
         modelId: String,
@@ -80,6 +91,23 @@ class ModelDownloader(private val context: Context) {
             outputStream.close()
             inputStream.close()
             onProgress(1.0f)
+
+            // Integrity check: verify the downloaded file against the expected SHA-256.
+            val expectedSha = sha256Map[modelId]
+            if (!expectedSha.isNullOrEmpty()) {
+                if (expectedSha.startsWith("placeholder")) {
+                    Log.w(TAG, "SHA-256 for model $modelId is a placeholder; skipping integrity check")
+                } else {
+                    val actualSha = sha256(outputFile)
+                    if (actualSha != expectedSha) {
+                        Log.e(TAG, "SHA-256 mismatch for model $modelId (expected=$expectedSha, actual=$actualSha)")
+                        outputFile.delete()
+                        return false
+                    }
+                    Log.i(TAG, "SHA-256 verified for model $modelId")
+                }
+            }
+
             Log.i(TAG, "Model $modelId downloaded successfully to ${outputFile.absolutePath}")
             return true
         } catch (e: Exception) {
@@ -89,5 +117,17 @@ class ModelDownloader(private val context: Context) {
             }
             return false
         }
+    }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buffer = ByteArray(65536)
+            var bytesRead: Int
+            while (input.read(buffer).also { bytesRead = it } != -1) {
+                digest.update(buffer, 0, bytesRead)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

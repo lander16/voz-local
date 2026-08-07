@@ -4,11 +4,14 @@ import android.util.Log
 import java.io.BufferedReader
 import java.io.FileReader
 
+private const val LOG_TAG = "WhisperCpuConfig"
+
 object WhisperCpuConfig {
-    val preferredThreadCount: Int
-        // Use high-perf cores but cap at 4 to prevent thermal throttling on mobile SoCs.
-        // More than 4 threads causes Tensor G3/Snapdragon to throttle, paradoxically slowing inference.
-        get() = CpuInfo.getHighPerfCpuCount().coerceIn(2, 4)
+    // Use high-perf cores but cap at 4 to prevent thermal throttling on mobile SoCs.
+    // More than 4 threads causes Tensor G3/Snapdragon to throttle, paradoxically slowing inference.
+    val preferredThreadCount: Int by lazy {
+        CpuInfo.getHighPerfCpuCount().coerceIn(2, 4)
+    }
 }
 
 private class CpuInfo(private val lines: List<String>) {
@@ -50,8 +53,6 @@ private class CpuInfo(private val lines: List<String>) {
     }
 
     companion object {
-        private const val LOG_TAG = "WhisperCpuConfig"
-
         fun getHighPerfCpuCount(): Int = try {
             readCpuInfo().getHighPerfCpuCount()
         } catch (e: Exception) {
