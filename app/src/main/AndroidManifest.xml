@@ -6,8 +6,9 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Background mic recording requires a foreground service with foregroundServiceType="microphone" (to be added in a future release). -->
 
     <application
         android:name=".VozLocalApp"

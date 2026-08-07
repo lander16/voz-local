@@ -6,10 +6,10 @@
 [![Language](https://img.shields.io/badge/Language-Kotlin-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-blue.svg?style=flat&logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
 [![Engine](https://img.shields.io/badge/Engine-whisper.cpp-orange.svg?style=flat)](https://github.com/ggerganov/whisper.cpp)
-[![LLM](https://img.shields.io/badge/AI%20Polisher-Qwen%202.5%200.5B-red.svg?style=flat)](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF)
+[![Polisher](https://img.shields.io/badge/AI%20Polisher-Local%20Rule--Based-red.svg?style=flat)](#architecture--tech-stack)
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline-brightgreen.svg?style=flat)](#privacy--security)
 
-**VozLocal** is a privacy-first, ultra-fast Android application designed for real-time speech-to-text dictation and audio file transcription. Running entirely on-device using quantized OpenAI Whisper GGUF/bin models (`whisper.cpp`) and local LLM post-processing (Qwen 2.5 0.5B), **VozLocal** requires zero internet connection, guarantees 100% data privacy, and works across any Android app via a global floating accessibility assistant.
+**VozLocal** is a privacy-first, ultra-fast Android application for real-time speech-to-text dictation and audio file transcription. It runs entirely on-device using quantized OpenAI Whisper GGUF/bin models via `whisper.cpp` and a local rule-based text polisher — **no internet, no cloud APIs, no telemetry, no third-party SDKs that phone home**. A global floating accessibility overlay lets you dictate into any app on the device.
 
 ---
 
@@ -27,76 +27,123 @@
 
 ## ✨ Key Features
 
-- 🎙️ **On-Device Speech Recognition**: Run quantized OpenAI Whisper models locally on Android hardware via JNI C++ bindings (`whisper.cpp`). No cloud APIs or subscriptions required.
-- 🎈 **Global Floating Dictation Overlay**: Accessibility Service integration allows a floating microphone button to appear over **any application** (WhatsApp, Gmail, Chrome, Twitter, Notes). Automatically types recognized text directly into the focused text input field.
-- 📁 **Shared Audio File Transcription**: Receives shared audio files via Android `SEND` intents (e.g. WhatsApp voice notes, audio recordings, podcast snippets) and transcribes them offline.
-- 🧠 **Local AI Text Polisher**: Optional offline LLM integration (Qwen 2.5 0.5B Instruct GGUF) that removes filler words ("um", "eh", "este"), corrects grammar, and formats dictated text on-device.
-- 📚 **Personal Dictation Dictionary**: Vocabulary biasing and custom phonetic replacement rules (e.g., mapping misheard sounds like "bos local" -> "VozLocal") for accurate recognition of jargon, names, and technical terms.
-- ⚡ **Local Post-Processing Filters**:
-  - **Smart Pause Correction**: Merges long speech pauses into logical sentence structures and punctuation.
-  - **Auto-Capitalization**: Automatically capitalizes sentence beginnings.
-  - **Smart Input Field Visibility**: Shows floating dictation button only when an active text field is focused.
-- 📊 **Performance Stats & Analytics**: Real-time metrics tracking dictation speed (WPM), total words dictated, estimated time saved vs. typing, and accuracy breakdown per model.
-- 💾 **Persistent Transcription History**: Built-in Room database storing past dictations and shared audio transcriptions with instant one-tap copy to clipboard.
-- 🎨 **Modern Material 3 Jetpack Compose UI**: Dynamic dark aesthetic with Material 3 Hamburger Navigation Drawer (`ModalNavigationDrawer`), Modal Settings Sheet (`SettingsSheet`), fluid micro-animations, canvas audio waveform visualizer, and custom press scaling.
-- 🇲🇽 🇧🇷 **Multi-Language Support**: Explicit language target selection (Spanish 🇲🇽, English 🇺🇸, French 🇫🇷, German 🇩🇪, Portuguese 🇧🇷, Italian 🇮🇹, Auto-detect 🌐) eliminating model language auto-detection latency.
+- 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). No cloud APIs or subscriptions.
+- 🎈 **Global Floating Dictation Overlay** — Accessibility Service + `WindowManager` show a floating microphone button over **any application** (WhatsApp, Gmail, Chrome, Notes). Recognized text is injected directly into the focused input field. The button is hidden when no text field is focused.
+- 📁 **Shared Audio File Transcription** — Receives shared audio files via Android `SEND` intents (WhatsApp voice notes, Voice Memos, podcast snippets) and transcribes them offline with `MediaCodec` + PCM.
+- 🧹 **Local Text Polisher** — A pure-Kotlin rule-based engine strips filler words ("um", "uh", "este", "bueno", "euh", "ähm"…), collapses repeated tokens, and applies smart capitalization/punctuation. Runs on `Dispatchers.Default`, no model file required. (A future llama.cpp + Qwen 2.5 backend is on the roadmap — the toggle already exists.)
+- 📚 **Personal Dictation Dictionary** — Vocabulary biasing and phonetic-replacement rules. Compiled regexes are cached and invalidated on insert/delete, so post-processing stays O(words) per transcription.
+- ⚡ **Local Post-Processing Pipeline** — Smart pause correction, auto-capitalization, dictionary replacement, and optional polisher — all stitched together in `DictationRepository.postProcessText`.
+- 📊 **Performance Stats & Analytics** — Per-day WPM, total speak time, and accuracy breakdown per model, backed by Room.
+- 💾 **Persistent Transcription History** — Room database with a paged query (`LIMIT 200`) so the History tab never re-emits the entire table on insert.
+- 🎨 **Modern Material 3 Jetpack Compose UI** — `ModalNavigationDrawer` + `ModalBottomSheet` settings + light/dark/system theming + canvas audio waveform visualizer + press-scale micro-interactions (now via `pointerInput`, not the previous clickable-swallowing bug).
+- 🇲🇽 🇧🇷 **Multi-Language Support** — Explicit language target (Spanish, English, French, German, Portuguese, Italian, Auto-detect) skips Whisper's expensive auto-detect.
 
 ---
 
 ## 🛠️ Architecture & Tech Stack
 
 ```
-VozLocal System Architecture
-┌────────────────────────────────────────────────────────────────────────┐
-│                        Jetpack Compose UI (MVVM)                       │
-│ ┌───────────────┐ ┌───────────────┐ ┌───────────────┐ ┌──────────────┐ │
-│ │  DictateTab   │ │  ModelsTab    │ │   SharedTab   │ │  HistoryTab  │ │
-│ └───────────────┘ └───────────────┘ └───────────────┘ └──────────────┘ │
-│ ┌────────────────────────────────────────────────────────────────────┐ │
-│ │   ModalNavigationDrawer (Custom Dictionary, Stats & Analytics)     │ │
-│ └────────────────────────────────────────────────────────────────────┘ │
-│ ┌────────────────────────────────────────────────────────────────────┐ │
-│ │     SettingsSheet (ModalBottomSheet for Language & System AI)      │ │
-│ └────────────────────────────────────────────────────────────────────┘ │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ Flow / State
-┌───────────────────────────────────▼────────────────────────────────────┐
-│                             MainViewModel                              │
-└──────┬────────────────────────────┬────────────────────────────┬───────┘
-       │                            │                            │
-┌──────▼────────────────┐  ┌────────▼────────────────┐  ┌───────▼────────────────┐
-│  AudioRecorder        │  │ DictationRepository     │  │ DictationAccessibility │
-│  (AudioRecord / PCM)  │  │ (Model management & DB) │  │ Service (Global Overlay│
-└──────┬────────────────┘  └────────┬────────────────┘  └───────┬────────────────┘
-       │                            │                            │
-┌──────▼────────────────────────────▼────────────────────────────▼───────┐
-│                            WhisperEngine JNI                           │
-│                     (LibWhisper / C++ whisper.cpp)                     │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-┌───────────────────────────────────▼────────────────────────────────────┐
-│                    On-Device Local GGUF/bin Models                     │
-│    Whisper Tiny / Base / Small / Medium / Large-v3-Turbo + Qwen 0.5B    │
-└────────────────────────────────────────────────────────────────────────┘
+VozLocal System Architecture (v2)
+┌──────────────────────────────────────────────────────────────────────────┐
+│                  Jetpack Compose UI (MVVM, Material 3)                    │
+│ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐  │
+│ │  DictateTab  │ │  ModelsTab   │ │ SharedTab    │ │ HistoryTab /     │  │
+│ │  (filters)   │ │  (paged)     │ │ (decode UI)  │ │ Dictionary/Stats │  │
+│ └──────────────┘ └──────────────┘ └──────────────┘ └──────────────────┘  │
+│  ↑                                                                       │
+│  │  StateFlow / collectAsStateWithLifecycle                              │
+│  │                                                                       │
+│ ┌─────────────────────▼────────────────────────────────────────────────┐ │
+│ │                       MainViewModel                                    │ │
+│ │  - StateFlow<Model/History/Dictionary/Stats>                           │ │
+│ │  - In-memory ring buffer for live waveform                             │ │
+│ │  - downloadProgressFor(modelId): StateFlow<Float>                      │ │
+│ │  - onCleared() → recorder.release() + repository.shutdown()            │ │
+│ └───────┬──────────────────────────────┬──────────────────────┬─────────┘ │
+└─────────┼──────────────────────────────┼──────────────────────┼───────────┘
+          │                              │                      │
+┌─────────▼──────────┐  ┌────────────────▼──────────┐  ┌───────▼──────────────────┐
+│  AudioRecorder     │  │  DictationRepository      │  │  DictationAccessibility   │
+│  (process-wide     │  │  - WhisperEngine (load)   │  │  Service                  │
+│   singleton,       │  │  - AudioDecoder (decode)  │  │  - Floating overlay       │
+│   Mutex-serialized)│  │  - QwenEngine (polish)    │  │  - Text injection         │
+└─────────┬──────────┘  │  - Room (DAO) + Prefs     │  │  - Same singleton         │
+          │             │  - postProcessText()      │  │    recorder               │
+          │             └────────────┬─────────────┘  └────────────┬──────────────┘
+          │                          │                              │
+┌─────────▼──────────────────────────▼──────────────────────────────▼─────────┐
+│                   WhisperEngine (com.whispercpp.whisper.WhisperContext)      │
+│                  - Single-thread executor (JNI constraint)                   │
+│                  - WhisperLib.fullTranscribeWithLang() — language hint skips │
+│                    ~200-500ms auto-detect overhead                            │
+│                  - thread count = lazy { CpuInfo.getHighPerfCpuCount() }     │
+│                  - Cleaner-based backstop cleanup (no finalize()/runBlocking)│
+└──────────────────────────────────┬──────────────────────────────────────────┘
+                                   │
+┌──────────────────────────────────▼──────────────────────────────────────────┐
+│                    On-Device Local Models                                    │
+│   ggml-tiny / base / small / medium / large-v3-turbo.bin (q8_0 / q5_0)      │
+│   + (planned) llama.cpp + qwen2.5-0.5b-instruct-q4_k_m.gguf                │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Application / Process Lifecycle
+
+`VozLocalApp : Application` is the single source of truth for shared singletons:
+
+| Field | Type | Notes |
+|---|---|---|
+| `repository` | `DictationRepository` | Lazy-initialized; owns the `WhisperEngine`, `ModelDownloader`, `AudioDecoder`, `QwenEngine`, and Room database. |
+| `audioRecorder` | `AudioRecorder` | Process-wide singleton. Both `MainViewModel` and `DictationAccessibilityService` read this same instance, serialized internally with a `Mutex` so the two can never open `AudioRecord` on the same mic. |
+| `applicationScope` | `CoroutineScope` | `SupervisorJob() + Dispatchers.IO`. Owns the long-lived `repository.initializeModels()` call (seed default model rows, prune stale ones, refresh download state). |
+
+`MainViewModel.onCleared()` calls `audioRecorder.release()` and the repository's `shutdown()` (which releases the native `WhisperContext`) so the multi-hundred-MB native buffer is freed on `Activity` destruction / configuration change.
+
+### Layered View → Service → Repository → Engine
+
+```
+Compose Screen
+  └─ collectAsStateWithLifecycle() over ViewModel StateFlow
+       └─ MainViewModel exposes state, mutators, and in-memory caches
+            └─ DictationRepository (single orchestration layer)
+                 ├─ WhisperEngine     (JNI bridge to whisper.cpp)
+                 ├─ AudioDecoder      (MediaCodec + PCM resample)
+                 ├─ ModelDownloader   (OkHttp + SHA-256 verify)
+                 ├─ QwenEngine        (rule-based polisher)
+                 └─ Room DAOs         (model / history / dictionary / stats)
+```
+
+### Service ↔ ViewModel Coordination
+
+`DictationAccessibilityService` does **not** re-implement recording or transcription. It:
+1. Borrows the same `AudioRecorder` singleton from `VozLocalApp`.
+2. Uses its own `serviceScope` for floating-overlay-only work.
+3. Queries `repository.allModels.first()` and `repository.postProcessText(..., useAiPolisher = repository.getUseAiPolisher())` to share the canonical post-processing pipeline with the in-app ViewModel.
+
+A `SharedPreferences.OnSharedPreferenceChangeListener` is registered in the service for `show_only_on_input` so overlay visibility updates instantly when the user toggles the setting in the app.
+
+---
 
 | Layer | Technology |
 |---|---|
-| **Language** | Kotlin 2.0+ & C++ (JNI) |
-| **UI Framework** | Jetpack Compose (Material 3) |
-| **Architecture** | MVVM with Kotlin Coroutines & `StateFlow` |
-| **STT Engine** | `whisper.cpp` (q8_0 / q5_0 GGML quantized models) |
-| **AI Polisher** | Qwen2.5-0.5B-Instruct (q4_k_m GGUF) |
-| **Persistence** | Room Database |
-| **Audio Processing** | AudioRecord API & MediaCodec / FFmpeg PCM decoder |
-| **Networking** | OkHttp 4.x (Used exclusively for downloading models on user request) |
-| **Global Overlay** | Android `AccessibilityService` & `WindowManager` |
+| **Language** | Kotlin 2.2.10 & C++ (JNI, vendored whisper.cpp) |
+| **UI Framework** | Jetpack Compose (Material 3, BOM 2024.09.00) |
+| **Architecture** | MVVM, Kotlin Coroutines, `StateFlow`, process-scoped singletons |
+| **STT Engine** | `whisper.cpp` (q8_0 / q5_0 GGML quantized) |
+| **AI Polisher (v1)** | Local rule-based Kotlin engine (`QwenEngine`) |
+| **AI Polisher (planned)** | llama.cpp + Qwen2.5-0.5B-Instruct (q4_k_m GGUF) |
+| **Persistence** | Room 2.7.0 (version 2, with stub `MIGRATION_1_2`, no destructive fallback) |
+| **Audio Capture** | `AudioRecord` API (16 kHz mono PCM, `VOICE_RECOGNITION` source) |
+| **Audio Decoding** | `MediaCodec` + `MediaExtractor` with linear resampling to 16 kHz |
+| **Networking** | OkHttp 4.x (model downloads only; offline thereafter) |
+| **Global Overlay** | Android `AccessibilityService` + `WindowManager` (display-cutout aware) |
+| **Build** | AGP 9.3.1, R8 minify + resource shrink **enabled** for release |
 
 ---
 
 ## 📦 Supported Local Speech Models
 
-Models are downloaded on-demand from Hugging Face directly to internal app storage (`context.filesDir/models`) and run offline:
+Models are downloaded on-demand from Hugging Face directly to `context.filesDir/models` and run offline:
 
 | Model ID | Weight File | Size (MB) | Spanish Accuracy | Decoding Speed | Recommended For |
 |---|---|---|---|---|---|
@@ -105,7 +152,9 @@ Models are downloaded on-demand from Hugging Face directly to internal app stora
 | `whisper_small` | `ggml-small-q8_0.bin` | ~466 MB | 95% | **3.2x** | High accuracy dictation & clean audio notes |
 | `whisper_medium` | `ggml-medium-q8_0.bin` | ~1.5 GB | 98% | **1.1x** | Complex vocab, accents & technical dictation |
 | `whisper_large_v3_turbo` | `ggml-large-v3-turbo-q5_0.bin` | ~1.6 GB | 99% | **1.4x** | Maximum accuracy audio file transcription |
-| `qwen2.5_0.5b` *(LLM)* | `qwen2.5-0.5b-instruct-q4_k_m.gguf` | ~398 MB | N/A | **7.8x** | On-device text polishing & grammar cleanup |
+| `qwen2.5_0.5b` *(planned)* | `qwen2.5-0.5b-instruct-q4_k_m.gguf` | ~398 MB | — | — | Reserved for the future llama.cpp-backed polisher |
+
+> **Model integrity**: after every download, `ModelDownloader` computes SHA-256 of the file and compares against the expected hash. A mismatch deletes the file and reports a failed download. The current map contains `placeholder-…` values — replace them with the real Hugging Face model-card hashes before shipping.
 
 ---
 
@@ -113,77 +162,114 @@ Models are downloaded on-demand from Hugging Face directly to internal app stora
 
 ### Prerequisites
 
-- **Android Studio**: Ladybug (2024.2.1+) or newer.
-- **JDK**: Version 17+.
-- **Android SDK**: Minimum SDK 26 (Android 8.0 Oreo), Target SDK 34 (Android 14).
-- **NDK**: Android NDK (r25c or higher) for compiling `whisper.cpp` C++ JNI source code.
+- **Android Studio**: Ladybug (2024.2.1+) or newer
+- **JDK**: Version 17+
+- **Android SDK**: Minimum SDK 26 (Android 8.0 Oreo), Target SDK 36
+- **NDK**: Android NDK r25c or higher for compiling the vendored `whisper.cpp` C++ JNI
 
 ### Installation & Build
 
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/your-username/voz-local.git
-   cd voz-local
-   ```
+```bash
+git clone https://github.com/your-username/voz-local.git
+cd voz-local
+cp .env.example .env          # optional, only if you override build config
+./gradlew assembleDebug
+./gradlew installDebug
+```
 
-2. **Environment Configuration**:
-   Copy `.env.example` to `.env` if custom build configurations are needed:
-   ```bash
-   cp .env.example .env
-   ```
-
-3. **Build the Debug APK**:
-   ```bash
-   ./gradlew assembleDebug
-   ```
-
-4. **Install on Device or Emulator**:
-   ```bash
-   ./gradlew installDebug
-   ```
+Release builds enable R8 minification + resource shrinking. The `proguard-rules.pro` keeps the JNI bridge, Room entities/DAOs, the `AccessibilityService`, and the Compose runtime intact.
 
 ---
 
 ## 📱 How to Use
 
 ### 1. Initial Permissions Setup
-Upon launching **VozLocal**, complete the 2-step setup wizard:
-1. **Microphone Permission**: Required for capturing live audio.
-2. **Accessibility Service**: Required for the global floating overlay button and automatic text injection into other apps.
+On first launch you'll see a 2-step setup wizard:
+1. **Microphone Permission** — required for live dictation
+2. **Accessibility Service** — required for the global floating overlay
+
+A "Skip Setup & Explore App" option is provided; if you skip, a persistent banner offers to grant the missing permission later.
 
 ### 2. Live Voice Dictation
-1. Select your target language (e.g. Spanish, English, Auto) on the **Dictate** tab.
-2. Tap the large circular microphone button to begin speaking.
-3. Observe the live audio waveform visualizer and real-time text output.
-4. Tap Stop to finish and automatically copy the dictation to your clipboard.
+1. Open the **Dictate** tab.
+2. (Optional) Pick a language (Spanish, English, etc.) — explicit language skips Whisper's auto-detect overhead.
+3. Tap the large circular microphone to start. The pulse aura, live waveform, and timer will all light up.
+4. Tap the mic (or the stop icon) to finish. The transcript is auto-saved and copied to your clipboard.
 
 ### 3. Using the Global Floating Assistant
 1. Enable **VozLocal Floating Dictation** in Android's *Accessibility Settings*.
-2. Open any app (e.g. WhatsApp, Gmail, Chrome).
-3. Tap on a text field: the floating mic icon will appear.
-4. Tap the floating mic to dictate; text is injected directly into your active input field!
+2. Open any app (WhatsApp, Gmail, Chrome, Notes).
+3. Tap on a text field — the floating mic icon appears (it stays hidden when no field is focused).
+4. Tap the floating mic to dictate; text is injected directly into the active input field via `ACTION_SET_TEXT` (with a clipboard fallback).
 
 ### 4. Transcribing Shared Audio Files
-1. In WhatsApp, Voice Memos, or Files, select any audio file (`.wav`, `.mp3`, `.m4a`, `.ogg`).
-2. Tap **Share** and select **VozLocal**.
-3. VozLocal opens the **Shared Audio** tab and transcribes the file locally using your active Whisper model.
+1. In WhatsApp, Voice Memos, or Files, tap **Share** on any audio file (`.wav`, `.mp3`, `.m4a`, `.ogg`).
+2. Pick **VozLocal** — the **Shared** tab opens with the file loaded.
+3. Tap **Start offline transcription**. Progress is reported through decode → model-load → inference → post-process stages.
 
 ### 5. Managing Models & Custom Dictionary
-- **Models Tab**: Download and activate different Whisper models or the Qwen 0.5B AI text polisher.
-- **Dictionary Tab**: Add custom brand names (e.g. "VozLocal") or technical terms. Add common phonetic misspellings so the model automatically corrects them.
+- **Models** tab — download or activate Whisper models. Download progress is now driven by an in-memory flow (not a per-1% Room write) so the list doesn't recompose 100 times during an 800 MB download.
+- **Dictionary** tab — add custom brand names or technical terms. Compiled regexes are cached and invalidated on insert/delete.
+
+### 6. Settings
+- **Appearance** — Light, Dark, or System. (System currently maps to dark until `MainActivity` learns to read `isSystemInDarkTheme()`; see the TODO in `MainScreen.kt`.)
+- **Language** — the same set as in the Dictate tab.
+- **Post-processing** — Smart pause correction, auto-capitalization, dictionary, optional polisher. **All four are persisted to SharedPreferences.**
+- **Overlay** — show floating button only when a text field is focused.
+- **History** — opt-out of saving transcripts, or cap history at 5 / 10 / 20 / 50 / unlimited.
+- **Done** — closes the sheet (settings are saved instantly on toggle).
 
 ---
 
 ## 🔒 Privacy & Security
 
-- 🚫 **Zero Telemetry / No Tracking**: VozLocal does not track, store, or transmit your audio or text logs.
-- ✈️ **Air-Gapped Operation**: Once model weights are downloaded, turn off Wi-Fi/Cellular data—the app continues to function at 100% capacity offline.
-- 🔐 **Local Storage**: All dictionary entries and dictation history logs remain strictly inside your device's private Room database (`app_database.db`).
+- 🚫 **Zero telemetry, no tracking.** No Firebase, no analytics SDK, no third-party network call after model download.
+- ✈️ **Air-gapped operation.** Once model weights are downloaded, turn off Wi-Fi and cellular — the app continues to work at 100% capacity. Model downloads are the only network call.
+- 🔐 **Local storage only.** All dictionary entries and dictation history live in the device's private Room database (`vozlocal_database`). The DB is **excluded** from auto-backup (`backup_rules.xml` and `data_extraction_rules.xml`) so transcript text is not silently uploaded to Google Drive. Device-to-device transfer includes the database (so history moves with you) but still excludes the 1.5 GB `models/` directory.
+- 🪟 **Narrowed accessibility scope.** The accessibility service only subscribes to `typeViewFocused | typeWindowStateChanged | typeWindowContentChanged` and does not request key-filter or "not important views" flags. This is the minimum scope needed to detect a focused text field.
+- 🔒 **No `FOREGROUND_SERVICE_MICROPHONE` permission declared.** The permission is removed from the manifest because no foreground service with `foregroundServiceType="microphone"` is currently registered. A future release will add a real foreground service for background recording; the permission will be re-added at the same time.
+- 🪵 **No raw transcripts in logs.** `WhisperEngine` only logs the raw transcription text under `BuildConfig.DEBUG` — release builds log nothing user-identifiable.
+
+---
+
+## 🧱 Recent Architectural Changes (v2)
+
+| Area | Before | After |
+|---|---|---|
+| `AudioRecorder` | Two instances (ViewModel + Service), raced for the mic | Process-wide singleton in `VozLocalApp`, `Mutex`-serialized |
+| `WhisperContext` cleanup | `runBlocking` on the GC finalizer thread | `Cleaner`-based backstop + explicit `release()` from `ViewModel.onCleared()` and `repository.shutdown()` |
+| CPU thread count | Re-read `/proc/cpuinfo` on every transcription | `by lazy { … }` — read once |
+| Smart-punctuation | Two implementations, one dead | Kotlin `postProcessText` is the single source of truth; the JNI pause-joiner is removed |
+| Dictionary regexes | Re-compiled every transcription | Hash-keyed cache, invalidated on insert/delete |
+| Download progress | Wrote Room on every 1% (100 writes for an 800 MB model) | In-memory `MutableStateFlow<Map<String,Float>>`; DB written only on completion/failure |
+| History list | Full table re-emit on every insert | `LIMIT 200` paged flow for the UI; full table retained for stats |
+| Filter toggles | Reset on every app restart | Persisted to SharedPreferences via proper setters |
+| `postProcessText` signature | Fixed booleans | `useAiPolisher: Boolean = false` parameter, with `QwenEngine` running the new rule-based polisher |
+| Database schema | `fallbackToDestructiveMigration(dropAllTables = true)` | `addMigrations(MIGRATION_1_2)`, no destructive fallback; version bumped to 2 |
+| Accessibility service | `typeAllMask` + key-filter | Narrowed to `typeViewFocused | typeWindowStateChanged | typeWindowContentChanged` |
+| Backup rules | Empty TODOs → default behavior leaked 1.5 GB models to cloud | `models/` + database explicitly excluded |
+| Build | `isMinifyEnabled = false`, no ProGuard rules | `isMinifyEnabled = true`, `isShrinkResources = true`, explicit keep rules for JNI/Room/AccessibilityService |
+| Dependencies | Firebase BOM, Retrofit, Moshi, logging-interceptor (all unused) | Removed; only Compose, Lifecycle, Room, Coroutines, OkHttp, Accompanist, Robolectric/Roborazzi |
+| `minSdk` / `targetSdk` | 24 / 36 (unreleased) | 26 / 36 (with a comment to pin to 35 once AGP 9.3.1 is verified on 35) |
+| `compileSdk` | `release(36) { minorApiLevel = 1 }` | Same (SDK 36 still tracked) |
+
+---
+
+## 🛣️ Roadmap
+
+- [ ] **Real llama.cpp + Qwen 2.5 polisher** — replace `QwenEngine` rule-based implementation with native llama.cpp inference. The toggle, download URL, and UI are already in place.
+- [ ] **Foreground service for background recording** — add a `<service android:foregroundServiceType="microphone">` so the mic can stay open when the user navigates away mid-dictation. Re-add the `FOREGROUND_SERVICE_MICROPHONE` permission at the same time.
+- [ ] **Real SHA-256 hashes** for the model download map (currently `placeholder-…`).
+- [ ] **Window-size-class adaptive UI** — `NavigationRail` for width ≥ 600 dp, foldable support.
+- [ ] **Room migrations for v2** — the v1 → v2 migration is a no-op stub; the next schema change will add a real `Migration(2, 3)`.
+- [ ] **`MainActivity` reads `themeMode` from `VozLocalApp.repository`** and passes it to the top-level `MyApplicationTheme` (currently the theme is re-applied inside `MainScreen` as a workaround).
+- [ ] **Detekt + ktlint + CI** for static analysis.
+- [ ] **Instrumented UI tests** for the dictation flow, dictionary CRUD, and model download.
 
 ---
 
 ## 📄 License & Acknowledgments
 
-- **whisper.cpp**: Built upon Georgi Gerganov's incredible [`whisper.cpp`](https://github.com/ggerganov/whisper.cpp) C++ library.
-- **Qwen2.5**: Powered by Alibaba Cloud's [`Qwen2.5-0.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF) GGUF quantized model.
-- **License**: MIT License. See [LICENSE](LICENSE) for details.
+- **whisper.cpp** — Georgi Gerganov's [`whisper.cpp`](https://github.com/ggerganov/whisper.cpp) C++ library (MIT).
+- **OpenAI Whisper** — the original Whisper model weights (MIT).
+- **License** — MIT. See [LICENSE](LICENSE).
