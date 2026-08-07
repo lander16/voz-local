@@ -44,6 +44,7 @@ fun SettingsSheet(
     val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
     val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
     val whisperLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -124,10 +125,65 @@ fun SettingsSheet(
 
             HorizontalDivider(color = GlassBorder)
 
-            // Section 1: Audio & Transcription Language
+            // Section 1: Appearance
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "TRANSCRIPTION ENGINE LANGUAGE",
+                    text = "Appearance",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = PrimaryColor,
+                    letterSpacing = 1.sp
+                )
+
+                Text(
+                    text = "Choose how VozLocal looks across the app.",
+                    fontSize = 13.sp,
+                    color = TextSecondary,
+                    lineHeight = 18.sp
+                )
+
+                val themeOptions = listOf(
+                    "light" to "Light",
+                    "dark" to "Dark",
+                    "system" to "System (default Dark)"
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    themeOptions.forEach { (value, label) ->
+                        val selected = themeMode == value
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (selected) PrimaryColor else SurfaceCard)
+                                .border(
+                                    BorderStroke(1.dp, if (selected) PrimaryColor else GlassBorder),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable { viewModel.setThemeMode(value) },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (selected) Color.White else TextPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(color = GlassBorder)
+
+            // Section 2: Audio & Transcription Language
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Transcription engine language",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -181,10 +237,10 @@ fun SettingsSheet(
 
             HorizontalDivider(color = GlassBorder)
 
-            // Section 2: Post-Processing & AI Polisher
+            // Section 3: Post-Processing & AI Polisher
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "TEXT POST-PROCESSING & LOCAL AI",
+                    text = "Text post-processing & local AI",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -202,7 +258,7 @@ fun SettingsSheet(
                         .toggleable(
                             value = smartPunctuation,
                             role = Role.Switch,
-                            onValueChange = { viewModel.smartPunctuation.value = it }
+                            onValueChange = { viewModel.setSmartPunctuation(it) }
                         )
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -230,7 +286,7 @@ fun SettingsSheet(
                         .toggleable(
                             value = autoCapitalization,
                             role = Role.Switch,
-                            onValueChange = { viewModel.autoCapitalization.value = it }
+                            onValueChange = { viewModel.setAutoCapitalization(it) }
                         )
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -258,7 +314,7 @@ fun SettingsSheet(
                         .toggleable(
                             value = applyDictionary,
                             role = Role.Switch,
-                            onValueChange = { viewModel.applyDictionary.value = it }
+                            onValueChange = { viewModel.setApplyDictionary(it) }
                         )
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -303,7 +359,7 @@ fun SettingsSheet(
                                     .background(AccentViolet.copy(alpha = 0.2f), RoundedCornerShape(100.dp))
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
-                                Text(text = "LLM", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = AccentViolet)
+                                Text(text = "LLM", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = AccentViolet)
                             }
                         }
                         Text(text = "Removes stutters, filler words & enhances grammar locally", fontSize = 13.sp, color = TextSecondary)
@@ -318,10 +374,10 @@ fun SettingsSheet(
 
             HorizontalDivider(color = GlassBorder)
 
-            // Section 3: System Overlay Assistant
+            // Section 4: System Overlay Assistant
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "FLOATING ASSISTANT OVERLAY",
+                    text = "Floating assistant overlay",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -358,10 +414,10 @@ fun SettingsSheet(
 
             HorizontalDivider(color = GlassBorder)
 
-            // Section 4: History Retention Limits
+            // Section 5: History Retention Limits
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "HISTORY STORAGE RETENTION LIMIT",
+                    text = "History storage retention limit",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -452,7 +508,7 @@ fun SettingsSheet(
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
             ) {
-                Text(text = "Save Preferences", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                Text(text = "Done", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
             }
         }
     }

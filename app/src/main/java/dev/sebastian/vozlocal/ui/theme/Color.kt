@@ -3,8 +3,8 @@ package dev.sebastian.vozlocal.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // VozLocal High-Readability & Modern Premium Theme Colors
-val PrimaryColor = Color(0xFF6366F1)       // Vibrant Electric Indigo
-val SecondaryColor = Color(0xFF0284C7)     // Deep Cobalt Blue (high text contrast)
+val PrimaryColor = Color(0xFF7C7FF5)       // Vibrant Electric Indigo (lightened for contrast)
+val SecondaryColor = Color(0xFF0EA5E9)     // Deep Cobalt Blue (lightened for contrast)
 val AccentViolet = Color(0xFF8B5CF6)       // Deep Violet Accent
 val TertiaryColor = Color(0xFFEF4444)      // Pure Crimson Red (Active Dictation)
 

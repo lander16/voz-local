@@ -4,8 +4,8 @@ import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
@@ -42,25 +42,24 @@ enum class Tab {
 
 /**
  * Reusable press scale micro-interaction modifier for buttons and interactive cards.
+ * Uses the InteractionSource provided by the enclosing clickable (Button, Surface, etc.)
+ * so it doesn't add its own clickable and won't swallow events.
  */
-fun Modifier.pressScale(targetScale: Float = 0.95f): Modifier = composed {
-    val interactionSource = remember { MutableInteractionSource() }
-    val isPressed by interactionSource.collectIsPressedAsState()
+fun Modifier.pressScale(
+    targetScale: Float = 0.95f,
+    interactionSource: MutableInteractionSource? = null
+): Modifier = composed {
+    val source = interactionSource ?: remember { MutableInteractionSource() }
+    val isPressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(
         targetValue = if (isPressed) targetScale else 1f,
         animationSpec = tween(durationMillis = 100),
         label = "press_scale_anim"
     )
-    this
-        .graphicsLayer {
-            scaleX = scale
-            scaleY = scale
-        }
-        .clickable(
-            interactionSource = interactionSource,
-            indication = null,
-            onClick = {}
-        )
+    this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,6 +70,10 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     var activeTab by remember { mutableStateOf(initialTab) }
+
+    // Theme mode is collected here so MainScreen can re-apply the theme.
+    // MainActivity should ideally observe this and pass it to MyApplicationTheme directly.
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
 
     // Observe shared audio loaded intent to automatically navigate to the SHARED tab
     val sharedUri by viewModel.sharedAudioUri.collectAsStateWithLifecycle()
@@ -85,6 +88,7 @@ fun MainScreen(
     var hasMicPermission by remember { mutableStateOf(false) }
     var hasAccessibilityEnabled by remember { mutableStateOf(false) }
     var bypassSetup by remember { mutableStateOf(false) }
+    var skippedSetup by remember { mutableStateOf(false) }
 
     fun checkAllPermissions() {
         hasMicPermission = androidx.core.content.ContextCompat.checkSelfPermission(
@@ -149,17 +153,22 @@ fun MainScreen(
             },
             onSkip = {
                 bypassSetup = true
+                skippedSetup = true
                 Toast.makeText(context, "You can configure permissions in settings later", Toast.LENGTH_SHORT).show()
             },
             onDone = {
                 bypassSetup = true
+                skippedSetup = false
                 Toast.makeText(context, "Setup completed successfully", Toast.LENGTH_SHORT).show()
             }
         )
     } else {
-        ModalNavigationDrawer(
-            drawerState = drawerState,
-            drawerContent = {
+        // Re-apply the theme from the ViewModel. This is a nested theme override;
+        // MainActivity should eventually observe themeMode and pass it to MyApplicationTheme.
+        MyApplicationTheme(themeMode = themeMode) {
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
                 ModalDrawerSheet(
                     drawerContainerColor = SurfaceDark,
                     drawerContentColor = TextPrimary,
@@ -214,7 +223,7 @@ fun MainScreen(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "TOOLS & ANALYTICS",
+                                text = "Tools & Analytics",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = TextMuted,
@@ -289,12 +298,12 @@ fun MainScreen(
                         },
                         title = {
                             val titleText = when (activeTab) {
-                                Tab.DICTATE -> "Live Dictate"
-                                Tab.MODELS -> "AI Speech Models"
-                                Tab.DICTIONARY -> "Custom Dictionary"
-                                Tab.HISTORY -> "Transcription History"
-                                Tab.SHARED -> "Shared Audio File"
-                                Tab.STATS -> "Statistics & Analytics"
+                                Tab.DICTATE -> "Dictate"
+                                Tab.MODELS -> "Models"
+                                Tab.DICTIONARY -> "Dictionary"
+                                Tab.HISTORY -> "History"
+                                Tab.SHARED -> "Shared"
+                                Tab.STATS -> "Stats"
                             }
                             Text(
                                 text = titleText,
@@ -355,13 +364,41 @@ fun MainScreen(
                 },
                 containerColor = BackgroundDark
             ) { innerPadding ->
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
+                    if (skippedSetup) {
+                        SetupRetryBanner(
+                            onGrantPermissions = {
+                                micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                try {
+                                    val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onDismiss = { skippedSetup = false }
+                        )
+                    }
+
                     when (activeTab) {
-                        Tab.DICTATE -> DictateTab(viewModel)
+                        Tab.DICTATE -> DictateTab(
+                            viewModel = viewModel,
+                            showFloatingAssistantCard = !hasAccessibilityEnabled,
+                            onOpenAccessibilitySettings = {
+                                try {
+                                    val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                    context.startActivity(intent)
+                                    Toast.makeText(context, "Locate 'VozLocal Floating Dictation' and toggle ON", Toast.LENGTH_LONG).show()
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onOpenSettings = { showSettingsSheet = true }
+                        )
                         Tab.STATS -> StatsTab(viewModel)
                         Tab.MODELS -> ModelsTab(viewModel)
                         Tab.DICTIONARY -> DictionaryTab(viewModel)
@@ -374,6 +411,81 @@ fun MainScreen(
 
         if (showSettingsSheet) {
             SettingsSheet(viewModel = viewModel, onDismiss = { showSettingsSheet = false })
+        }
+    }
+}
+}
+
+@Composable
+private fun SetupRetryBanner(
+    onGrantPermissions: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.4f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(PrimaryColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = PrimaryColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = "Finish setup to dictate anywhere",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    color = TextPrimary
+                )
+                Text(
+                    text = "Microphone and accessibility permissions are needed for the floating assistant.",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    lineHeight = 16.sp
+                )
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary),
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text(text = "Dismiss", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Button(
+                    onClick = onGrantPermissions,
+                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text(text = "Grant", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Black)
+                }
+            }
         }
     }
 }

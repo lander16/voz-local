@@ -5,7 +5,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.provider.Settings
 import android.text.TextUtils
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -224,17 +226,21 @@ fun SetupStepCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(testTag),
+            .testTag(testTag)
+            .border(
+                BorderStroke(
+                    1.dp,
+                    Brush.linearGradient(
+                        listOf(
+                            if (isGranted) Color(0xFF10B981).copy(alpha = 0.5f) else SecondaryColor.copy(alpha = 0.3f),
+                            Color.Transparent
+                        )
+                    )
+                ),
+                RoundedCornerShape(16.dp)
+            ),
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-        shape = RoundedCornerShape(16.dp),
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = Brush.linearGradient(
-                listOf(
-                    if (isGranted) Color(0xFF10B981).copy(alpha = 0.5f) else SecondaryColor.copy(alpha = 0.3f),
-                    Color.Transparent
-                )
-            )
-        )
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -269,9 +275,9 @@ fun SetupStepCard(
                                 modifier = Modifier.size(12.dp)
                             )
                             Text(
-                                text = "ACTIVE",
+                                text = "Active",
                                 color = Color(0xFF10B981),
-                                fontSize = 9.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.5.sp
                             )
@@ -284,9 +290,9 @@ fun SetupStepCard(
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "REQUIRED",
+                            text = "Required",
                             color = Color(0xFFEF4444),
-                            fontSize = 9.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp
                         )

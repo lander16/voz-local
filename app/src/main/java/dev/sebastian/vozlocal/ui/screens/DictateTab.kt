@@ -1,7 +1,5 @@
 package dev.sebastian.vozlocal.ui.screens
 
-import android.content.Intent
-import android.provider.Settings
 import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -47,8 +45,14 @@ import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 import java.util.Locale
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun DictateTab(viewModel: MainViewModel) {
+fun DictateTab(
+    viewModel: MainViewModel,
+    showFloatingAssistantCard: Boolean = true,
+    onOpenAccessibilitySettings: () -> Unit = {},
+    onOpenSettings: () -> Unit = {}
+) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
@@ -71,78 +75,111 @@ fun DictateTab(viewModel: MainViewModel) {
     ) {
         item { Spacer(modifier = Modifier.height(6.dp)) }
 
-        // Hero Floating Assistant Onboarding Banner
+        // Floating Assistant Onboarding Banner / Active Status Pill
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("accessibility_card"),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, Brush.linearGradient(listOf(PrimaryColor.copy(alpha = 0.4f), Color.Transparent)))
-            ) {
-                Row(
+            if (showFloatingAssistantCard) {
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .testTag("accessibility_card"),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    shape = RoundedCornerShape(20.dp),
+                    border = BorderStroke(1.dp, Brush.linearGradient(listOf(PrimaryColor.copy(alpha = 0.4f), Color.Transparent)))
                 ) {
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(Color(0xFF10B981))
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF10B981))
+                                )
+                                Text(
+                                    text = "Global Floating Dictation",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 15.sp,
+                                    color = TextPrimary
+                                )
+                            }
                             Text(
-                                text = "Global Floating Dictation",
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 15.sp,
-                                color = TextPrimary
+                                text = "Dictate directly into WhatsApp, Slack, Chrome, or Notes with our system floating overlay.",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = TextSecondary,
+                                lineHeight = 18.sp
                             )
                         }
-                        Text(
-                            text = "Dictate directly into WhatsApp, Slack, Chrome, or Notes with our system floating overlay.",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = TextSecondary,
-                            lineHeight = 18.sp
-                        )
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Button(
+                            onClick = onOpenAccessibilitySettings,
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .pressScale()
+                        ) {
+                            Text(
+                                text = "Enable Assistant",
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp,
+                                color = Color.White
+                            )
+                        }
                     }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Button(
-                        onClick = {
-                            try {
-                                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                                context.startActivity(intent)
-                                Toast.makeText(context, "Locate 'VozLocal Floating Dictation' and toggle ON", Toast.LENGTH_LONG).show()
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                }
+            } else {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, GlassBorder)
+                ) {
+                    Row(
                         modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .pressScale()
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            text = "Enable Assistant",
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 12.sp,
-                            color = Color.White
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF10B981))
                         )
+                        Text(
+                            text = "Floating assistant active",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = TextPrimary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(
+                            onClick = onOpenAccessibilitySettings,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Open accessibility settings",
+                                tint = TextSecondary
+                            )
+                        }
                     }
                 }
             }
@@ -180,7 +217,7 @@ fun DictateTab(viewModel: MainViewModel) {
                     }
                     Column {
                         Text(
-                            text = "ACTIVE WHISPER MODEL",
+                            text = "Active Whisper model",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = TextMuted,
@@ -250,7 +287,7 @@ fun DictateTab(viewModel: MainViewModel) {
                                         .background(if (isRecording) TertiaryColor else Color(0xFF10B981))
                                 )
                                 Text(
-                                    text = if (isRecording) "LIVE TRANSCRIPTION FEED" else "DICTATION READY",
+                                    text = if (isRecording) "Live transcription feed" else "Dictation ready",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     letterSpacing = 1.sp,
@@ -261,10 +298,32 @@ fun DictateTab(viewModel: MainViewModel) {
                             val wordsCount = if (liveText.isBlank()) 0 else liveText.trim().split(Regex("\\s+")).size
                             Text(
                                 text = "$wordsCount words • ${liveText.length} chars",
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 color = TextMuted,
                                 fontWeight = FontWeight.SemiBold
                             )
+
+                            IconButton(
+                                onClick = {
+                                    if (liveText.isNotBlank()) {
+                                        try {
+                                            clipboardManager.setText(AnnotatedString(liveText))
+                                            Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
+                                    }
+                                },
+                                enabled = liveText.isNotBlank(),
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ContentCopy,
+                                    contentDescription = "Copy to clipboard",
+                                    tint = if (liveText.isBlank()) TextMuted else PrimaryColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
 
                         // Output Text
@@ -280,38 +339,6 @@ fun DictateTab(viewModel: MainViewModel) {
                                 .padding(vertical = 8.dp)
                         )
 
-                        // Bottom Actions Row
-                        if (!isRecording && liveText.isNotEmpty()) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.End
-                            ) {
-                                Button(
-                                    onClick = {
-                                        try {
-                                            clipboardManager.setText(AnnotatedString(liveText))
-                                            Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
-                                        } catch (e: Exception) {
-                                            e.printStackTrace()
-                                        }
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor.copy(alpha = 0.2f), contentColor = PrimaryColor),
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                    modifier = Modifier
-                                        .pressScale()
-                                        .testTag("copy_transcription_button")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Copy to Clipboard",
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(text = "Copy Text", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-                        }
                     }
                 } else {
                     Column(
@@ -327,13 +354,13 @@ fun DictateTab(viewModel: MainViewModel) {
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "Tap mic button to dictate on-device",
+                            text = "Tap the mic to start dictating on-device",
                             fontSize = 14.sp,
                             color = TextPrimary,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Speech is processed 100% on-device with near-zero latency.",
+                            text = "Speech is transcribed 100% on-device.",
                             fontSize = 12.sp,
                             color = TextMuted
                         )
@@ -383,16 +410,20 @@ fun DictateTab(viewModel: MainViewModel) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-                val pulseScale by infiniteTransition.animateFloat(
-                    initialValue = 1f,
-                    targetValue = if (isRecording) 1.25f else 1f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(800, easing = LinearEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "pulse_anim"
-                )
+                val pulseScale by if (isRecording) {
+                    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+                    infiniteTransition.animateFloat(
+                        initialValue = 1f,
+                        targetValue = 1.25f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(800, easing = LinearEasing),
+                            repeatMode = RepeatMode.Reverse
+                        ),
+                        label = "pulse_anim"
+                    )
+                } else {
+                    remember { mutableFloatStateOf(1f) }
+                }
 
                 Box(
                     contentAlignment = Alignment.Center
@@ -427,7 +458,7 @@ fun DictateTab(viewModel: MainViewModel) {
                             .background(
                                 Brush.linearGradient(
                                     colors = if (isRecording) {
-                                        listOf(TertiaryColor, Color(0xFFD97706))
+                                        listOf(TertiaryColor, Color(0xFFDC2626))
                                     } else {
                                         listOf(PrimaryColor, AccentViolet)
                                     }
@@ -448,9 +479,9 @@ fun DictateTab(viewModel: MainViewModel) {
                     text = if (isRecording) {
                         val min = recordDurationSec / 60
                         val sec = recordDurationSec % 60
-                        String.format(Locale.US, "RECORDING  %02d:%02d", min, sec)
+                        String.format(Locale.US, "Recording %02d:%02d", min, sec)
                     } else {
-                        "TAP TO DICTATE"
+                        "Tap to dictate"
                     },
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 12.sp,
@@ -471,8 +502,16 @@ fun DictateTab(viewModel: MainViewModel) {
             }
         }
 
-        // Post-Processing Filters Card
+        // Post-Processing Filters Summary Card
         item {
+            val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
+            val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
+            val modelsList by viewModel.modelsList.collectAsStateWithLifecycle()
+            val qwenModel = modelsList.find { it.id == "qwen2.5_0.5b" }
+            val isQwenDownloaded = qwenModel?.isDownloaded == true
+            val isQwenDownloading = qwenModel?.isDownloading == true
+            val qwenDownloadProgress by viewModel.downloadProgressFor("qwen2.5_0.5b").collectAsStateWithLifecycle()
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = SurfaceDark),
@@ -483,158 +522,59 @@ fun DictateTab(viewModel: MainViewModel) {
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Text(
-                        text = "AI Post-Processing Filters",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = TextPrimary
-                    )
-
-                    // Modifier 1: Smart Punctuation
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .semantics(mergeDescendants = true) {}
-                            .toggleable(
-                                value = smartPunctuation,
-                                role = Role.Switch,
-                                onValueChange = { viewModel.smartPunctuation.value = it }
-                            )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        Text(
+                            text = "AI Post-Processing Filters",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            color = TextPrimary
+                        )
+                        Button(
+                            onClick = onOpenSettings,
+                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor.copy(alpha = 0.2f), contentColor = PrimaryColor),
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.heightIn(min = 48.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.AutoAwesome, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                            Column {
-                                Text(text = "Smart Pause Correction", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text(text = "Fuses long speech pauses into logical punctuation.", fontSize = 11.sp, color = TextSecondary)
-                            }
+                            Text(text = "Customize", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
-                        Switch(
-                            checked = smartPunctuation,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    }
+
+                    // Active filter chips
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterStatusChip(
+                            label = "Smart Pause",
+                            active = smartPunctuation,
+                            activeColor = PrimaryColor
+                        )
+                        FilterStatusChip(
+                            label = "Auto-Cap",
+                            active = autoCapitalization,
+                            activeColor = SecondaryColor
+                        )
+                        FilterStatusChip(
+                            label = "Dictionary",
+                            active = applyDictionary,
+                            activeColor = AccentViolet
+                        )
+                        FilterStatusChip(
+                            label = "Smart Overlay",
+                            active = showOnlyOnInput,
+                            activeColor = PrimaryColor
                         )
                     }
 
-                    // Modifier 2: Auto capitalization
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .semantics(mergeDescendants = true) {}
-                            .toggleable(
-                                value = autoCapitalization,
-                                role = Role.Switch,
-                                onValueChange = { viewModel.autoCapitalization.value = it }
-                            )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.FormatSize, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                            Column {
-                                Text(text = "Auto-Capitalization", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text(text = "Starts sentences with uppercase automatically.", fontSize = 11.sp, color = TextSecondary)
-                            }
-                        }
-                        Switch(
-                            checked = autoCapitalization,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
-                        )
-                    }
+                    HorizontalDivider(color = GlassBorder)
 
-                    // Modifier 3: Dictionary replacements
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .semantics(mergeDescendants = true) {}
-                            .toggleable(
-                                value = applyDictionary,
-                                role = Role.Switch,
-                                onValueChange = { viewModel.applyDictionary.value = it }
-                            )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.BookmarkBorder, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                            Column {
-                                Text(text = "Apply Local Dictionary", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text(text = "Corrects common misspellings with custom words.", fontSize = 11.sp, color = TextSecondary)
-                            }
-                        }
-                        Switch(
-                            checked = applyDictionary,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
-                        )
-                    }
-
-                    // Modifier 4: Show only on text input
-                    val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .semantics(mergeDescendants = true) {}
-                            .toggleable(
-                                value = showOnlyOnInput,
-                                role = Role.Switch,
-                                onValueChange = { viewModel.setShowOnlyOnInput(it) }
-                            )
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Visibility, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                            Column {
-                                Text(text = "Smart Overlay Button", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text(text = "Only show floating button when clicking text fields.", fontSize = 11.sp, color = TextSecondary)
-                            }
-                        }
-                        Switch(
-                            checked = showOnlyOnInput,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor),
-                            modifier = Modifier.testTag("main_only_on_input_switch")
-                        )
-                    }
-
-                    // Modifier 5: AI Post-Processing (Qwen 0.5B)
-                    val modelsList by viewModel.modelsList.collectAsStateWithLifecycle()
-                    val qwenModel = modelsList.find { it.id == "qwen2.5_0.5b" }
-                    val isQwenDownloaded = qwenModel?.isDownloaded == true
-                    val isQwenDownloading = qwenModel?.isDownloading == true
-                    val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
-
+                    // AI Polisher row
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -659,7 +599,7 @@ fun DictateTab(viewModel: MainViewModel) {
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                 Text(text = "AI Text Polisher (Qwen 0.5B)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                                 Text(text = "Cleans up filler words & polishes dictation with local LLM.", fontSize = 11.sp, color = TextSecondary)
-                                
+
                                 Surface(
                                     onClick = {
                                         if (!isQwenDownloaded && !isQwenDownloading) {
@@ -677,10 +617,10 @@ fun DictateTab(viewModel: MainViewModel) {
                                     Text(
                                         text = when {
                                             isQwenDownloaded -> "Model Ready (398 MB)"
-                                            isQwenDownloading -> "Downloading... ${(qwenModel?.downloadProgress?.times(100))?.toInt()}%"
-                                            else -> "Download Model (398 MB)"
+                                            isQwenDownloading -> "Downloading... ${(qwenDownloadProgress * 100).toInt()}%"
+                                            else -> "Tap to download (398 MB)"
                                         },
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = when {
                                             isQwenDownloaded -> PrimaryColor
@@ -754,5 +694,30 @@ fun DictateTab(viewModel: MainViewModel) {
         }
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
+    }
+}
+
+@Composable
+private fun FilterStatusChip(
+    label: String,
+    active: Boolean,
+    activeColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(if (active) activeColor.copy(alpha = 0.15f) else SurfaceCard)
+            .border(
+                BorderStroke(1.dp, if (active) activeColor.copy(alpha = 0.4f) else GlassBorder),
+                RoundedCornerShape(100.dp)
+            )
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(
+            text = "$label ${if (active) "ON" else "OFF"}",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (active) activeColor else TextSecondary
+        )
     }
 }

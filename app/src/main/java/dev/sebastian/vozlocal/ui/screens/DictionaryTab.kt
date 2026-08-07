@@ -117,7 +117,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .heightIn(min = 48.dp)
                     ) {
                         Text(
                             text = "Add Custom Word",
@@ -198,7 +198,7 @@ fun DictionaryRow(word: DictionaryWord, onDelete: () -> Unit) {
             ) {
                 Text(
                     text = "Word / Phrase to Recognize",
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextSecondary
                 )

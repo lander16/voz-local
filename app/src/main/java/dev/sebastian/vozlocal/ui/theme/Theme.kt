@@ -45,14 +45,24 @@ private val LightColorScheme = lightColorScheme(
 fun MyApplicationTheme(
     darkTheme: Boolean = true, // Force dark theme by default for the premium "Cosmic" vibe!
     dynamicColor: Boolean = false, // Disable dynamic colors to ensure our custom cosmic branding stays consistent!
+    themeMode: String? = null, // "light" / "dark" / "system" — overrides darkTheme when provided
     content: @Composable () -> Unit
 ) {
+    // Resolve explicit theme mode. "system" falls back to the darkTheme param for now;
+    // a future pass can wire isSystemInDarkTheme() here from MainActivity.
+    val effectiveDarkTheme = when (themeMode) {
+        "light" -> false
+        "dark" -> true
+        "system" -> darkTheme // TODO: use isSystemInDarkTheme() once available in caller
+        else -> darkTheme
+    }
+
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (effectiveDarkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        darkTheme -> DarkColorScheme
+        effectiveDarkTheme -> DarkColorScheme
         else -> LightColorScheme
     }
 

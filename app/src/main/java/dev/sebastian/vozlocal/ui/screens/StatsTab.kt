@@ -1,6 +1,8 @@
 package dev.sebastian.vozlocal.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,49 +31,62 @@ import java.util.Locale
 fun StatsTab(viewModel: MainViewModel) {
     val stats by viewModel.dictationStats.collectAsStateWithLifecycle()
 
-    // Base calculations
-    val totalWords = stats.sumOf { it.wordCount }
-    val totalSeconds = stats.sumOf { it.durationSec }
-    val totalMinutes = totalSeconds / 60f
-    
-    val averageWpm = if (stats.isNotEmpty()) {
-        stats.map { it.wpm }.average().toFloat()
-    } else {
-        0f
+    // Base calculations — remembered so they don't recompute on every recomposition
+    val totalWords by remember(stats) { derivedStateOf { stats.sumOf { it.wordCount } } }
+    val totalSeconds by remember(stats) { derivedStateOf { stats.sumOf { it.durationSec } } }
+    val totalMinutes by remember(totalSeconds) { derivedStateOf { totalSeconds / 60f } }
+
+    val averageWpm by remember(stats) {
+        derivedStateOf {
+            if (stats.isNotEmpty()) stats.map { it.wpm }.average().toFloat() else 0f
+        }
     }
 
     // Today calculations
-    val calendar = Calendar.getInstance()
-    val todayMidnight = calendar.apply {
-        set(Calendar.HOUR_OF_DAY, 0)
-        set(Calendar.MINUTE, 0)
-        set(Calendar.SECOND, 0)
-        set(Calendar.MILLISECOND, 0)
-    }.timeInMillis
-
-    val statsToday = stats.filter { it.timestamp >= todayMidnight }
-    val todayWords = statsToday.sumOf { it.wordCount }
-    val todayAvgWpm = if (statsToday.isNotEmpty()) statsToday.map { it.wpm }.average().toFloat() else 0f
+    val todayMidnight by remember {
+        derivedStateOf {
+            Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }.timeInMillis
+        }
+    }
+    val statsToday by remember(stats, todayMidnight) {
+        derivedStateOf { stats.filter { it.timestamp >= todayMidnight } }
+    }
+    val todayWords by remember(statsToday) { derivedStateOf { statsToday.sumOf { it.wordCount } } }
+    val todayAvgWpm by remember(statsToday) {
+        derivedStateOf { if (statsToday.isNotEmpty()) statsToday.map { it.wpm }.average().toFloat() else 0f }
+    }
+    val todayDurationMin by remember(statsToday) {
+        derivedStateOf { statsToday.sumOf { it.durationSec } / 60f }
+    }
 
     // Week calculations (last 7 days)
-    val sdf = SimpleDateFormat("EEE", Locale.getDefault())
-    val last7DaysData = (0..6).map { offset ->
-        val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -offset) }
-        val dateString = sdf.format(cal.time)
-        val dayStart = cal.apply {
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }.timeInMillis
-        val dayEnd = dayStart + 24 * 60 * 60 * 1000
-        val dayStats = stats.filter { it.timestamp in dayStart until dayEnd }
-        val wordCount = dayStats.sumOf { it.wordCount }
-        dateString to wordCount
-    }.reversed()
+    val last7DaysData by remember(stats) {
+        derivedStateOf {
+            val sdf = SimpleDateFormat("EEE", Locale.getDefault())
+            (0..6).map { offset ->
+                val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -offset) }
+                val dateString = sdf.format(cal.time)
+                val dayStart = cal.apply {
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }.timeInMillis
+                val dayEnd = dayStart + 24 * 60 * 60 * 1000
+                val dayStats = stats.filter { it.timestamp in dayStart until dayEnd }
+                val wordCount = dayStats.sumOf { it.wordCount }
+                dateString to wordCount
+            }.reversed()
+        }
+    }
 
-    val maxWordCount = last7DaysData.maxOfOrNull { it.second } ?: 1
-    val displayMax = if (maxWordCount > 0) maxWordCount else 100
+    val maxWordCount by remember(last7DaysData) { derivedStateOf { last7DaysData.maxOfOrNull { it.second } ?: 1 } }
+    val displayMax by remember(maxWordCount) { derivedStateOf { if (maxWordCount > 0) maxWordCount else 100 } }
 
     LazyColumn(
         modifier = Modifier
@@ -108,20 +123,27 @@ fun StatsTab(viewModel: MainViewModel) {
             ) {
                 // Card 1: Today's Words
                 Card(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(
+                            BorderStroke(
+                                1.dp,
+                                Brush.linearGradient(listOf(PrimaryColor.copy(alpha = 0.4f), Color.Transparent))
+                            ),
+                            RoundedCornerShape(16.dp)
+                        ),
                     colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                    shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(PrimaryColor.copy(alpha = 0.4f), Color.Transparent)))
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(text = "TODAY'S WORDS", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                        Text(text = "Today's words", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
                         Text(text = todayWords.toString(), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor)
                         Text(
-                            text = String.format(Locale.US, "%.1f min duration", statsToday.sumOf { it.durationSec } / 60f),
-                            fontSize = 10.sp,
+                            text = String.format(Locale.US, "%.1f min duration", todayDurationMin),
+                            fontSize = 11.sp,
                             color = TextSecondary
                         )
                     }
@@ -129,26 +151,33 @@ fun StatsTab(viewModel: MainViewModel) {
 
                 // Card 2: Average WPM
                 Card(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .border(
+                            BorderStroke(
+                                1.dp,
+                                Brush.linearGradient(listOf(SecondaryColor.copy(alpha = 0.4f), Color.Transparent))
+                            ),
+                            RoundedCornerShape(16.dp)
+                        ),
                     colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                    shape = RoundedCornerShape(16.dp),
-                    border = CardDefaults.outlinedCardBorder().copy(brush = Brush.linearGradient(listOf(SecondaryColor.copy(alpha = 0.4f), Color.Transparent)))
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(text = "VERBAL SPEED", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                        Text(text = "Verbal speed", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
                         Row(
                             verticalAlignment = Alignment.Bottom,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(text = String.format(Locale.US, "%.0f", averageWpm), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = SecondaryColor)
-                            Text(text = "WPM", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = SecondaryColor)
+                            Text(text = "WPM", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SecondaryColor)
                         }
                         Text(
                             text = if (todayAvgWpm > 0f) String.format(Locale.US, "%.0f WPM today", todayAvgWpm) else "No dictations today",
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             color = TextSecondary
                         )
                     }
@@ -214,7 +243,7 @@ fun StatsTab(viewModel: MainViewModel) {
                                 if (wordCount > 0) {
                                     Text(
                                         text = wordCount.toString(),
-                                        fontSize = 10.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary,
                                         modifier = Modifier.padding(bottom = 4.dp)
@@ -239,7 +268,7 @@ fun StatsTab(viewModel: MainViewModel) {
 
                                 Text(
                                     text = day,
-                                    fontSize = 10.sp,
+                                    fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = TextSecondary
                                 )
@@ -274,13 +303,13 @@ fun StatsTab(viewModel: MainViewModel) {
                     ) {
                         // Stat Item 1
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "LIFETIME WORDS", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                            Text(text = "Lifetime words", fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
                             Text(text = totalWords.toString(), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                         }
 
                         // Stat Item 2
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "TOTAL SPEAK TIME", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                            Text(text = "Total speak time", fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
                             Text(
                                 text = String.format(Locale.US, "%.1f min", totalMinutes),
                                 fontSize = 18.sp,
@@ -291,7 +320,7 @@ fun StatsTab(viewModel: MainViewModel) {
 
                         // Stat Item 3
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "DICTATIONS", fontSize = 10.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                            Text(text = "Dictations", fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
                             Text(text = stats.size.toString(), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
                         }
                     }

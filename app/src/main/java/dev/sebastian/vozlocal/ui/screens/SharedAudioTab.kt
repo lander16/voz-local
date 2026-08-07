@@ -130,7 +130,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                             onClick = { filePickerLauncher.launch("audio/*") },
                             colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
                             shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.heightIn(min = 44.dp)
+                            modifier = Modifier.heightIn(min = 48.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.UploadFile,
@@ -178,11 +178,23 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            Text(
-                                text = "Size: ${audioSize.ifBlank { "Loading…" }}",
-                                fontSize = 12.sp,
-                                color = TextSecondary
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Size: ${audioSize.ifBlank { "Loading…" }}",
+                                    fontSize = 12.sp,
+                                    color = TextSecondary
+                                )
+                                if (audioSize.isBlank()) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(12.dp),
+                                        color = PrimaryColor,
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                            }
                         }
 
                         IconButton(onClick = { viewModel.clearSharedFile() }) {
@@ -244,7 +256,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "TRANSCRIPTION COMPLETED",
+                                    text = "Transcription completed",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = PrimaryColor,
@@ -305,7 +317,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(44.dp)
+                                    .heightIn(min = 48.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -343,7 +355,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "HOW IT WORKS",
+                        text = "How it works",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = PrimaryColor,

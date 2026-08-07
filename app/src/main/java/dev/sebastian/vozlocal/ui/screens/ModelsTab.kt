@@ -1,7 +1,9 @@
 package dev.sebastian.vozlocal.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -56,6 +58,7 @@ fun ModelsTab(viewModel: MainViewModel) {
 
         items(models, key = { it.id }) { model ->
             ModelCard(
+                viewModel = viewModel,
                 model = model,
                 onSelect = { viewModel.selectModel(model.id) },
                 onDownload = { viewModel.downloadModel(model.id) },
@@ -70,28 +73,34 @@ fun ModelsTab(viewModel: MainViewModel) {
 
 @Composable
 fun ModelCard(
+    viewModel: MainViewModel,
     model: DictationModel,
     onSelect: () -> Unit,
     onDownload: () -> Unit,
     onDelete: () -> Unit,
     onRedownload: () -> Unit
 ) {
+    val downloadProgress by viewModel.downloadProgressFor(model.id).collectAsStateWithLifecycle()
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = model.isDownloaded) { onSelect() },
+            .clickable(enabled = model.isDownloaded) { onSelect() }
+            .border(
+                BorderStroke(
+                    1.dp,
+                    Brush.linearGradient(
+                        listOf(
+                            if (model.isSelected) PrimaryColor else SecondaryColor.copy(alpha = 0.2f),
+                            Color.Transparent
+                        )
+                    )
+                ),
+                RoundedCornerShape(16.dp)
+            ),
         colors = CardDefaults.cardColors(
             containerColor = if (model.isSelected) SurfaceLightDark else SurfaceDark
         ),
-        shape = RoundedCornerShape(16.dp),
-        border = CardDefaults.outlinedCardBorder().copy(
-            brush = Brush.linearGradient(
-                listOf(
-                    if (model.isSelected) PrimaryColor else SecondaryColor.copy(alpha = 0.2f),
-                    Color.Transparent
-                )
-            )
-        )
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -122,14 +131,14 @@ fun ModelCard(
 
                 Box(
                     modifier = Modifier
-                        .background(SurfaceLightDark, RoundedCornerShape(6.dp))
+                        .background(SurfaceDark, RoundedCornerShape(6.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = "${model.sizeMb.toInt()} MB",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = SecondaryColor
+                        color = TextSecondary
                     )
                 }
             }
@@ -141,7 +150,7 @@ fun ModelCard(
             ) {
                 // Spanish accuracy
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "SPANISH ACCURACY", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                    Text(text = "Spanish accuracy", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -161,7 +170,7 @@ fun ModelCard(
 
                 // Speed factor
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "MOBILE DECODING SPEED", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                    Text(text = "Mobile decoding speed", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -172,7 +181,7 @@ fun ModelCard(
                             fontWeight = FontWeight.ExtraBold,
                             color = if (model.speedMultiplier > 4f) PrimaryColor else SecondaryColor
                         )
-                        Text(text = "multiplier", fontSize = 10.sp, color = TextSecondary)
+                        Text(text = "multiplier", fontSize = 11.sp, color = TextSecondary)
                     }
                 }
             }
@@ -195,14 +204,14 @@ fun ModelCard(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "${(model.downloadProgress * 100).toInt()}%",
+                            text = "${(downloadProgress * 100).toInt()}%",
                             fontSize = 11.sp,
                             color = PrimaryColor,
                             fontWeight = FontWeight.Bold
                         )
                     }
                     LinearProgressIndicator(
-                        progress = { model.downloadProgress },
+                        progress = { downloadProgress },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(6.dp)
@@ -224,7 +233,7 @@ fun ModelCard(
                         ) {
                             IconButton(
                                 onClick = onDelete,
-                                modifier = Modifier.heightIn(min = 44.dp)
+                                modifier = Modifier.heightIn(min = 48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.DeleteOutline,
@@ -234,7 +243,7 @@ fun ModelCard(
                             }
                             IconButton(
                                 onClick = onRedownload,
-                                modifier = Modifier.heightIn(min = 44.dp)
+                                modifier = Modifier.heightIn(min = 48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
@@ -253,7 +262,7 @@ fun ModelCard(
                             ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
-                                .heightIn(min = 44.dp)
+                                .heightIn(min = 48.dp)
                                 .pressScale()
                         ) {
                             Text(
@@ -269,7 +278,7 @@ fun ModelCard(
                             colors = ButtonDefaults.buttonColors(containerColor = SecondaryColor),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
-                                .height(36.dp)
+                                .heightIn(min = 48.dp)
                                 .pressScale()
                         ) {
                             Row(

@@ -49,7 +49,7 @@ fun HistoryTab(viewModel: MainViewModel) {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Transcription History",
+                        text = "Transcription history",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = TextPrimary
@@ -155,8 +155,8 @@ fun HistoryCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Text(
-                        text = if (item.type == "shared_file") "SHARED FILE" else "DICTATION",
-                        fontSize = 10.sp,
+                        text = if (item.type == "shared_file") "Shared file" else "Dictation",
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (item.type == "shared_file") SecondaryColor else PrimaryColor,
                         letterSpacing = 1.sp
@@ -207,7 +207,7 @@ fun HistoryCard(
                     ) {
                         Text(
                             text = item.modelUsed,
-                            fontSize = 10.sp,
+                            fontSize = 11.sp,
                             color = TextSecondary,
                             fontWeight = FontWeight.Bold
                         )
