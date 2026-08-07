@@ -94,18 +94,8 @@ class ModelDownloader(private val context: Context) {
 
             // Integrity check: verify the downloaded file against the expected SHA-256.
             val expectedSha = sha256Map[modelId]
-            if (!expectedSha.isNullOrEmpty()) {
-                if (expectedSha.startsWith("placeholder")) {
-                    Log.w(TAG, "SHA-256 for model $modelId is a placeholder; skipping integrity check")
-                } else {
-                    val actualSha = sha256(outputFile)
-                    if (actualSha != expectedSha) {
-                        Log.e(TAG, "SHA-256 mismatch for model $modelId (expected=$expectedSha, actual=$actualSha)")
-                        outputFile.delete()
-                        return false
-                    }
-                    Log.i(TAG, "SHA-256 verified for model $modelId")
-                }
+            if (!expectedSha.isNullOrEmpty() && !verifySha256(outputFile, expectedSha)) {
+                return false
             }
 
             Log.i(TAG, "Model $modelId downloaded successfully to ${outputFile.absolutePath}")
@@ -117,6 +107,26 @@ class ModelDownloader(private val context: Context) {
             }
             return false
         }
+    }
+
+    /**
+     * Verifies [file] against the expected SHA-256. Placeholder hashes (see [sha256Map])
+     * skip the check and return true. On a mismatch the file is deleted and false is
+     * returned. Extracted from [downloadModel] so it can be unit-tested in isolation.
+     */
+    internal fun verifySha256(file: File, expected: String): Boolean {
+        if (expected.startsWith("placeholder")) {
+            Log.w(TAG, "SHA-256 for ${file.name} is a placeholder; skipping integrity check")
+            return true
+        }
+        val actualSha = sha256(file)
+        if (actualSha != expected) {
+            Log.e(TAG, "SHA-256 mismatch for ${file.name} (expected=$expected, actual=$actualSha)")
+            file.delete()
+            return false
+        }
+        Log.i(TAG, "SHA-256 verified for ${file.name}")
+        return true
     }
 
     private fun sha256(file: File): String {
