@@ -18,8 +18,7 @@ object ModelUrls {
         "whisper_base" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q8_0.bin",
         "whisper_small" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q8_0.bin",
         "whisper_medium" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q8_0.bin",
-        "whisper_large_v3_turbo" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
-        "qwen2.5_0.5b" to "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+        "whisper_large_v3_turbo" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin"
     )
 
     fun getModelFile(context: Context, modelId: String): File {
@@ -45,8 +44,7 @@ class ModelDownloader(private val context: Context) {
         "whisper_base" to "placeholder-whisper_base",
         "whisper_small" to "placeholder-whisper_small",
         "whisper_medium" to "placeholder-whisper_medium",
-        "whisper_large_v3_turbo" to "placeholder-whisper_large_v3_turbo",
-        "qwen2.5_0.5b" to "placeholder-qwen2.5_0.5b"
+        "whisper_large_v3_turbo" to "placeholder-whisper_large_v3_turbo"
     )
 
     suspend fun downloadModel(

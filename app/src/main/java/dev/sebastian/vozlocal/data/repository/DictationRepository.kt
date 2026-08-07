@@ -44,16 +44,14 @@ class DictationRepository(private val context: Context) {
     private var lastDictHash: Int = 0
 
     val allModels: Flow<List<DictationModel>> = modelDao.getAllModels().map { list ->
-        list.sortedBy { model ->
-            if (model.id.startsWith("qwen")) 99 else when (model.id) {
-                "whisper_tiny" -> 1
-                "whisper_base" -> 2
-                "whisper_small" -> 3
-                "whisper_medium" -> 4
-                "whisper_large_v3_turbo" -> 5
-                else -> 10
-            }
-        }
+        list.sortedBy { model -> when (model.id) {
+            "whisper_tiny" -> 1
+            "whisper_base" -> 2
+            "whisper_small" -> 3
+            "whisper_medium" -> 4
+            "whisper_large_v3_turbo" -> 5
+            else -> 10
+        } }
     }
     val allHistory: Flow<List<TranscriptionHistory>> = historyDao.getAllHistory()
     val allWords: Flow<List<DictionaryWord>> = dictionaryDao.getAllWords()
@@ -214,16 +212,6 @@ class DictationRepository(private val context: Context) {
                     accuracyEnglish = 99,
                     speedMultiplier = 3.5f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_large_v3_turbo"),
-                    isSelected = false
-                ),
-                DictationModel(
-                    id = "qwen2.5_0.5b",
-                    name = "Qwen2.5 0.5B (AI Text Polisher)",
-                    sizeMb = 398f,  // Q4_K_M quantized
-                    accuracySpanish = 99,
-                    accuracyEnglish = 99,
-                    speedMultiplier = 12.0f,
-                    isDownloaded = ModelUrls.isModelDownloaded(context, "qwen2.5_0.5b"),
                     isSelected = false
                 )
             )

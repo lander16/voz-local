@@ -597,39 +597,8 @@ fun DictateTab(
                         ) {
                             Icon(imageVector = Icons.Default.Psychology, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(text = "AI Text Polisher (Qwen 0.5B)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text(text = "Cleans up filler words & polishes dictation with local LLM.", fontSize = 11.sp, color = TextSecondary)
-
-                                Surface(
-                                    onClick = {
-                                        if (!isQwenDownloaded && !isQwenDownloading) {
-                                            viewModel.downloadModel("qwen2.5_0.5b")
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = when {
-                                        isQwenDownloaded -> PrimaryColor.copy(alpha = 0.15f)
-                                        isQwenDownloading -> SecondaryColor.copy(alpha = 0.15f)
-                                        else -> TertiaryColor.copy(alpha = 0.15f)
-                                    },
-                                    modifier = Modifier.pressScale()
-                                ) {
-                                    Text(
-                                        text = when {
-                                            isQwenDownloaded -> "Model Ready (398 MB)"
-                                            isQwenDownloading -> "Downloading... ${(qwenDownloadProgress * 100).toInt()}%"
-                                            else -> "Tap to download (398 MB)"
-                                        },
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = when {
-                                            isQwenDownloaded -> PrimaryColor
-                                            isQwenDownloading -> SecondaryColor
-                                            else -> TertiaryColor
-                                        },
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+                                Text(text = "AI Text Polisher", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(text = "Cleans up filler words & polishes dictation locally.", fontSize = 11.sp, color = TextSecondary)
                             }
                         }
                         Switch(

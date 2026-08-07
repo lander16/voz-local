@@ -30,7 +30,7 @@
 - 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). No cloud APIs or subscriptions.
 - 🎈 **Global Floating Dictation Overlay** — Accessibility Service + `WindowManager` show a floating microphone button over **any application** (WhatsApp, Gmail, Chrome, Notes). Recognized text is injected directly into the focused input field. The button is hidden when no text field is focused.
 - 📁 **Shared Audio File Transcription** — Receives shared audio files via Android `SEND` intents (WhatsApp voice notes, Voice Memos, podcast snippets) and transcribes them offline with `MediaCodec` + PCM.
-- 🧹 **Local Text Polisher** — A pure-Kotlin rule-based engine strips filler words ("um", "uh", "este", "bueno", "euh", "ähm"…), collapses repeated tokens, and applies smart capitalization/punctuation. Runs on `Dispatchers.Default`, no model file required. (A future llama.cpp + Qwen 2.5 backend is on the roadmap — the toggle already exists.)
+- 🧹 **Local Text Polisher** — A pure-Kotlin rule-based engine strips filler words ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies smart capitalization/punctuation. Runs on `Dispatchers.Default`, no model file required. The `QwenEngine` is the final implementation — the LLM backend was scoped out.
 - 📚 **Personal Dictation Dictionary** — Vocabulary biasing and phonetic-replacement rules. Compiled regexes are cached and invalidated on insert/delete, so post-processing stays O(words) per transcription.
 - ⚡ **Local Post-Processing Pipeline** — Smart pause correction, auto-capitalization, dictionary replacement, and optional polisher — all stitched together in `DictationRepository.postProcessText`.
 - 📊 **Performance Stats & Analytics** — Per-day WPM, total speak time, and accuracy breakdown per model, backed by Room.
@@ -83,7 +83,6 @@ VozLocal System Architecture (v2)
 ┌──────────────────────────────────▼──────────────────────────────────────────┐
 │                    On-Device Local Models                                    │
 │   ggml-tiny / base / small / medium / large-v3-turbo.bin (q8_0 / q5_0)      │
-│   + (planned) llama.cpp + qwen2.5-0.5b-instruct-q4_k_m.gguf                │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -130,8 +129,7 @@ A `SharedPreferences.OnSharedPreferenceChangeListener` is registered in the serv
 | **UI Framework** | Jetpack Compose (Material 3, BOM 2024.09.00) |
 | **Architecture** | MVVM, Kotlin Coroutines, `StateFlow`, process-scoped singletons |
 | **STT Engine** | `whisper.cpp` (q8_0 / q5_0 GGML quantized) |
-| **AI Polisher (v1)** | Local rule-based Kotlin engine (`QwenEngine`) |
-| **AI Polisher (planned)** | llama.cpp + Qwen2.5-0.5B-Instruct (q4_k_m GGUF) |
+| **AI Polisher** | Local rule-based Kotlin engine (`QwenEngine`) — pure Kotlin, no model file |
 | **Persistence** | Room 2.7.0 (version 2, with stub `MIGRATION_1_2`, no destructive fallback) |
 | **Audio Capture** | `AudioRecord` API (16 kHz mono PCM, `VOICE_RECOGNITION` source) |
 | **Audio Decoding** | `MediaCodec` + `MediaExtractor` with linear resampling to 16 kHz |
@@ -152,7 +150,7 @@ Models are downloaded on-demand from Hugging Face directly to `context.filesDir/
 | `whisper_small` | `ggml-small-q8_0.bin` | ~466 MB | 95% | **3.2x** | High accuracy dictation & clean audio notes |
 | `whisper_medium` | `ggml-medium-q8_0.bin` | ~1.5 GB | 98% | **1.1x** | Complex vocab, accents & technical dictation |
 | `whisper_large_v3_turbo` | `ggml-large-v3-turbo-q5_0.bin` | ~1.6 GB | 99% | **1.4x** | Maximum accuracy audio file transcription |
-| `qwen2.5_0.5b` *(planned)* | `qwen2.5-0.5b-instruct-q4_k_m.gguf` | ~398 MB | — | — | Reserved for the future llama.cpp-backed polisher |
+
 
 > **Model integrity**: after every download, `ModelDownloader` computes SHA-256 of the file and compares against the expected hash. A mismatch deletes the file and reports a failed download. The current map contains `placeholder-…` values — replace them with the real Hugging Face model-card hashes before shipping.
 
@@ -257,9 +255,8 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 
 ## 🛣️ Roadmap
 
-- [ ] **Real llama.cpp + Qwen 2.5 polisher** — replace `QwenEngine` rule-based implementation with native llama.cpp inference. The toggle, download URL, and UI are already in place.
 - [ ] **Foreground service for background recording** — add a `<service android:foregroundServiceType="microphone">` so the mic can stay open when the user navigates away mid-dictation. Re-add the `FOREGROUND_SERVICE_MICROPHONE` permission at the same time.
-- [ ] **Real SHA-256 hashes** for the model download map (currently `placeholder-…`).
+- [ ] **Real SHA-256 hashes** for the 5 Whisper model download map entries (currently `placeholder-…`).
 - [ ] **Window-size-class adaptive UI** — `NavigationRail` for width ≥ 600 dp, foldable support.
 - [ ] **Room migrations for v2** — the v1 → v2 migration is a no-op stub; the next schema change will add a real `Migration(2, 3)`.
 - [ ] **`MainActivity` reads `themeMode` from `VozLocalApp.repository`** and passes it to the top-level `MyApplicationTheme` (currently the theme is re-applied inside `MainScreen` as a workaround).

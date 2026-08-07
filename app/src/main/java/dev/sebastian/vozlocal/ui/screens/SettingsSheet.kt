@@ -349,20 +349,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(text = "Qwen2.5 AI Text Polisher", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            Box(
-                                modifier = Modifier
-                                    .background(AccentViolet.copy(alpha = 0.2f), RoundedCornerShape(100.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(text = "LLM", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = AccentViolet)
-                            }
-                        }
-                        Text(text = "Removes stutters, filler words & enhances grammar locally", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "AI Text Polisher", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Removes stutters and filler words locally", fontSize = 13.sp, color = TextSecondary)
                     }
                     Switch(
                         checked = useAiPolisher,
