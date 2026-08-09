@@ -27,7 +27,7 @@ class WhisperContext private constructor(private var ptr: Long) {
         params: WhisperParams
     ): String = withContext(scope.coroutineContext) {
         require(ptr != 0L)
-        val numThreads = WhisperCpuConfig.preferredThreadCount
+        val numThreads = WhisperCpuConfig.threadCountFor(params)
         Log.d(LOG_TAG, "Selecting $numThreads threads, language=${params.language}")
 
         WhisperLib.fullTranscribeWithParams(
@@ -42,7 +42,9 @@ class WhisperContext private constructor(private var ptr: Long) {
             params.logprobThold,
             params.entropyThold,
             params.vadModelPath,
-            params.beamSize
+            params.beamSize,
+            params.noTimestamps,
+            params.temperatureInc
         )
 
         val textCount = WhisperLib.getTextSegmentCount(ptr)
@@ -170,7 +172,9 @@ private class WhisperLib {
             logprobThold: Float,
             entropyThold: Float,
             vadModelPath: String?,
-            beamSize: Int
+            beamSize: Int,
+            noTimestamps: Boolean,
+            temperatureInc: Float
         )
         external fun getTextSegmentCount(contextPtr: Long): Int
         external fun getTextSegment(contextPtr: Long, index: Int): String

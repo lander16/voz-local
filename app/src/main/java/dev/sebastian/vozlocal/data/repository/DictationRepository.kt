@@ -14,6 +14,7 @@ import dev.sebastian.vozlocal.whisper.WhisperEngine
 import dev.sebastian.vozlocal.whisper.WhisperParams
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,6 +47,7 @@ class DictationRepository(private val context: Context) {
     private var cachedWordRegexes: List<Regex> = emptyList()
     private var cachedWordReplacements: List<String> = emptyList()
     private var lastDictHash: Int = 0
+    @Volatile private var dictionarySnapshot: List<DictionaryWord> = emptyList()
 
     // Silero VAD model state: populated at app start by ensureVadModel().
     private val _vadModelReady = MutableStateFlow(false)
@@ -232,6 +234,17 @@ class DictationRepository(private val context: Context) {
         }
     }
 
+    suspend fun preloadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
+        val ok = whisperEngine.loadModel(modelId)
+        _modelLoaded.value = ok
+        ok
+    }
+
+    suspend fun preloadSelectedDownloadedModel(): Boolean = withContext(Dispatchers.IO) {
+        val selected = allModels.first { it.isNotEmpty() }.find { it.isSelected && it.isDownloaded }
+        selected?.let { preloadModel(it.id) } ?: false
+    }
+
     suspend fun pruneHistory(limit: Int) = withContext(Dispatchers.IO) {
         if (limit > 0) {
             val currentHistory = historyDao.getAllHistory().first()
@@ -355,11 +368,13 @@ class DictationRepository(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "Error initializing default models", e)
         }
+        refreshDictionarySnapshot()
     }
 
     // Models Operations
     suspend fun selectModel(modelId: String) = withContext(Dispatchers.IO) {
         modelDao.selectModel(modelId)
+        allModels.first().find { it.id == modelId && it.isDownloaded }?.let { preloadModel(modelId) }
     }
 
     @Suppress("unused")
@@ -395,6 +410,7 @@ class DictationRepository(private val context: Context) {
                         downloadProgress = 1.0f
                     ))
                     onProgress(1.0f)
+                    allModels.first().find { it.id == modelId && it.isSelected }?.let { preloadModel(modelId) }
                 } else {
                     modelDao.updateModel(model.copy(
                         isDownloading = false,
@@ -451,6 +467,12 @@ class DictationRepository(private val context: Context) {
             samples,
             language = getLanguage(),
             params = currentWhisperParams()
+                .copy(
+                    noTimestamps = true,
+                    printTimestamps = false,
+                    vadModelPath = vadPathFor(samples.size, sharedFile = false),
+                    modelIdHint = modelId
+                )
         )
     }
 
@@ -460,28 +482,36 @@ class DictationRepository(private val context: Context) {
         onProgress: (Float, String) -> Unit
     ): String = withContext(Dispatchers.Default) {
         onProgress(0.10f, "Decoding audio file...")
+        val loadJob = async(Dispatchers.IO) {
+            onProgress(0.12f, "Loading local Whisper model...")
+            whisperEngine.loadModel(modelId)
+        }
         val samples = audioDecoder.decodeToPcm16k(uri) { prog ->
-            onProgress(0.10f + prog * 0.40f, "Decoding audio file...")
+            onProgress(0.10f + prog * 0.45f, "Decoding audio file...")
         }
 
         if (samples.isEmpty()) {
+            loadJob.cancel()
             return@withContext "Error: Failed to decode audio file."
         }
 
-        onProgress(0.55f, "Loading local Whisper model...")
-        val loaded = whisperEngine.loadModel(modelId)
+        onProgress(0.58f, "Preparing local Whisper model...")
+        val loaded = loadJob.await()
         _modelLoaded.value = loaded
         if (!loaded) {
             return@withContext "Error: Local Whisper model $modelId is not downloaded yet. Please download it first."
         }
 
-        onProgress(0.70f, "Running local Whisper inference...")
+        onProgress(0.65f, "Running local Whisper inference...")
         val rawResult = whisperEngine.transcribe(
             samples,
             language = getLanguage(),
             params = currentWhisperParams().copy(
                 singleSegment = false,
-                printTimestamps = true
+                printTimestamps = true,
+                noTimestamps = false,
+                vadModelPath = vadPathFor(samples.size, sharedFile = true),
+                modelIdHint = modelId
             )
         )
         onProgress(0.95f, "Applying local post-processing...")
@@ -500,9 +530,15 @@ class DictationRepository(private val context: Context) {
             initialPrompt = getInitialPrompt(),
             noSpeechThold = getNoSpeechThold(),
             logprobThold = getLogprobThold(),
-            entropyThold = getEntropyThold(),
-            vadModelPath = _vadModelPath.value.takeIf { getUseVad() }
+            entropyThold = getEntropyThold()
         )
+    }
+
+    private fun vadPathFor(sampleCount: Int, sharedFile: Boolean): String? {
+        if (!getUseVad()) return null
+        val path = _vadModelPath.value ?: return null
+        val durationSec = sampleCount / 16000f
+        return path.takeIf { sharedFile || durationSec >= 12f }
     }
 
     // History Operations
@@ -532,16 +568,21 @@ class DictationRepository(private val context: Context) {
     // Dictionary Operations
     suspend fun insertWord(word: DictionaryWord) = withContext(Dispatchers.IO) {
         dictionaryDao.insertWord(word)
-        invalidateRegexCache()
+        refreshDictionarySnapshot()
     }
 
     suspend fun deleteWordById(id: Int) = withContext(Dispatchers.IO) {
         dictionaryDao.deleteWordById(id)
-        invalidateRegexCache()
+        refreshDictionarySnapshot()
     }
 
     suspend fun getWordsList(): List<DictionaryWord> = withContext(Dispatchers.IO) {
         dictionaryDao.getWordsList()
+    }
+
+    private suspend fun refreshDictionarySnapshot() {
+        dictionarySnapshot = dictionaryDao.getWordsList()
+        invalidateRegexCache()
     }
 
     fun invalidateRegexCache() {
@@ -565,7 +606,7 @@ class DictationRepository(private val context: Context) {
 
         // 2. Dictionary Replacements & Misheard Vocabulary Biasing
         if (applyDict) {
-            val words = getWordsList()
+            val words = dictionarySnapshot
             val dictHash = words.fold(0) { acc, w -> 31 * acc + w.id + w.word.hashCode() }
             if (dictHash != lastDictHash) {
                 val regexes = mutableListOf<Regex>()

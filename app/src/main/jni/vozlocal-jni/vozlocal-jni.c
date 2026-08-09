@@ -77,7 +77,8 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
         jstring lang, jstring initial_prompt,
         jboolean single_segment, jboolean print_timestamps,
         jfloat no_speech_thold, jfloat logprob_thold, jfloat entropy_thold,
-        jstring vad_model_path, jint beam_size) {
+        jstring vad_model_path, jint beam_size, jboolean no_timestamps,
+        jfloat temperature_inc) {
     UNUSED(thiz);
 
     struct whisper_context *context = (struct whisper_context *) context_ptr;
@@ -148,6 +149,8 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
     }
     params.single_segment = single_segment;
     params.print_timestamps = print_timestamps;
+    params.no_timestamps = no_timestamps;
+    params.temperature_inc = temperature_inc < 0.0f ? 0.0f : temperature_inc;
     params.no_speech_thold = no_speech_thold;
     params.logprob_thold = logprob_thold;
     params.entropy_thold = entropy_thold;
@@ -163,13 +166,13 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
     params.offset_ms = 0;
 
     LOGI("whisper_full: strategy=%s, language=%s, threads=%d, samples=%d, "
-         "single_segment=%d, print_timestamps=%d, no_speech_thold=%.2f, "
-         "logprob_thold=%.2f, entropy_thold=%.2f, vad=%d, beam_size=%d",
+         "single_segment=%d, print_timestamps=%d, no_timestamps=%d, no_speech_thold=%.2f, "
+         "logprob_thold=%.2f, entropy_thold=%.2f, vad=%d, beam_size=%d, temperature_inc=%.2f",
          (strategy == WHISPER_SAMPLING_BEAM_SEARCH) ? "beam" : "greedy",
          params.language, num_threads, audio_data_length,
-         (int) single_segment, (int) print_timestamps,
+         (int) single_segment, (int) print_timestamps, (int) no_timestamps,
          no_speech_thold, logprob_thold, entropy_thold,
-         (int) params.vad, beam_size);
+         (int) params.vad, beam_size, params.temperature_inc);
 
     if (whisper_full(context, params, audio_data_arr, audio_data_length) != 0) {
         LOGE("whisper_full failed");

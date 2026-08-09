@@ -35,6 +35,7 @@ class QwenEngine {
     private val fillerRegexCache: MutableMap<String, List<Regex>> = ConcurrentHashMap()
     private val repeatWordRegex = Regex("\\b(\\w+)(?:\\s+\\1\\b)+", RegexOption.IGNORE_CASE)
     private val multiSpaceRegex = Regex("\\s+")
+    private val capitalizeAfterSentenceRegex = Regex("([.!?¿¡\\n]\\s+)([a-zñáéíóúàâçèêëîïôùûüäöß])")
 
     private fun fillerRegexesFor(language: String): List<Regex> {
         val resolved = if (fillersByLang.containsKey(language)) language else "auto"
@@ -61,7 +62,7 @@ class QwenEngine {
         result = multiSpaceRegex.replace(result, " ").trim()
 
         // 4. Capitalize after sentence end or newline.
-        result = result.replace(Regex("([.!?¿¡\\n]\\s+)([a-zñáéíóúàâçèêëîïôùûüäöß])")) { match ->
+        result = capitalizeAfterSentenceRegex.replace(result) { match ->
             match.groupValues[1] + match.groupValues[2].uppercase(Locale.getDefault())
         }
 

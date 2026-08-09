@@ -45,6 +45,8 @@ import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 import java.util.Locale
 
+private val WORD_SPLIT_REGEX = Regex("\\s+")
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DictateTab(
@@ -296,7 +298,7 @@ fun DictateTab(
                                 )
                             }
 
-                            val wordsCount = if (liveText.isBlank()) 0 else liveText.trim().split(Regex("\\s+")).size
+                            val wordsCount = if (liveText.isBlank()) 0 else liveText.trim().split(WORD_SPLIT_REGEX).size
                             Text(
                                 text = "$wordsCount words • ${liveText.length} chars",
                                 fontSize = 11.sp,

@@ -15,6 +15,8 @@ package dev.sebastian.vozlocal.whisper
  * @param entropyThold segment is skipped if mean entropy is higher.
  * @param vadModelPath absolute path to a Silero VAD ggml model; null disables VAD.
  * @param beamSize 0 = greedy sampling (default); >1 switches to beam search.
+ * @param noTimestamps true asks whisper.cpp to skip timestamp token work.
+ * @param temperatureInc 0 disables fallback sampling for deterministic fast mode.
  */
 data class WhisperParams(
     val language: String = "es",
@@ -26,4 +28,7 @@ data class WhisperParams(
     val entropyThold: Float = 2.4f,
     val vadModelPath: String? = null,
     val beamSize: Int = 0, // 0 = greedy (default); >1 = beam search
+    val noTimestamps: Boolean = true,
+    val temperatureInc: Float = 0.0f,
+    val modelIdHint: String? = null,
 )

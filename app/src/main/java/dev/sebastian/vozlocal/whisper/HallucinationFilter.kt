@@ -22,6 +22,8 @@ object HallucinationFilter {
     // Collapses an empty "sentence" left behind after a phrase is stripped,
     // e.g. "Hola. . Adios." -> "Hola. Adios.".
     private val PUNCT_GAP = Regex("([.!?])\\s+\\1")
+    private val MULTI_SPACE = Regex("\\s+")
+    private val REPEATED_SENTENCE = Regex("\\b([^.!?]+[.!?])\\s+\\1\\s*", RegexOption.IGNORE_CASE)
 
     fun filter(text: String): String {
         if (text.isBlank()) return text
@@ -34,7 +36,7 @@ object HallucinationFilter {
         // Collapse a sentence that's been repeated N>=2 times verbatim
         result = collapseRepetition(result)
         // Clean up the resulting double spaces
-        result = result.replace(Regex("\\s+"), " ").trim()
+        result = result.replace(MULTI_SPACE, " ").trim()
         // Clean up empty-sentence punctuation gaps left by the removals
         while (PUNCT_GAP.containsMatchIn(result)) {
             result = result.replace(PUNCT_GAP, "$1")
@@ -51,10 +53,9 @@ object HallucinationFilter {
         // If a sentence (ending in . ! ?) appears 2+ times consecutively, keep only one.
         // The leading \b prevents a false positive like "Goodbye." vs "Bye." where a
         // substring ("bye.") would otherwise match the backreference case-insensitively.
-        val pattern = Regex("\\b([^.!?]+[.!?])\\s+\\1\\s*", RegexOption.IGNORE_CASE)
         var result = text
-        while (pattern.containsMatchIn(result)) {
-            result = result.replace(pattern, "$1 ")
+        while (REPEATED_SENTENCE.containsMatchIn(result)) {
+            result = result.replace(REPEATED_SENTENCE, "$1 ")
         }
         return result
     }

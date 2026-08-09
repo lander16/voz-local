@@ -1,6 +1,7 @@
 package com.whispercpp.whisper
 
 import android.util.Log
+import dev.sebastian.vozlocal.whisper.WhisperParams
 import java.io.BufferedReader
 import java.io.FileReader
 
@@ -16,6 +17,19 @@ object WhisperCpuConfig {
         configuredThreadCount() ?: adaptiveThreadCount()
     }
 
+    fun threadCountFor(params: WhisperParams): Int {
+        configuredThreadCount()?.let { return it }
+        val base = preferredThreadCount
+        val modelHint = params.modelIdHint
+        return when {
+            modelHint?.contains("large", ignoreCase = true) == true -> (base + 1).coerceAtMost(maxThreadCap())
+            modelHint?.contains("medium", ignoreCase = true) == true -> (base + 1).coerceAtMost(maxThreadCap())
+            modelHint?.contains("tiny", ignoreCase = true) == true -> base.coerceAtMost(2)
+            modelHint?.contains("base", ignoreCase = true) == true -> base.coerceAtMost(3)
+            else -> base
+        }
+    }
+
     private fun configuredThreadCount(): Int? = System.getProperty(THREAD_PROPERTY)
         ?.toIntOrNull()
         ?.takeIf { it > 0 }
@@ -29,6 +43,8 @@ object WhisperCpuConfig {
         val cap = if (available >= 6) 4 else 2
         return usable.coerceIn(1, cap)
     }
+
+    private fun maxThreadCap(): Int = if (Runtime.getRuntime().availableProcessors() >= 8) 5 else 4
 }
 
 private class CpuInfo(private val lines: List<String>) {

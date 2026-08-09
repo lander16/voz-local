@@ -139,6 +139,8 @@ class MainViewModel(
     val isModelLoading: StateFlow<Boolean> = MutableStateFlow(false)
 
     companion object {
+        private val REGEX_WORD_SPLIT = Regex("\\s+")
+
         // Supported whisper.cpp language codes for the selector
         val LANGUAGE_OPTIONS = listOf(
             "es" to "🇲🇽 Español",
@@ -352,6 +354,10 @@ class MainViewModel(
         _currentLiveTranscription.value = "Recording mic audio (PCM 16kHz)..."
         resetWaveform()
 
+        selectedModel.value?.takeIf { it.isDownloaded }?.let { model ->
+            viewModelScope.launch(Dispatchers.IO) { repository.preloadModel(model.id) }
+        }
+
         // Start duration timer
         timerJob = viewModelScope.launch {
             while (isActive) {
@@ -429,7 +435,7 @@ class MainViewModel(
                 useAiPolisher = useAiPolisher.value
             )
 
-            val wordCount = processedText.split(Regex("\\s+")).filter { it.isNotBlank() }.size
+            val wordCount = processedText.split(REGEX_WORD_SPLIT).count { it.isNotBlank() }
             val calcDuration = if (finalDuration > 0) finalDuration else 1
             val calculatedWpm = (wordCount.toFloat() / (calcDuration.toFloat() / 60f))
 
@@ -491,7 +497,7 @@ class MainViewModel(
 
         viewModelScope.launch(Dispatchers.Default) {
             val result = repository.transcribeSharedFile(uri, model.id) { prog, status ->
-                _sharedProgress.value = prog
+                _sharedProgress.value = prog.coerceIn(0f, 1f)
                 _sharedStatusText.value = status
             }
 
