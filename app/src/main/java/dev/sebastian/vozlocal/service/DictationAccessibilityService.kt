@@ -44,6 +44,7 @@ class DictationAccessibilityService : AccessibilityService() {
     private var floatingView: FrameLayout? = null
     private var buttonView: FrameLayout? = null
     private var isRecording = false
+    private var ownsRecorderSession = false
     private var lastFocusedNode: AccessibilityNodeInfo? = null
     private var startTimestamp: Long = 0
     private var timerJob: Job? = null
@@ -475,7 +476,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 }
             }
 
-            audioRecorder.startRecording(serviceScope) { amplitude ->
+            val started = audioRecorder.startRecording(serviceScope) { amplitude ->
                 mainHandler.post {
                     waveBars.forEachIndexed { index, bar ->
                         val scaleFactor = 1.0f + (amplitude * 3.5f * (1f + (index % 3) * 0.25f))
@@ -483,6 +484,14 @@ class DictationAccessibilityService : AccessibilityService() {
                     }
                 }
             }
+            if (!started) {
+                timerJob?.cancel()
+                timerJob = null
+                isRecording = false
+                stopRecordingUI()
+                return
+            }
+            ownsRecorderSession = true
         } else {
             timerJob?.cancel()
             timerJob = null
@@ -500,12 +509,18 @@ class DictationAccessibilityService : AccessibilityService() {
             }
 
             startWaveformAnimation()
-            val samples = audioRecorder.stopRecording()
+            val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
+            ownsRecorderSession = false
 
             serviceScope.launch(Dispatchers.Default) {
                 val models = repository.allModels.first()
-                val selected = models.find { it.isSelected } ?: models.firstOrNull()
-                val modelId = selected?.id ?: "whisper_tiny"
+                val selected = models.find { it.isSelected && it.isDownloaded }
+                    ?: models.firstOrNull { it.isDownloaded }
+                if (selected == null) {
+                    withContext(Dispatchers.Main) { stopRecordingUI() }
+                    return@launch
+                }
+                val modelId = selected.id
 
                 val rawText = repository.transcribeAudio(samples, modelId)
                 withContext(Dispatchers.Main) {
@@ -581,8 +596,18 @@ class DictationAccessibilityService : AccessibilityService() {
     private fun pasteTextToActiveInput(text: String) {
         val targetNode = findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: lastFocusedNode
         if (targetNode != null) {
+            val existingText = targetNode.text?.toString().orEmpty()
+            val selectionStart = targetNode.textSelectionStart
+            val selectionEnd = targetNode.textSelectionEnd
+            val insertionStart = minOf(selectionStart, selectionEnd)
+            val insertionEnd = maxOf(selectionStart, selectionEnd)
+            val newText = if (insertionStart >= 0 && insertionEnd >= insertionStart && insertionEnd <= existingText.length) {
+                existingText.replaceRange(insertionStart, insertionEnd, text)
+            } else {
+                existingText + text
+            }
             val arguments = Bundle()
-            arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
+            arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText)
             val success = targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
 
             if (!success) {
@@ -612,10 +637,17 @@ class DictationAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {
         isRecording = false
         stopWaveformAnimation()
-        audioRecorder.stopRecording()
+        if (ownsRecorderSession) {
+            audioRecorder.stopRecording()
+            ownsRecorderSession = false
+        }
     }
 
     override fun onDestroy() {
+        if (ownsRecorderSession) {
+            audioRecorder.stopRecording()
+            ownsRecorderSession = false
+        }
         serviceScope.cancel()
         @Suppress("DEPRECATION")
         lastFocusedNode?.recycle()

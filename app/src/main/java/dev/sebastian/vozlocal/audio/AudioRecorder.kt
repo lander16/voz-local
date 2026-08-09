@@ -71,13 +71,13 @@ class AudioRecorder {
         scope: CoroutineScope,
         hasRecordPermission: Boolean = true,
         onRmsChanged: ((Float) -> Unit)? = null
-    ) {
+    ): Boolean {
         if (!hasRecordPermission) {
             throw SecurityException("RECORD_AUDIO permission not granted")
         }
 
         synchronized(this) {
-            if (isRecording) return
+            if (isRecording) return false
 
             val minBufferSize = max(
                 AudioRecord.getMinBufferSize(
@@ -99,7 +99,7 @@ class AudioRecorder {
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
                 Log.e(TAG, "AudioRecord initialization failed!")
                 audioRecord = null
-                return
+                return false
             }
 
             synchronized(floatBuffer) {
@@ -127,6 +127,7 @@ class AudioRecorder {
                     }
                 }
             }
+            return true
         }
     }
 

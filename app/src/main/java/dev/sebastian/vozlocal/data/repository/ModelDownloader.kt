@@ -7,7 +7,11 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
+import java.util.UUID
 
 private const val TAG = "ModelDownloader"
 
@@ -22,6 +26,15 @@ object ModelUrls {
         "silero_vad" to "https://huggingface.co/ggml-org/whisper.cpp/resolve/main/ggml-silero-v6.2.0.bin"
     )
 
+    private val MIN_VALID_BYTES = mapOf(
+        "whisper_tiny" to 33_000_000L,
+        "whisper_base" to 62_000_000L,
+        "whisper_small" to 200_000_000L,
+        "whisper_medium" to 650_000_000L,
+        "whisper_large_v3_turbo" to 430_000_000L,
+        "silero_vad" to 1_000_000L
+    )
+
     fun getModelFile(context: Context, modelId: String): File {
         val modelsDir = File(context.filesDir, "models")
         if (!modelsDir.exists()) {
@@ -32,21 +45,32 @@ object ModelUrls {
 
     fun isModelDownloaded(context: Context, modelId: String): Boolean {
         val file = getModelFile(context, modelId)
-        return file.exists() && file.length() > 1000000 // > 1MB
+        return isValidDownloadedFile(file, modelId)
+    }
+
+    fun isValidDownloadedFile(file: File, modelId: String): Boolean {
+        if (!file.exists() || file.name.endsWith(".part")) return false
+        return hasValidSize(file, modelId)
+    }
+
+    fun hasValidSize(file: File, modelId: String): Boolean {
+        val minBytes = MIN_VALID_BYTES[modelId] ?: 1_000_000L
+        return file.exists() && file.length() >= minBytes
     }
 }
 
 class ModelDownloader(private val context: Context) {
     private val client = OkHttpClient.Builder().build()
 
-    // TODO: replace with real Hugging Face sha256s
-    private val sha256Map: Map<String, String> = mapOf(
-        "whisper_tiny" to "placeholder-whisper_tiny",
-        "whisper_base" to "placeholder-whisper_base",
-        "whisper_small" to "placeholder-whisper_small",
-        "whisper_medium" to "placeholder-whisper_medium",
-        "whisper_large_v3_turbo" to "placeholder-whisper_large_v3_turbo",
-        "silero_vad" to "placeholder-silero_vad"
+    // Real SHA-256 values are not currently pinned for these mutable Hugging Face URLs.
+    // Keep unknown hashes as null so logs/results never imply cryptographic verification.
+    private val sha256Map: Map<String, String?> = mapOf(
+        "whisper_tiny" to null,
+        "whisper_base" to null,
+        "whisper_small" to null,
+        "whisper_medium" to null,
+        "whisper_large_v3_turbo" to null,
+        "silero_vad" to null
     )
 
     suspend fun downloadModel(
@@ -55,7 +79,7 @@ class ModelDownloader(private val context: Context) {
     ): Boolean {
         val url = ModelUrls.URL_MAP[modelId] ?: return false
         val outputFile = ModelUrls.getModelFile(context, modelId)
-        return downloadTo(url, outputFile, sha256Map[modelId], onProgress)
+        return downloadTo(url, outputFile, modelId, sha256Map[modelId], onProgress)
     }
 
     /**
@@ -76,12 +100,12 @@ class ModelDownloader(private val context: Context) {
      */
     suspend fun downloadVadModel(): String? {
         val file = vadModelFile()
-        if (file.exists() && file.length() > 0L) {
+        if (ModelUrls.isValidDownloadedFile(file, "silero_vad")) {
             Log.i(TAG, "VAD model already present at ${file.absolutePath}")
             return file.absolutePath
         }
         val url = ModelUrls.URL_MAP["silero_vad"] ?: return null
-        val ok = downloadTo(url, file, sha256Map["silero_vad"]) { }
+        val ok = downloadTo(url, file, "silero_vad", sha256Map["silero_vad"]) { }
         if (!ok) return null
         Log.i(TAG, "VAD model downloaded to ${file.absolutePath}")
         return file.absolutePath
@@ -90,69 +114,97 @@ class ModelDownloader(private val context: Context) {
     private suspend fun downloadTo(
         url: String,
         outputFile: File,
+        modelId: String,
         expectedSha: String?,
         onProgress: suspend (Float) -> Unit
     ): Boolean {
+        val partFile = File(outputFile.parentFile, "${outputFile.name}.${UUID.randomUUID()}.part")
         try {
+            outputFile.parentFile?.mkdirs()
             val request = Request.Builder().url(url).build()
             val response = client.newCall(request).execute()
+            response.use {
+                if (!response.isSuccessful) {
+                    Log.e(TAG, "Failed to download from $url: ${response.code}")
+                    return false
+                }
 
-            if (!response.isSuccessful) {
-                Log.e(TAG, "Failed to download from $url: ${response.code}")
-                return false
-            }
+                val body = response.body ?: return false
+                val contentLength = body.contentLength()
+                val inputStream: InputStream = body.byteStream()
 
-            val body = response.body ?: return false
-            val contentLength = body.contentLength()
-            val inputStream: InputStream = body.byteStream()
-            val outputStream = FileOutputStream(outputFile)
+                val buffer = ByteArray(65536) // 64KB buffer for faster throughput
+                var bytesRead: Int
+                var totalBytesRead = 0L
+                var lastEmittedProgress = -1f
 
-            val buffer = ByteArray(65536) // 64KB buffer for faster throughput
-            var bytesRead: Int
-            var totalBytesRead = 0L
-            var lastEmittedProgress = -1f
-
-            while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                outputStream.write(buffer, 0, bytesRead)
-                totalBytesRead += bytesRead
-                if (contentLength > 0) {
-                    val progress = (totalBytesRead.toFloat() / contentLength.toFloat()).coerceIn(0.0f, 1.0f)
-                    if (progress - lastEmittedProgress >= 0.01f || progress >= 1.0f) {
-                        lastEmittedProgress = progress
-                        onProgress(progress)
+                inputStream.use { input ->
+                    FileOutputStream(partFile).use { output ->
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            totalBytesRead += bytesRead
+                            if (contentLength > 0) {
+                                val progress = (totalBytesRead.toFloat() / contentLength.toFloat()).coerceIn(0.0f, 1.0f)
+                                if (progress - lastEmittedProgress >= 0.01f || progress >= 1.0f) {
+                                    lastEmittedProgress = progress
+                                    onProgress(progress)
+                                }
+                            }
+                        }
+                        output.flush()
                     }
+                }
+
+                if (contentLength > 0 && totalBytesRead != contentLength) {
+                    Log.e(TAG, "Incomplete download for ${outputFile.name} (expected=$contentLength, actual=$totalBytesRead)")
+                    partFile.delete()
+                    return false
                 }
             }
 
-            outputStream.flush()
-            outputStream.close()
-            inputStream.close()
-            onProgress(1.0f)
-
-            // Integrity check: verify the downloaded file against the expected SHA-256.
-            if (!expectedSha.isNullOrEmpty() && !verifySha256(outputFile, expectedSha)) {
+            if (!ModelUrls.hasValidSize(partFile, modelId)) {
+                Log.e(TAG, "Downloaded ${outputFile.name} failed size/metadata validation (${partFile.length()} bytes)")
+                partFile.delete()
                 return false
             }
+
+            // Integrity check: verify the downloaded file against the expected SHA-256.
+            if (!verifySha256(partFile, expectedSha)) {
+                return false
+            }
+
+            try {
+                Files.move(
+                    partFile.toPath(),
+                    outputFile.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING
+                )
+            } catch (e: AtomicMoveNotSupportedException) {
+                Log.e(TAG, "Atomic move not supported for ${outputFile.absolutePath}", e)
+                partFile.delete()
+                return false
+            }
+
+            onProgress(1.0f)
 
             Log.i(TAG, "Downloaded ${outputFile.name} successfully to ${outputFile.absolutePath}")
             return true
         } catch (e: Exception) {
             Log.e(TAG, "Exception downloading to ${outputFile.absolutePath}", e)
-            if (outputFile.exists()) {
-                outputFile.delete()
-            }
+            partFile.delete()
             return false
         }
     }
 
     /**
-     * Verifies [file] against the expected SHA-256. Placeholder hashes (see [sha256Map])
-     * skip the check and return true. On a mismatch the file is deleted and false is
-     * returned. Extracted from [downloadModel] so it can be unit-tested in isolation.
+     * Verifies [file] against [expected] when a real SHA-256 is pinned. A null expected
+     * value explicitly means the model is not cryptographically verified. On mismatch
+     * the file is deleted and false is returned.
      */
-    internal fun verifySha256(file: File, expected: String): Boolean {
-        if (expected.startsWith("placeholder")) {
-            Log.w(TAG, "SHA-256 for ${file.name} is a placeholder; skipping integrity check")
+    internal fun verifySha256(file: File, expected: String?): Boolean {
+        if (expected.isNullOrBlank()) {
+            Log.w(TAG, "No SHA-256 pinned for ${file.name}; download accepted after transport and size checks only")
             return true
         }
         val actualSha = sha256(file)

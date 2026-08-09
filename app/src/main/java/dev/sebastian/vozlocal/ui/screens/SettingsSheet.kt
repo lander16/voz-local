@@ -58,6 +58,8 @@ fun SettingsSheet(
     val entropyThold by viewModel.entropyThold.collectAsStateWithLifecycle()
     val initialPrompt by viewModel.initialPrompt.collectAsStateWithLifecycle()
     val isVadModelReady by viewModel.isVadModelReady.collectAsStateWithLifecycle()
+    val useVad by viewModel.useVad.collectAsStateWithLifecycle()
+    val spokenPunctuationCommands by viewModel.spokenPunctuationCommands.collectAsStateWithLifecycle()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -636,6 +638,50 @@ fun SettingsSheet(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isVadModelReady) Color(0xFF10B981) else TextSecondary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .toggleable(value = useVad, role = Role.Switch, onValueChange = { viewModel.setUseVad(it) })
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Use VAD when ready", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Default on for faster dictation; disable if it clips speech", fontSize = 13.sp, color = TextSecondary)
+                    }
+                    Switch(
+                        checked = useVad,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .toggleable(value = spokenPunctuationCommands, role = Role.Switch, onValueChange = { viewModel.setSpokenPunctuationCommands(it) })
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Spoken punctuation commands", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Opt-in replacement of words like comma/coma/punto", fontSize = 13.sp, color = TextSecondary)
+                    }
+                    Switch(
+                        checked = spokenPunctuationCommands,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                     )
                 }
             }

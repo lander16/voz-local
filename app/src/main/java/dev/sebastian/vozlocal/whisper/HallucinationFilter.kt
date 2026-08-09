@@ -27,7 +27,9 @@ object HallucinationFilter {
         if (text.isBlank()) return text
         var result = text
         for (p in PATTERNS) {
-            result = result.replace(p, "")
+            result = p.replace(result) { match ->
+                if (isTailMatch(result, match.range)) "" else match.value
+            }
         }
         // Collapse a sentence that's been repeated N>=2 times verbatim
         result = collapseRepetition(result)
@@ -38,6 +40,11 @@ object HallucinationFilter {
             result = result.replace(PUNCT_GAP, "$1")
         }
         return result
+    }
+
+    private fun isTailMatch(text: String, range: IntRange): Boolean {
+        val tail = text.substring(range.last + 1).trim()
+        return tail.isEmpty() || tail.all { it.isWhitespace() || it in ".!?)]}" }
     }
 
     private fun collapseRepetition(text: String): String {

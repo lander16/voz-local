@@ -7,10 +7,27 @@ import java.io.FileReader
 private const val LOG_TAG = "WhisperCpuConfig"
 
 object WhisperCpuConfig {
-    // Use high-perf cores but cap at 4 to prevent thermal throttling on mobile SoCs.
-    // More than 4 threads causes Tensor G3/Snapdragon to throttle, paradoxically slowing inference.
+    private const val THREAD_PROPERTY = "vozlocal.whisper.threads"
+
+    // Use high-perf cores by default but reserve CPU for audio/UI and cap to avoid
+    // mobile SoC oversubscription/thermal throttling. Tunable with
+    // -Dvozlocal.whisper.threads=N for tests or device-specific builds.
     val preferredThreadCount: Int by lazy {
-        CpuInfo.getHighPerfCpuCount().coerceIn(2, 4)
+        configuredThreadCount() ?: adaptiveThreadCount()
+    }
+
+    private fun configuredThreadCount(): Int? = System.getProperty(THREAD_PROPERTY)
+        ?.toIntOrNull()
+        ?.takeIf { it > 0 }
+        ?.coerceAtMost(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
+
+    private fun adaptiveThreadCount(): Int {
+        val available = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        val highPerf = CpuInfo.getHighPerfCpuCount().takeIf { it > 0 } ?: available
+        val reserved = if (available >= 8) 2 else 1
+        val usable = minOf(highPerf, (available - reserved).coerceAtLeast(1))
+        val cap = if (available >= 6) 4 else 2
+        return usable.coerceIn(1, cap)
     }
 }
 

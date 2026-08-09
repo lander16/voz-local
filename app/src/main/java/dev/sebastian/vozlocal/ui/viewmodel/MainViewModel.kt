@@ -108,14 +108,17 @@ class MainViewModel(
     val logprobThold = MutableStateFlow(repository.getLogprobThold())
     val entropyThold = MutableStateFlow(repository.getEntropyThold())
     val initialPrompt = MutableStateFlow(repository.getInitialPrompt() ?: "")
+    val useVad = MutableStateFlow(repository.getUseVad())
+    val spokenPunctuationCommands = MutableStateFlow(repository.getSpokenPunctuationCommands())
 
     // Silero VAD + model-loading state (updated by the app-start background work)
     val isVadModelReady: StateFlow<Boolean> = repository.isVadModelReady
     val vadModelPath: StateFlow<String?> = repository.vadModelPath
 
-    val isModelLoading: StateFlow<Boolean> = repository.modelLoaded
-        .map { loaded -> !loaded }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+    // The engine can load on demand when recording stops. Do not block dictation
+    // just because no model is preloaded yet; missing downloads are reported as
+    // actionable model-selection errors instead.
+    val isModelLoading: StateFlow<Boolean> = MutableStateFlow(false)
 
     companion object {
         // Supported whisper.cpp language codes for the selector
@@ -185,6 +188,16 @@ class MainViewModel(
         initialPrompt.value = value
     }
 
+    fun setUseVad(value: Boolean) {
+        repository.saveUseVad(value)
+        useVad.value = value
+    }
+
+    fun setSpokenPunctuationCommands(value: Boolean) {
+        repository.saveSpokenPunctuationCommands(value)
+        spokenPunctuationCommands.value = value
+    }
+
     fun setSaveHistory(value: Boolean) {
         repository.saveSaveHistory(value)
         saveHistory.value = value
@@ -205,6 +218,7 @@ class MainViewModel(
     }
 
     private var timerJob: Job? = null
+    private var ownsRecorderSession = false
 
     // Dictionary Operations
     fun addWord(word: String, replacement: String) {
@@ -284,9 +298,18 @@ class MainViewModel(
         }
 
         try {
-            audioRecorder.startRecording(viewModelScope) { amplitude ->
+            val started = audioRecorder.startRecording(viewModelScope) { amplitude ->
                 pushWaveform(amplitude)
             }
+            if (!started) {
+                timerJob?.cancel()
+                timerJob = null
+                _isRecording.value = false
+                _currentLiveTranscription.value = "Microphone is already in use."
+                _liveWaveform.value = emptyList()
+                return
+            }
+            ownsRecorderSession = true
         } catch (e: SecurityException) {
             timerJob?.cancel()
             timerJob = null
@@ -302,12 +325,18 @@ class MainViewModel(
         timerJob?.cancel()
         _isRecording.value = false
 
-        val samples = audioRecorder.stopRecording()
+        val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
+        ownsRecorderSession = false
         val finalDuration = _recordDurationSec.value
         val model = selectedModel.value
 
         if (model == null) {
             _currentLiveTranscription.value = "Please select a model in the Models tab."
+            return
+        }
+
+        if (!model.isDownloaded) {
+            _currentLiveTranscription.value = "Please download ${model.name} in the Models tab first."
             return
         }
 
@@ -403,6 +432,16 @@ class MainViewModel(
                 _sharedStatusText.value = status
             }
 
+            if (result.startsWith("Error:")) {
+                withContext(Dispatchers.Main) {
+                    _sharedProgress.value = 0f
+                    _sharedStatusText.value = result
+                    _sharedResultText.value = result
+                    _isSharedTranscribing.value = false
+                }
+                return@launch
+            }
+
             val processedResult = repository.postProcessText(
                 text = result,
                 smartPunctuation = smartPunctuation.value,
@@ -471,7 +510,10 @@ class MainViewModel(
     }
 
     override fun onCleared() {
+        if (ownsRecorderSession) {
+            audioRecorder.stopRecording()
+            ownsRecorderSession = false
+        }
         super.onCleared()
-        audioRecorder.release()
     }
 }

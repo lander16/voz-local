@@ -6,8 +6,9 @@ import dev.sebastian.vozlocal.BuildConfig
 import dev.sebastian.vozlocal.data.repository.ModelUrls
 import com.whispercpp.whisper.WhisperContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.io.File
 
 private const val TAG = "WhisperEngine"
 
@@ -30,33 +31,36 @@ internal fun effectivePrompt(language: String, initialPrompt: String?): String? 
 }
 
 class WhisperEngine(private val context: Context) {
+    private val lifecycleMutex = Mutex()
     private var whisperContext: WhisperContext? = null
     private var currentModelId: String? = null
 
     suspend fun loadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
-        if (currentModelId == modelId && whisperContext != null) {
-            return@withContext true
-        }
+        lifecycleMutex.withLock {
+            if (currentModelId == modelId && whisperContext != null) {
+                return@withLock true
+            }
 
-        release()
+            releaseLocked()
 
-        val modelFile = ModelUrls.getModelFile(context, modelId)
-        if (!modelFile.exists()) {
-            Log.e(TAG, "Model file does not exist: ${modelFile.absolutePath}")
-            return@withContext false
-        }
+            val modelFile = ModelUrls.getModelFile(context, modelId)
+            if (!modelFile.exists()) {
+                Log.e(TAG, "Model file does not exist: ${modelFile.absolutePath}")
+                return@withLock false
+            }
 
-        try {
-            Log.i(TAG, "Loading Whisper model from ${modelFile.absolutePath}")
-            whisperContext = WhisperContext.createContextFromFile(modelFile.absolutePath)
-            currentModelId = modelId
-            Log.i(TAG, "Whisper model $modelId loaded successfully!")
-            true
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load Whisper model $modelId", e)
-            whisperContext = null
-            currentModelId = null
-            false
+            try {
+                Log.i(TAG, "Loading Whisper model from ${modelFile.absolutePath}")
+                whisperContext = WhisperContext.createContextFromFile(modelFile.absolutePath)
+                currentModelId = modelId
+                Log.i(TAG, "Whisper model $modelId loaded successfully!")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load Whisper model $modelId", e)
+                whisperContext = null
+                currentModelId = null
+                false
+            }
         }
     }
 
@@ -65,40 +69,48 @@ class WhisperEngine(private val context: Context) {
         language: String = "es",
         params: WhisperParams = WhisperParams()
     ): String = withContext(Dispatchers.Default) {
-        val wContext = whisperContext
-        if (wContext == null) {
-            Log.e(TAG, "Whisper context not initialized!")
-            return@withContext ""
-        }
+        lifecycleMutex.withLock {
+            val wContext = whisperContext
+            if (wContext == null) {
+                Log.e(TAG, "Whisper context not initialized!")
+                return@withLock ""
+            }
 
-        if (audioSamples.size < 3200) { // < 200ms audio sample
-            return@withContext ""
-        }
+            if (audioSamples.size < 3200) { // < 200ms audio sample
+                return@withLock ""
+            }
 
-        try {
-            // Backward-compat resolution: an explicitly-passed positional language
-            // (legacy callers) wins; otherwise params.language is used.
-            val effectiveLanguage = if (language == "es") params.language else language
-            val effectiveParams = params.copy(
-                language = effectiveLanguage,
-                initialPrompt = effectivePrompt(effectiveLanguage, params.initialPrompt)
-            )
+            try {
+                // Backward-compat resolution: an explicitly-passed positional language
+                // (legacy callers) wins; otherwise params.language is used.
+                val effectiveLanguage = if (language == "es") params.language else language
+                val effectiveParams = params.copy(
+                    language = effectiveLanguage,
+                    initialPrompt = effectivePrompt(effectiveLanguage, params.initialPrompt)
+                )
 
-            val startMs = System.currentTimeMillis()
-            val durationSec = audioSamples.size / 16000f
-            Log.d(TAG, "Running transcription: ${audioSamples.size} samples (${String.format("%.1f", durationSec)}s audio), lang=$effectiveLanguage")
-            val result = wContext.transcribeData(audioSamples, effectiveParams)
-            val elapsedMs = System.currentTimeMillis() - startMs
-            Log.i(TAG, "Transcription completed in ${elapsedMs}ms (${String.format("%.1fx", durationSec * 1000 / elapsedMs)} realtime)")
-            if (BuildConfig.DEBUG) Log.d(TAG, "Raw transcription output: $result")
-            HallucinationFilter.filter(result).trim()
-        } catch (e: Exception) {
-            Log.e(TAG, "Error transcribing audio samples", e)
-            ""
+                val startMs = System.currentTimeMillis()
+                val durationSec = audioSamples.size / 16000f
+                Log.d(TAG, "Running transcription: ${audioSamples.size} samples (${String.format("%.1f", durationSec)}s audio), lang=$effectiveLanguage")
+                val result = wContext.transcribeData(audioSamples, effectiveParams)
+                val elapsedMs = System.currentTimeMillis() - startMs
+                Log.i(TAG, "Transcription completed in ${elapsedMs}ms (${String.format("%.1fx", durationSec * 1000 / elapsedMs)} realtime)")
+                if (BuildConfig.DEBUG) Log.d(TAG, "Raw transcription output: $result")
+                HallucinationFilter.filter(result).trim()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error transcribing audio samples", e)
+                ""
+            }
         }
     }
 
     suspend fun release() = withContext(Dispatchers.IO) {
+        lifecycleMutex.withLock {
+            releaseLocked()
+        }
+    }
+
+    private suspend fun releaseLocked() {
         try {
             whisperContext?.release()
         } catch (e: Exception) {

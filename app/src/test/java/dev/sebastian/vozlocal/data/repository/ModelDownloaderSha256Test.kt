@@ -29,13 +29,13 @@ class ModelDownloaderSha256Test {
     }
 
     @Test
-    fun placeholderHash_skipsCheck() {
+    fun unknownHash_isExplicitlyUnverifiedButAccepted() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = ModelUrls.getModelFile(context, "whisper_tiny")
         file.writeBytes(byteArrayOf(1, 2, 3, 4))
         try {
-            assertTrue(ModelDownloader(context).verifySha256(file, "placeholder-whisper_tiny"))
-            // Placeholder must NOT delete the just-downloaded file.
+            assertTrue(ModelDownloader(context).verifySha256(file, null))
+            // Unknown SHA must NOT delete a file that passed transport/size checks.
             assertTrue(file.exists())
         } finally {
             file.delete()

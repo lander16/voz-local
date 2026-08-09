@@ -14,7 +14,7 @@ import dev.sebastian.vozlocal.data.model.DictationStat
 @Database(
     entities = [DictationModel::class, TranscriptionHistory::class, DictionaryWord::class, DictationStat::class],
     version = 2,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun modelDao(): ModelDao
@@ -38,7 +38,6 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "vozlocal_database"
                 )
-                .fallbackToDestructiveMigration(dropAllTables = true)
                 .addMigrations(MIGRATION_1_2)
                 .build()
                 INSTANCE = instance

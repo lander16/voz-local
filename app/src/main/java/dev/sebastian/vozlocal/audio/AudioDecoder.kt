@@ -1,11 +1,13 @@
 package dev.sebastian.vozlocal.audio
 
 import android.content.Context
+import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
 import android.util.Log
+import java.nio.ByteBuffer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteOrder
@@ -71,54 +73,75 @@ class AudioDecoder(private val context: Context) {
         codec.configure(format, null, null, 0)
         codec.start()
 
-        val sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else TARGET_SAMPLE_RATE
-        val channelCount = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 1
+        var sampleRate = if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) format.getInteger(MediaFormat.KEY_SAMPLE_RATE) else TARGET_SAMPLE_RATE
+        var channelCount = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) format.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else 1
+        var pcmEncoding = if (format.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
+            format.getInteger(MediaFormat.KEY_PCM_ENCODING)
+        } else {
+            AudioFormat.ENCODING_PCM_16BIT
+        }
         val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 1L
 
         val pcmSampleList = PrimitiveFloatList()
         val info = MediaCodec.BufferInfo()
-        var isEOS = false
+        var inputDone = false
+        var outputDone = false
 
-        while (!isEOS) {
-            val inIndex = codec.dequeueInputBuffer(10000)
-            if (inIndex >= 0) {
-                val inputBuffer = codec.getInputBuffer(inIndex)
-                if (inputBuffer != null) {
-                    val sampleSize = extractor.readSampleData(inputBuffer, 0)
-                    if (sampleSize < 0) {
-                        codec.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-                        isEOS = true
-                    } else {
-                        val presentationTimeUs = extractor.sampleTime
-                        codec.queueInputBuffer(inIndex, 0, sampleSize, presentationTimeUs, 0)
-                        extractor.advance()
+        while (!outputDone) {
+            if (!inputDone) {
+                val inIndex = codec.dequeueInputBuffer(10000)
+                if (inIndex >= 0) {
+                    val inputBuffer = codec.getInputBuffer(inIndex)
+                    if (inputBuffer != null) {
+                        val sampleSize = extractor.readSampleData(inputBuffer, 0)
+                        if (sampleSize < 0) {
+                            codec.queueInputBuffer(inIndex, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            val presentationTimeUs = extractor.sampleTime
+                            codec.queueInputBuffer(inIndex, 0, sampleSize, presentationTimeUs, 0)
+                            extractor.advance()
 
-                        if (durationUs > 0) {
-                            val prog = (presentationTimeUs.toFloat() / durationUs.toFloat()).coerceIn(0f, 1f)
-                            onProgress?.invoke(prog * 0.5f) // first 50% is decoding
+                            if (durationUs > 0) {
+                                val prog = (presentationTimeUs.toFloat() / durationUs.toFloat()).coerceIn(0f, 1f)
+                                onProgress?.invoke(prog * 0.5f) // first 50% is decoding
+                            }
                         }
                     }
                 }
             }
 
             var outIndex = codec.dequeueOutputBuffer(info, 10000)
-            while (outIndex >= 0) {
-                val outputBuffer = codec.getOutputBuffer(outIndex)
-                if (outputBuffer != null && info.size > 0) {
-                    outputBuffer.position(info.offset)
-                    outputBuffer.limit(info.offset + info.size)
-
-                    val shortBuf = outputBuffer.order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-                    val numSamples = shortBuf.remaining()
-
-                    for (i in 0 until numSamples step channelCount) {
-                        val sample = shortBuf.get(i)
-                        pcmSampleList.add(sample.toFloat() / 32768.0f)
+            while (outIndex != MediaCodec.INFO_TRY_AGAIN_LATER) {
+                when (outIndex) {
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        val outputFormat = codec.outputFormat
+                        if (outputFormat.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                            sampleRate = outputFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+                        }
+                        if (outputFormat.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                            channelCount = outputFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT).coerceAtLeast(1)
+                        }
+                        pcmEncoding = if (outputFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
+                            outputFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
+                        } else {
+                            AudioFormat.ENCODING_PCM_16BIT
+                        }
                     }
-                }
-                codec.releaseOutputBuffer(outIndex, false)
-                if ((info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
-                    break
+                    MediaCodec.INFO_OUTPUT_BUFFERS_CHANGED -> Unit
+                    else -> if (outIndex >= 0) {
+                        val outputBuffer = codec.getOutputBuffer(outIndex)
+                        if (outputBuffer != null && info.size > 0) {
+                            outputBuffer.position(info.offset)
+                            outputBuffer.limit(info.offset + info.size)
+                            appendPcmAsMono(outputBuffer.slice(), pcmEncoding, channelCount, pcmSampleList)
+                        }
+                        codec.releaseOutputBuffer(outIndex, false)
+                        if ((info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                            outputDone = true
+                            break
+                        }
+                    }
                 }
                 outIndex = codec.dequeueOutputBuffer(info, 0)
             }
@@ -140,16 +163,92 @@ class AudioDecoder(private val context: Context) {
         return@withContext finalSamples
     }
 
-    // NOTE: Linear interpolation aliases when downsampling — there is no
-    // anti-aliasing low-pass filter before decimation. For speech this is
-    // acceptable in practice (Whisper is robust to mild aliasing), but a
-    // future pass should replace this with a windowed-sinc kernel (e.g.
-    // Kaiser-windowed resampler) for best fidelity on 44.1/48kHz sources.
+    private fun appendPcmAsMono(buffer: ByteBuffer, encoding: Int, channelCount: Int, output: PrimitiveFloatList) {
+        buffer.order(ByteOrder.LITTLE_ENDIAN)
+        val channels = channelCount.coerceAtLeast(1)
+        when (encoding) {
+            AudioFormat.ENCODING_PCM_16BIT -> {
+                val samples = buffer.asShortBuffer()
+                val frames = samples.remaining() / channels
+                for (frame in 0 until frames) {
+                    var sum = 0f
+                    val base = frame * channels
+                    for (channel in 0 until channels) sum += samples.get(base + channel) / 32768f
+                    output.add(sum / channels)
+                }
+            }
+            AudioFormat.ENCODING_PCM_FLOAT -> {
+                val samples = buffer.asFloatBuffer()
+                val frames = samples.remaining() / channels
+                for (frame in 0 until frames) {
+                    var sum = 0f
+                    val base = frame * channels
+                    for (channel in 0 until channels) sum += samples.get(base + channel).coerceIn(-1f, 1f)
+                    output.add(sum / channels)
+                }
+            }
+            AudioFormat.ENCODING_PCM_8BIT -> {
+                val frames = buffer.remaining() / channels
+                for (frame in 0 until frames) {
+                    var sum = 0f
+                    for (channel in 0 until channels) sum += ((buffer.get(frame * channels + channel).toInt() and 0xff) - 128) / 128f
+                    output.add(sum / channels)
+                }
+            }
+            AudioFormat.ENCODING_PCM_24BIT_PACKED -> {
+                val bytesPerFrame = channels * 3
+                val frames = buffer.remaining() / bytesPerFrame
+                for (frame in 0 until frames) {
+                    var sum = 0f
+                    for (channel in 0 until channels) {
+                        val offset = frame * bytesPerFrame + channel * 3
+                        val raw = (buffer.get(offset).toInt() and 0xff) or
+                            ((buffer.get(offset + 1).toInt() and 0xff) shl 8) or
+                            (buffer.get(offset + 2).toInt() shl 16)
+                        sum += raw / 8388608f
+                    }
+                    output.add(sum / channels)
+                }
+            }
+            AudioFormat.ENCODING_PCM_32BIT -> {
+                val samples = buffer.asIntBuffer()
+                val frames = samples.remaining() / channels
+                for (frame in 0 until frames) {
+                    var sum = 0f
+                    val base = frame * channels
+                    for (channel in 0 until channels) sum += samples.get(base + channel) / 2147483648f
+                    output.add(sum / channels)
+                }
+            }
+            else -> Log.w(TAG, "Unsupported PCM encoding from decoder: $encoding")
+        }
+    }
+
     private fun resampleLinear(input: FloatArray, srcRate: Int): FloatArray {
         if (input.isEmpty()) return FloatArray(0)
         val ratio = srcRate.toDouble() / TARGET_SAMPLE_RATE.toDouble()
         val outputLen = (input.size / ratio).toInt()
         val output = FloatArray(outputLen)
+
+        if (srcRate > TARGET_SAMPLE_RATE) {
+            for (i in 0 until outputLen) {
+                val start = i * ratio
+                val end = ((i + 1) * ratio).coerceAtMost(input.size.toDouble())
+                val startIndex = start.toInt()
+                val endIndex = kotlin.math.ceil(end).toInt().coerceAtMost(input.size)
+                var sum = 0.0
+                var weight = 0.0
+                for (index in startIndex until endIndex) {
+                    val segmentStart = maxOf(start, index.toDouble())
+                    val segmentEnd = minOf(end, (index + 1).toDouble())
+                    val segmentWeight = (segmentEnd - segmentStart).coerceAtLeast(0.0)
+                    sum += input[index] * segmentWeight
+                    weight += segmentWeight
+                }
+                output[i] = if (weight > 0.0) (sum / weight).toFloat() else input[startIndex.coerceAtMost(input.size - 1)]
+            }
+            return output
+        }
 
         for (i in 0 until outputLen) {
             val srcPos = i * ratio

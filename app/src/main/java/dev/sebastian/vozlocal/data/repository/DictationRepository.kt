@@ -54,7 +54,7 @@ class DictationRepository(private val context: Context) {
     private val _vadModelPath = MutableStateFlow<String?>(null)
     val vadModelPath: StateFlow<String?> = _vadModelPath.asStateFlow()
 
-    // True once a model has been preloaded (or the preload attempt finished).
+    // True only while a Whisper model is actually loaded in the native engine.
     private val _modelLoaded = MutableStateFlow(false)
     val modelLoaded: StateFlow<Boolean> = _modelLoaded.asStateFlow()
 
@@ -181,8 +181,21 @@ class DictationRepository(private val context: Context) {
         prefs.edit { putString("initial_prompt", value?.ifBlank { null }) }
     }
 
+    fun getUseVad(): Boolean = prefs.getBoolean("use_vad", true)
+
+    fun saveUseVad(value: Boolean) {
+        prefs.edit { putBoolean("use_vad", value) }
+    }
+
+    fun getSpokenPunctuationCommands(): Boolean = prefs.getBoolean("spoken_punctuation_commands", false)
+
+    fun saveSpokenPunctuationCommands(value: Boolean) {
+        prefs.edit { putBoolean("spoken_punctuation_commands", value) }
+    }
+
     suspend fun shutdown() {
         whisperEngine.release()
+        _modelLoaded.value = false
     }
 
     fun setModelLoaded(value: Boolean) {
@@ -208,15 +221,14 @@ class DictationRepository(private val context: Context) {
      */
     suspend fun preloadModel() = withContext(Dispatchers.IO) {
         try {
-            val selected = allModels
-                .map { list -> list.find { it.isSelected } ?: list.firstOrNull() }
-                .first { it != null }
-            val ok = selected != null && whisperEngine.loadModel(selected.id)
-            Log.i(TAG, "Preload of model '${selected?.id}' -> loaded=$ok")
-            _modelLoaded.value = true
+            val models = allModels.first { it.isNotEmpty() }
+            val selectedDownloaded = models.find { it.isSelected && it.isDownloaded }
+            val ok = selectedDownloaded?.let { whisperEngine.loadModel(it.id) } == true
+            Log.i(TAG, "Preload of selected downloaded model '${selectedDownloaded?.id}' -> loaded=$ok")
+            _modelLoaded.value = ok
         } catch (e: Exception) {
             Log.e(TAG, "Error preloading model", e)
-            _modelLoaded.value = true
+            _modelLoaded.value = false
         }
     }
 
@@ -240,10 +252,8 @@ class DictationRepository(private val context: Context) {
             _vadModelReady.value = true
         }
 
-        // Backward-compat: kick off the seed work on the repository's own IO scope
-        // for callers that don't manage their own scope. The application also calls
-        // initializeModels() from its own long-lived scope.
-        CoroutineScope(Dispatchers.IO).launch { initializeModels() }
+        // Model seeding/sync is owned by VozLocalApp.applicationScope so startup
+        // does not duplicate database work from both the repository and app.
     }
 
     /**
@@ -373,13 +383,9 @@ class DictationRepository(private val context: Context) {
                 onProgress(0.01f)
 
                 val success = modelDownloader.downloadModel(modelId) { progress ->
-                    // Route the tick to the caller (e.g. the ViewModel's
-                    // in-memory _downloadProgressMap) BEFORE writing Room,
-                    // so the progress bar updates within the same frame
-                    // instead of waiting for the Flow re-emission.
+                    // Keep frequent progress in memory only; Room is updated at
+                    // start and on final success/failure to avoid write storms.
                     onProgress(progress)
-                    model = model.copy(isDownloading = true, downloadProgress = progress)
-                    modelDao.updateModel(model)
                 }
 
                 if (success) {
@@ -435,9 +441,10 @@ class DictationRepository(private val context: Context) {
 
         // Ensure Whisper engine is loaded with target model
         val loaded = whisperEngine.loadModel(modelId)
+        _modelLoaded.value = loaded
         if (!loaded) {
             Log.e(TAG, "Could not load Whisper model $modelId for transcription")
-            return@withContext "Model not downloaded. Please download $modelId in the Models tab first."
+            return@withContext ""
         }
 
         whisperEngine.transcribe(
@@ -463,6 +470,7 @@ class DictationRepository(private val context: Context) {
 
         onProgress(0.55f, "Loading local Whisper model...")
         val loaded = whisperEngine.loadModel(modelId)
+        _modelLoaded.value = loaded
         if (!loaded) {
             return@withContext "Error: Local Whisper model $modelId is not downloaded yet. Please download it first."
         }
@@ -493,7 +501,7 @@ class DictationRepository(private val context: Context) {
             noSpeechThold = getNoSpeechThold(),
             logprobThold = getLogprobThold(),
             entropyThold = getEntropyThold(),
-            vadModelPath = _vadModelPath.value
+            vadModelPath = _vadModelPath.value.takeIf { getUseVad() }
         )
     }
 
@@ -585,26 +593,12 @@ class DictationRepository(private val context: Context) {
             }
         }
 
-        // 3. Smart Punctuation & Spoken Commands (Verbalized punctuation & Pause formatting)
+        // 3. Smart Punctuation. Spoken punctuation commands are opt-in because
+        // blanket word replacement can corrupt intended words (e.g. "coma").
         if (smartPunctuation) {
-            // Verbalized Punctuation - Spanish
-            result = result.replace(REGEX_ES_PUNTO, ".")
-            result = result.replace(REGEX_ES_COMA, ",")
-            result = result.replace(REGEX_ES_DOS_PUNTOS, ":")
-            result = result.replace(REGEX_ES_INTERROGACION, "?")
-            result = result.replace(REGEX_ES_EXCLAMACION, "!")
-            result = result.replace(REGEX_ES_NUEVA_LINEA, "\n")
-            result = result.replace(REGEX_ES_NUEVO_PARRAFO, "\n\n")
-
-            // Verbalized Punctuation - English
-            result = result.replace(REGEX_EN_PERIOD, ".")
-            result = result.replace(REGEX_EN_FULL_STOP, ".")
-            result = result.replace(REGEX_EN_COMMA, ",")
-            result = result.replace(REGEX_EN_COLON, ":")
-            result = result.replace(REGEX_EN_QUESTION_MARK, "?")
-            result = result.replace(REGEX_EN_EXCLAMATION_MARK, "!")
-            result = result.replace(REGEX_EN_NEW_LINE, "\n")
-            result = result.replace(REGEX_EN_NEW_PARAGRAPH, "\n\n")
+            if (getSpokenPunctuationCommands()) {
+                result = applySpokenPunctuationCommands(result)
+            }
 
             // Clean spaces BEFORE punctuation: "hola ," -> "hola,"
             result = result.replace(REGEX_SPACES_BEFORE_PUNCT, "$1")
@@ -660,6 +654,14 @@ class DictationRepository(private val context: Context) {
         result
     }
 
+    private fun applySpokenPunctuationCommands(text: String): String {
+        var result = text
+        for ((regex, replacement) in SPOKEN_PUNCTUATION_COMMANDS) {
+            result = result.replace(regex, replacement)
+        }
+        return result
+    }
+
     companion object {
         private val REGEX_SPACES = Regex("\\s+")
         private val REGEX_ES_PUNTO = Regex("(?i)\\bpunto\\b")
@@ -690,5 +692,22 @@ class DictationRepository(private val context: Context) {
         private val REGEX_EN_QUESTION_START = Regex("(?i)^\\s*(what|why|where|when|who|whom|whose|which|how|is|are|was|were|do|does|did|can|could|would|should|will|shall|have|has|had|am|isnt|arent|wasnt|werent|dont|doesnt|didnt|cant|couldnt|wouldnt|shouldnt|wont)\\s+(you|i|we|it|he|she|they|this|that|there)\\b")
         private val REGEX_EN_QUESTION_END = Regex("(?i)\\b(right|correct|is\\s+it|don't\\s+you|don't\\s+you\\s+think)\\s*[.]?$")
         private val REGEX_AUTO_CAPITALIZE = Regex("([.!?¿\\n]\\s*)([a-zñáéíóú])")
+        private val SPOKEN_PUNCTUATION_COMMANDS = listOf(
+            REGEX_ES_DOS_PUNTOS to ":",
+            REGEX_ES_INTERROGACION to "?",
+            REGEX_ES_EXCLAMACION to "!",
+            REGEX_ES_NUEVO_PARRAFO to "\n\n",
+            REGEX_ES_NUEVA_LINEA to "\n",
+            REGEX_ES_PUNTO to ".",
+            REGEX_ES_COMA to ",",
+            REGEX_EN_QUESTION_MARK to "?",
+            REGEX_EN_EXCLAMATION_MARK to "!",
+            REGEX_EN_NEW_PARAGRAPH to "\n\n",
+            REGEX_EN_NEW_LINE to "\n",
+            REGEX_EN_FULL_STOP to ".",
+            REGEX_EN_PERIOD to ".",
+            REGEX_EN_COMMA to ",",
+            REGEX_EN_COLON to ":",
+        )
     }
 }

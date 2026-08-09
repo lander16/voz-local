@@ -84,6 +84,10 @@ secrets {
   defaultPropertiesFileName = ".env.example"
 }
 
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 // googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN } // unused: no Firebase SDK
 
 // Some unused dependencies are commented out below instead of being removed.

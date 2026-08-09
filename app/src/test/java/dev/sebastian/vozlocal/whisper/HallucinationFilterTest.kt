@@ -12,22 +12,27 @@ class HallucinationFilterTest {
 
     @Test
     fun filter_strips_gracias_por_ver() {
-        assertEquals("Hola mundo. Adios.", HallucinationFilter.filter("Hola mundo. Gracias por ver. Adios."))
+        assertEquals("Hola mundo.", HallucinationFilter.filter("Hola mundo. Gracias por ver."))
     }
 
     @Test
     fun filter_strips_suscribete() {
-        assertEquals("al canal.", HallucinationFilter.filter("Suscríbete al canal."))
+        assertEquals("Hola.", HallucinationFilter.filter("Hola. Suscríbete."))
     }
 
     @Test
     fun filter_strips_thanks_for_watching() {
-        assertEquals("Welcome back. Bye.", HallucinationFilter.filter("Welcome back. Thanks for watching. Bye."))
+        assertEquals("Welcome back.", HallucinationFilter.filter("Welcome back. Thanks for watching."))
     }
 
     @Test
     fun filter_strips_music_brackets() {
-        assertEquals("Hello world.", HallucinationFilter.filter("Hello [Music] world."))
+        assertEquals("Hello world.", HallucinationFilter.filter("Hello world. [Music]"))
+    }
+
+    @Test
+    fun filter_preserves_non_tail_phrases() {
+        assertEquals("Welcome back. Thanks for watching. Bye.", HallucinationFilter.filter("Welcome back. Thanks for watching. Bye."))
     }
 
     @Test
