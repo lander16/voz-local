@@ -1,8 +1,8 @@
 package dev.sebastian.vozlocal.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -22,6 +22,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sebastian.vozlocal.data.model.DictationModel
+import dev.sebastian.vozlocal.ui.formatDownloadProgress
+import dev.sebastian.vozlocal.ui.formatEta
+import dev.sebastian.vozlocal.ui.modelRecommendationLabel
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 
@@ -81,6 +84,24 @@ fun ModelCard(
     onRedownload: () -> Unit
 ) {
     val downloadProgress by viewModel.downloadProgressFor(model.id).collectAsStateWithLifecycle()
+    val downloadStatus by viewModel.downloadStatusFor(model.id).collectAsStateWithLifecycle()
+    var confirmDelete by remember(model.id) { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete model?") },
+            text = { Text("This removes the downloaded weights from local storage.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete()
+                    confirmDelete = false
+                }) { Text("Delete", color = TertiaryColor) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+        )
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -143,6 +164,16 @@ fun ModelCard(
                 }
             }
 
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ModelMetaChip(text = modelRecommendationLabel(model.id), active = true, accent = PrimaryColor)
+                ModelMetaChip(text = "${model.sizeMb.toInt()} MB", active = false)
+                ModelMetaChip(
+                    text = downloadStatus?.verificationLabel ?: "Unverified",
+                    active = downloadStatus?.verificationLabel == "Verified",
+                    accent = if (downloadStatus?.verificationLabel == "Verified") Color(0xFF10B981) else TextMuted
+                )
+            }
+
             // Accuracy and Speed Ratings Layout
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -198,18 +229,21 @@ fun ModelCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Downloading model weights...",
+                            text = downloadStatus?.statusLabel ?: "Downloading model weights...",
                             fontSize = 11.sp,
                             color = PrimaryColor,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Text(
-                            text = "${(downloadProgress * 100).toInt()}%",
-                            fontSize = 11.sp,
-                            color = PrimaryColor,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(text = "${(downloadProgress * 100).toInt()}%", fontSize = 11.sp, color = PrimaryColor, fontWeight = FontWeight.Bold)
+                            Text(text = formatEta(downloadStatus?.etaSeconds) ?: "Sizing…", fontSize = 11.sp, color = TextSecondary)
+                        }
                     }
+                    Text(
+                        text = downloadStatus?.let { formatDownloadProgress(it.downloadedMb, it.totalMb) } ?: "0 MB / ${model.sizeMb.toInt()} MB",
+                        fontSize = 11.sp,
+                        color = TextSecondary
+                    )
                     LinearProgressIndicator(
                         progress = { downloadProgress },
                         modifier = Modifier
@@ -232,7 +266,7 @@ fun ModelCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
-                                onClick = onDelete,
+                                onClick = { confirmDelete = true },
                                 modifier = Modifier.heightIn(min = 48.dp)
                             ) {
                                 Icon(
@@ -303,5 +337,18 @@ fun ModelCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ModelMetaChip(text: String, active: Boolean, accent: Color = TextSecondary) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(if (active) accent.copy(alpha = 0.15f) else SurfaceCard)
+            .border(BorderStroke(1.dp, if (active) accent.copy(alpha = 0.35f) else GlassBorder), RoundedCornerShape(100.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(text = text, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) accent else TextSecondary)
     }
 }

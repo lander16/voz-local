@@ -1,5 +1,6 @@
 package dev.sebastian.vozlocal.ui.screens
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -21,17 +22,50 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
+import dev.sebastian.vozlocal.ui.historyDateGroupLabel
+import dev.sebastian.vozlocal.ui.formatShortDateTime
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 @Composable
-fun HistoryTab(viewModel: MainViewModel) {
+fun HistoryTab(
+    viewModel: MainViewModel,
+    onReuse: (String) -> Unit = {}
+) {
     val history by viewModel.transcriptionHistory.collectAsStateWithLifecycle()
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
+    var query by remember { mutableStateOf("") }
+    var confirmClear by remember { mutableStateOf(false) }
+
+    val filteredHistory = remember(history, query) {
+        val q = query.trim().lowercase()
+        history.filter { item ->
+            q.isBlank() ||
+                item.text.lowercase().contains(q) ||
+                item.modelUsed.lowercase().contains(q) ||
+                (item.fileName?.lowercase()?.contains(q) == true)
+        }
+    }
+
+    val groupedHistory = remember(filteredHistory) {
+        filteredHistory.groupBy { historyDateGroupLabel(it.timestamp) }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("Clear all history?") },
+            text = { Text("This removes every saved transcript from local storage.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.clearHistory()
+                    confirmClear = false
+                }) { Text("Clear", color = TertiaryColor) }
+            },
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } }
+        )
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -42,61 +76,60 @@ fun HistoryTab(viewModel: MainViewModel) {
     ) {
         item {
             Spacer(modifier = Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Transcription history",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Review and copy offline dictations and transcribed shared files.",
-                        fontSize = 13.sp,
-                        color = TextSecondary
-                    )
-                }
-
-                if (history.isNotEmpty()) {
-                    TextButton(
-                        onClick = { viewModel.clearHistory() },
-                        colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor),
-                        modifier = Modifier.pressScale()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Clear History", fontWeight = FontWeight.Bold)
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Transcription history", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                        Text(text = "Search, copy, share, or reuse saved dictations.", fontSize = 13.sp, color = TextSecondary)
+                    }
+                    if (history.isNotEmpty()) {
+                        TextButton(
+                            onClick = { confirmClear = true },
+                            colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor),
+                            modifier = Modifier.pressScale()
+                        ) {
+                            Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "Clear", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
+
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null) },
+                    placeholder = { Text("Search text, file, or model") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryColor,
+                        unfocusedBorderColor = GlassBorder,
+                        focusedLeadingIconColor = PrimaryColor,
+                        unfocusedLeadingIconColor = TextSecondary,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
         }
 
-        if (history.isEmpty()) {
+        if (filteredHistory.isEmpty()) {
             item {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 80.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 80.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(
-                            imageVector = Icons.Default.HistoryToggleOff,
+                            imageVector = if (query.isBlank()) Icons.Default.HistoryToggleOff else Icons.Default.Search,
                             contentDescription = null,
                             tint = TextSecondary.copy(alpha = 0.3f),
                             modifier = Modifier.size(56.dp)
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = "No transcript history available.",
+                            text = if (query.isBlank()) "No transcript history yet." else "No results for \"$query\".",
                             fontSize = 14.sp,
                             color = TextSecondary
                         )
@@ -104,15 +137,26 @@ fun HistoryTab(viewModel: MainViewModel) {
                 }
             }
         } else {
-            items(history, key = { it.id }) { item ->
-                HistoryCard(
-                    item = item,
-                    onCopy = {
-                        clipboardManager.setText(AnnotatedString(item.text))
-                        Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
-                    },
-                    onDelete = { viewModel.deleteHistoryItem(item.id) }
-                )
+            groupedHistory.forEach { (groupLabel, groupItems) ->
+                item {
+                    Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = groupLabel, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor, letterSpacing = 1.sp)
+                        Text(text = "${groupItems.size} item${if (groupItems.size == 1) "" else "s"}", fontSize = 11.sp, color = TextMuted)
+                    }
+                }
+
+                items(groupItems, key = { it.id }) { item ->
+                    HistoryCard(
+                        item = item,
+                        onCopy = {
+                            clipboardManager.setText(AnnotatedString(item.text))
+                            Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                        },
+                        onShare = { shareTranscription(context, item) },
+                        onReuse = { onReuse(item.text) },
+                        onDelete = { viewModel.deleteHistoryItem(item.id) }
+                    )
+                }
             }
         }
 
@@ -124,30 +168,36 @@ fun HistoryTab(viewModel: MainViewModel) {
 fun HistoryCard(
     item: TranscriptionHistory,
     onCopy: () -> Unit,
+    onShare: () -> Unit,
+    onReuse: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val formatter = remember { SimpleDateFormat("MMM dd, yyyy - HH:mm", Locale.getDefault()) }
-    val dateStr = formatter.format(Date(item.timestamp))
+    val dateStr = remember(item.timestamp) { formatShortDateTime(item.timestamp) }
+    var confirmDelete by remember(item.id) { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete transcript?") },
+            text = { Text("This transcript will be removed from local history.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete()
+                    confirmDelete = false
+                }) { Text("Delete", color = TertiaryColor) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+        )
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            // Header: Icon, Type, Metadata
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(
                         imageVector = if (item.type == "shared_file") Icons.Default.AudioFile else Icons.Default.KeyboardVoice,
                         contentDescription = null,
@@ -162,12 +212,7 @@ fun HistoryCard(
                         letterSpacing = 1.sp
                     )
                 }
-
-                Text(
-                    text = dateStr,
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
+                Text(text = dateStr, fontSize = 11.sp, color = TextSecondary)
             }
 
             if (!item.fileName.isNullOrEmpty()) {
@@ -181,70 +226,42 @@ fun HistoryCard(
                 )
             }
 
-            // Transcribed Text Block
-            Text(
-                text = item.text,
-                fontSize = 14.sp,
-                color = TextPrimary,
-                lineHeight = 20.sp
-            )
+            Text(text = item.text, fontSize = 14.sp, color = TextPrimary, lineHeight = 20.sp)
 
-            // Bottom bar: model info, duration, actions
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    // model label
-                    Box(
-                        modifier = Modifier
-                            .background(SurfaceLightDark, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = item.modelUsed,
-                            fontSize = 11.sp,
-                            color = TextSecondary,
-                            fontWeight = FontWeight.Bold
-                        )
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(modifier = Modifier.background(SurfaceLightDark, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        Text(text = item.modelUsed, fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
                     }
-
-                    // duration
                     if (item.durationSec > 0) {
-                        Text(
-                            text = "${item.durationSec}s duration",
-                            fontSize = 11.sp,
-                            color = TextSecondary
-                        )
+                        Text(text = "${item.durationSec}s", fontSize = 11.sp, color = TextSecondary)
                     }
                 }
 
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    IconButton(onClick = onDelete) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Delete history log",
-                            tint = TextSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(onClick = onReuse) {
+                        Icon(imageVector = Icons.Default.Replay, contentDescription = "Reuse transcript", tint = PrimaryColor, modifier = Modifier.size(20.dp))
                     }
-
+                    IconButton(onClick = onShare) {
+                        Icon(imageVector = Icons.Default.Share, contentDescription = "Share transcript", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                    }
                     IconButton(onClick = onCopy) {
-                        Icon(
-                            imageVector = Icons.Default.ContentCopy,
-                            contentDescription = "Copy transcription text",
-                            tint = PrimaryColor,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy transcription text", tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                    }
+                    IconButton(onClick = { confirmDelete = true }) {
+                        Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = "Delete history log", tint = TextSecondary, modifier = Modifier.size(20.dp))
                     }
                 }
             }
         }
     }
+}
+
+private fun shareTranscription(context: android.content.Context, item: TranscriptionHistory) {
+    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, item.fileName ?: "VozLocal transcription")
+        putExtra(Intent.EXTRA_TEXT, item.text)
+    }
+    context.startActivity(Intent.createChooser(shareIntent, "Share transcript"))
 }

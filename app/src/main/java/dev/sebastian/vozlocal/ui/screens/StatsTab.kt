@@ -30,6 +30,7 @@ import java.util.Locale
 @Composable
 fun StatsTab(viewModel: MainViewModel) {
     val stats by viewModel.dictationStats.collectAsStateWithLifecycle()
+    var confirmReset by remember { mutableStateOf(false) }
 
     // Base calculations — remembered so they don't recompute on every recomposition
     val totalWords by remember(stats) { derivedStateOf { stats.sumOf { it.wordCount } } }
@@ -360,7 +361,7 @@ fun StatsTab(viewModel: MainViewModel) {
         if (stats.isNotEmpty()) {
             item {
                 TextButton(
-                    onClick = { viewModel.clearStats() },
+                    onClick = { confirmReset = true },
                     colors = ButtonDefaults.textButtonColors(contentColor = TertiaryColor),
                     modifier = Modifier.pressScale()
                 ) {
@@ -372,6 +373,23 @@ fun StatsTab(viewModel: MainViewModel) {
                         Text(text = "Reset Statistics", fontWeight = FontWeight.Bold)
                     }
                 }
+            }
+        }
+
+        if (confirmReset) {
+            item {
+                AlertDialog(
+                    onDismissRequest = { confirmReset = false },
+                    title = { Text("Reset statistics?") },
+                    text = { Text("This clears all stored performance stats from the device.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.clearStats()
+                            confirmReset = false
+                        }) { Text("Reset", color = TertiaryColor) }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel") } }
+                )
             }
         }
 

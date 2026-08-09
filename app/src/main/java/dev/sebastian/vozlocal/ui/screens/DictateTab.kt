@@ -328,6 +328,15 @@ fun DictateTab(
                         }
 
                         // Output Text
+                        if (liveText.isNotBlank() && !isRecording) {
+                            Text(
+                                text = "Loaded draft from history",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = SecondaryColor,
+                                letterSpacing = 1.sp
+                            )
+                        }
                         Text(
                             text = liveText.ifEmpty { "Listening..." },
                             fontSize = 15.sp,

@@ -17,10 +17,21 @@ import kotlinx.coroutines.flow.*
 import java.util.ArrayList
 import java.util.Locale
 import kotlin.math.log10
+import kotlin.math.roundToInt
 import kotlin.math.pow
 import kotlin.time.Duration.Companion.seconds
+import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "MainViewModel"
+
+data class ModelDownloadUiState(
+    val progress: Float = 0f,
+    val downloadedMb: Float = 0f,
+    val totalMb: Float = 0f,
+    val etaSeconds: Int? = null,
+    val verificationLabel: String = "Unverified",
+    val statusLabel: String = "Preparing"
+)
 
 class MainViewModel(
     private val repository: DictationRepository,
@@ -86,11 +97,18 @@ class MainViewModel(
 
     // In-memory map of per-model download progress, exposed to the UI via downloadProgressFor().
     private val _downloadProgressMap = MutableStateFlow<Map<String, Float>>(emptyMap())
+    private val _downloadUiStateMap = MutableStateFlow<Map<String, ModelDownloadUiState>>(emptyMap())
+    private val downloadStartedAtMs = ConcurrentHashMap<String, Long>()
 
     fun downloadProgressFor(modelId: String): StateFlow<Float> =
         _downloadProgressMap
             .map { map -> map[modelId] ?: 0f }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
+
+    fun downloadStatusFor(modelId: String): StateFlow<ModelDownloadUiState?> =
+        _downloadUiStateMap
+            .map { map -> map[modelId] }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     // Settings State
     val smartPunctuation = MutableStateFlow(repository.getSmartPunctuation())
@@ -241,7 +259,10 @@ class MainViewModel(
     }
 
     fun downloadModel(modelId: String) {
+        val model = modelsList.value.find { it.id == modelId } ?: return
+        beginDownloadState(modelId, model.sizeMb)
         repository.startModelDownload(modelId, viewModelScope) { progress ->
+            updateDownloadState(modelId, model.sizeMb, progress, "Downloading")
             _downloadProgressMap.update { it + (modelId to progress) }
         }
     }
@@ -255,9 +276,51 @@ class MainViewModel(
     fun redownloadModel(modelId: String) {
         viewModelScope.launch {
             repository.deleteDownloadedModel(modelId)
+            val model = modelsList.value.find { it.id == modelId } ?: return@launch
+            beginDownloadState(modelId, model.sizeMb)
             repository.startModelDownload(modelId, viewModelScope) { progress ->
+                updateDownloadState(modelId, model.sizeMb, progress, "Downloading")
                 _downloadProgressMap.update { it + (modelId to progress) }
             }
+        }
+    }
+
+    private fun beginDownloadState(modelId: String, totalMb: Float) {
+        downloadStartedAtMs[modelId] = System.currentTimeMillis()
+        _downloadUiStateMap.update {
+            it + (modelId to ModelDownloadUiState(
+                progress = 0.01f,
+                downloadedMb = totalMb * 0.01f,
+                totalMb = totalMb,
+                etaSeconds = null,
+                verificationLabel = repository.modelDownloader.verificationLabel(modelId),
+                statusLabel = "Starting"
+            ))
+        }
+    }
+
+    private fun updateDownloadState(modelId: String, totalMb: Float, progress: Float, statusLabel: String) {
+        val startedAt = downloadStartedAtMs[modelId] ?: System.currentTimeMillis()
+        val etaSeconds = when {
+            progress <= 0.02f || progress >= 1f -> null
+            else -> {
+                val elapsedSec = ((System.currentTimeMillis() - startedAt).coerceAtLeast(1L)) / 1000f
+                val estimatedTotalSec = elapsedSec / progress
+                (estimatedTotalSec - elapsedSec).roundToInt().coerceAtLeast(0)
+            }
+        }
+        _downloadUiStateMap.update {
+            it + (modelId to ModelDownloadUiState(
+                progress = progress.coerceIn(0f, 1f),
+                downloadedMb = totalMb * progress.coerceIn(0f, 1f),
+                totalMb = totalMb,
+                etaSeconds = etaSeconds,
+                verificationLabel = repository.modelDownloader.verificationLabel(modelId),
+                statusLabel = statusLabel
+            ))
+        }
+        if (progress >= 1f) {
+            downloadStartedAtMs.remove(modelId)
         }
     }
 
@@ -476,6 +539,10 @@ class MainViewModel(
         _sharedStatusText.value = ""
         _sharedResultText.value = ""
         _sharedProgress.value = 0f
+    }
+
+    fun loadHistoryDraft(text: String) {
+        _currentLiveTranscription.value = text
     }
 
     private fun formatFileSize(bytes: Long): String {

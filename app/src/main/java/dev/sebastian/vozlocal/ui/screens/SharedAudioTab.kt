@@ -1,11 +1,13 @@
 package dev.sebastian.vozlocal.ui.screens
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -245,6 +247,17 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 color = TextPrimary,
                                 textAlign = TextAlign.Center
                             )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                listOf("Decode", "Load", "Transcribe", "Polish").forEachIndexed { index, label ->
+                                    val active = when {
+                                        progress < 0.55f -> index == 0
+                                        progress < 0.70f -> index == 1
+                                        progress < 0.95f -> index == 2
+                                        else -> index == 3
+                                    }
+                                    StagePill(label = label, active = active)
+                                }
+                            }
                         }
                     } else if (resultText.isNotEmpty()) {
                         Column(
@@ -263,7 +276,16 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                     letterSpacing = 1.sp
                                 )
 
-                                Row {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    IconButton(
+                                        onClick = { shareText(context, resultText, audioName.ifBlank { "VozLocal transcription" }) }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Share text",
+                                            tint = TextSecondary
+                                        )
+                                    }
                                     IconButton(
                                         onClick = {
                                             clipboardManager.setText(AnnotatedString(resultText))
@@ -309,6 +331,11 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 text = "Active Transcription Model: ${activeModel?.name ?: "No model selected"}",
                                 fontSize = 12.sp,
                                 color = TextSecondary
+                            )
+                            Text(
+                                text = if (audioSize.isBlank()) "Waiting for file metadata…" else "Loaded file: $audioSize",
+                                fontSize = 11.sp,
+                                color = TextMuted
                             )
 
                             Button(
@@ -392,4 +419,26 @@ fun SharedAudioTab(viewModel: MainViewModel) {
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
     }
+}
+
+@Composable
+private fun StagePill(label: String, active: Boolean) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(if (active) PrimaryColor.copy(alpha = 0.18f) else SurfaceCard)
+            .border(BorderStroke(1.dp, if (active) PrimaryColor.copy(alpha = 0.35f) else GlassBorder), RoundedCornerShape(100.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) PrimaryColor else TextSecondary)
+    }
+}
+
+private fun shareText(context: android.content.Context, text: String, subject: String) {
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, subject)
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, "Share transcript"))
 }

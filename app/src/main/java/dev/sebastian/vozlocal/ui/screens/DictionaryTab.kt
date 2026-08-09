@@ -180,6 +180,23 @@ fun DictionaryTab(viewModel: MainViewModel) {
 
 @Composable
 fun DictionaryRow(word: DictionaryWord, onDelete: () -> Unit) {
+    var confirmDelete by remember(word.id) { mutableStateOf(false) }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete word?") },
+            text = { Text("This removes the word and its replacements from the local dictionary.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onDelete()
+                    confirmDelete = false
+                }) { Text("Delete", color = TertiaryColor) }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+        )
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = SurfaceDark),
@@ -228,7 +245,7 @@ fun DictionaryRow(word: DictionaryWord, onDelete: () -> Unit) {
                 }
             }
 
-            IconButton(onClick = onDelete) {
+            IconButton(onClick = { confirmDelete = true }) {
                 Icon(
                     imageVector = Icons.Default.DeleteOutline,
                     contentDescription = "Delete dictionary word",

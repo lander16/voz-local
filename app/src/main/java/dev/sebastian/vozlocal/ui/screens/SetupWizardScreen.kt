@@ -88,6 +88,34 @@ fun SetupWizardScreen(
             lineHeight = 18.sp,
             modifier = Modifier.padding(horizontal = 12.dp)
         )
+
+        val completionProgress = (if (hasMicPermission) 0.5f else 0f) + (if (hasAccessibilityEnabled) 0.5f else 0f)
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, GlassBorder)
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(text = "Setup progress", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                    Text(text = "${(completionProgress * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor)
+                }
+                LinearProgressIndicator(
+                    progress = { completionProgress },
+                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                    color = PrimaryColor,
+                    trackColor = SurfaceCard
+                )
+                Text(
+                    text = "Only the mic and accessibility permission are needed. Transcription stays on your device.",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    lineHeight = 16.sp
+                )
+            }
+        }
         
         Spacer(modifier = Modifier.height(12.dp))
         
@@ -176,6 +204,27 @@ fun SetupWizardScreen(
                             ),
                             modifier = Modifier.testTag("setup_only_on_input_switch")
                         )
+                    }
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GlassBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(text = "Privacy reassurance", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor, letterSpacing = 1.sp)
+                    listOf(
+                        "No cloud dictation or telemetry",
+                        "Models download once, then run offline",
+                        "The floating assistant only appears over focused text fields"
+                    ).forEach { line ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                            Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(PrimaryColor).padding(top = 5.dp))
+                            Text(text = line, fontSize = 12.sp, color = TextSecondary, lineHeight = 16.sp)
+                        }
                     }
                 }
             }

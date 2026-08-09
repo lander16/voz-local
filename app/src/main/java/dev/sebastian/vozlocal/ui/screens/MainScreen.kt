@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -69,6 +70,7 @@ fun MainScreen(
     initialTab: Tab = Tab.DICTATE
 ) {
     val context = LocalContext.current
+    val isWideLayout = LocalConfiguration.current.screenWidthDp >= 600
     var activeTab by remember { mutableStateOf(initialTab) }
 
     // Theme mode is collected here so MainScreen can re-apply the theme.
@@ -284,15 +286,19 @@ fun MainScreen(
                 topBar = {
                     TopAppBar(
                         navigationIcon = {
-                            IconButton(
-                                onClick = { coroutineScope.launch { drawerState.open() } },
-                                modifier = Modifier.heightIn(min = 48.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Menu,
-                                    contentDescription = "Open Drawer Menu",
-                                    tint = TextPrimary
-                                )
+                            if (!isWideLayout) {
+                                IconButton(
+                                    onClick = { coroutineScope.launch { drawerState.open() } },
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Menu,
+                                        contentDescription = "Open Drawer Menu",
+                                        tint = TextPrimary
+                                    )
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.width(8.dp))
                             }
                         },
                         title = {
@@ -332,32 +338,34 @@ fun MainScreen(
                     )
                 },
                 bottomBar = {
-                    NavigationBar(
-                        containerColor = SurfaceDark,
-                        tonalElevation = 8.dp,
-                        windowInsets = WindowInsets.navigationBars
-                    ) {
-                        val tabs = listOf(
-                            Triple(Tab.DICTATE, "Dictate", Icons.Default.KeyboardVoice),
-                            Triple(Tab.MODELS, "Models", Icons.Default.CloudDownload),
-                            Triple(Tab.SHARED, "Shared", Icons.Default.AudioFile),
-                            Triple(Tab.HISTORY, "History", Icons.Default.History)
-                        )
-
-                        tabs.forEach { (tab, label, icon) ->
-                            NavigationBarItem(
-                                selected = activeTab == tab,
-                                onClick = { activeTab = tab },
-                                icon = { Icon(imageVector = icon, contentDescription = label) },
-                                label = { Text(text = label, fontWeight = FontWeight.Bold, fontSize = 12.sp) },
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = Color.White,
-                                    selectedTextColor = PrimaryColor,
-                                    indicatorColor = PrimaryColor.copy(alpha = 0.35f),
-                                    unselectedIconColor = TextSecondary,
-                                    unselectedTextColor = TextSecondary
-                                )
+                    if (!isWideLayout) {
+                        NavigationBar(
+                            containerColor = SurfaceDark,
+                            tonalElevation = 8.dp,
+                            windowInsets = WindowInsets.navigationBars
+                        ) {
+                            val tabs = listOf(
+                                Triple(Tab.DICTATE, "Dictate", Icons.Default.KeyboardVoice),
+                                Triple(Tab.MODELS, "Models", Icons.Default.CloudDownload),
+                                Triple(Tab.SHARED, "Shared", Icons.Default.AudioFile),
+                                Triple(Tab.HISTORY, "History", Icons.Default.History)
                             )
+
+                            tabs.forEach { (tab, label, icon) ->
+                                NavigationBarItem(
+                                    selected = activeTab == tab,
+                                    onClick = { activeTab = tab },
+                                    icon = { Icon(imageVector = icon, contentDescription = label) },
+                                    label = { Text(text = label, fontWeight = FontWeight.Bold, fontSize = 12.sp) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = Color.White,
+                                        selectedTextColor = PrimaryColor,
+                                        indicatorColor = PrimaryColor.copy(alpha = 0.35f),
+                                        unselectedIconColor = TextSecondary,
+                                        unselectedTextColor = TextSecondary
+                                    )
+                                )
+                            }
                         }
                     }
                 },
@@ -368,24 +376,74 @@ fun MainScreen(
                         .fillMaxSize()
                         .padding(innerPadding)
                 ) {
-                    if (skippedSetup) {
-                        SetupRetryBanner(
-                            onGrantPermissions = {
-                                micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                                try {
-                                    val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                                    context.startActivity(intent)
-                                } catch (_: Exception) {
-                                    Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
+                    if (isWideLayout) {
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            NavigationRail(
+                                containerColor = BackgroundDark,
+                                modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp)
+                            ) {
+                                listOf(
+                                    Triple(Tab.DICTATE, "Dictate", Icons.Default.KeyboardVoice),
+                                    Triple(Tab.MODELS, "Models", Icons.Default.CloudDownload),
+                                    Triple(Tab.SHARED, "Shared", Icons.Default.AudioFile),
+                                    Triple(Tab.HISTORY, "History", Icons.Default.History),
+                                    Triple(Tab.DICTIONARY, "Dictionary", Icons.Default.Book),
+                                    Triple(Tab.STATS, "Stats", Icons.Default.BarChart)
+                                ).forEach { (tab, label, icon) ->
+                                    NavigationRailItem(
+                                        selected = activeTab == tab,
+                                        onClick = { activeTab = tab },
+                                        icon = { Icon(imageVector = icon, contentDescription = label) },
+                                        label = { Text(text = label) },
+                                        colors = NavigationRailItemDefaults.colors(
+                                            selectedIconColor = Color.White,
+                                            selectedTextColor = PrimaryColor,
+                                            indicatorColor = PrimaryColor.copy(alpha = 0.35f),
+                                            unselectedIconColor = TextSecondary,
+                                            unselectedTextColor = TextSecondary
+                                        )
+                                    )
                                 }
-                            },
-                            onDismiss = { skippedSetup = false }
-                        )
-                    }
+                            }
 
-                    when (activeTab) {
-                        Tab.DICTATE -> DictateTab(
+                            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                MainTabContent(
+                                    viewModel = viewModel,
+                                    activeTab = activeTab,
+                                    showSetupRetryBanner = skippedSetup,
+                                    showFloatingAssistantCard = !hasAccessibilityEnabled,
+                                    onOpenAccessibilitySettings = {
+                                        try {
+                                            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                            context.startActivity(intent)
+                                            Toast.makeText(context, "Locate 'VozLocal Floating Dictation' and toggle ON", Toast.LENGTH_LONG).show()
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onOpenSettings = { showSettingsSheet = true },
+                                    onReuseHistory = { draft ->
+                                        viewModel.loadHistoryDraft(draft)
+                                        activeTab = Tab.DICTATE
+                                    },
+                                    onGrantPermissions = {
+                                        micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                        try {
+                                            val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                            context.startActivity(intent)
+                                        } catch (_: Exception) {
+                                            Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    onDismissRetry = { skippedSetup = false }
+                                )
+                            }
+                        }
+                    } else {
+                        MainTabContent(
                             viewModel = viewModel,
+                            activeTab = activeTab,
+                            showSetupRetryBanner = skippedSetup,
                             showFloatingAssistantCard = !hasAccessibilityEnabled,
                             onOpenAccessibilitySettings = {
                                 try {
@@ -396,13 +454,22 @@ fun MainScreen(
                                     Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            onOpenSettings = { showSettingsSheet = true }
+                            onOpenSettings = { showSettingsSheet = true },
+                            onReuseHistory = { draft ->
+                                viewModel.loadHistoryDraft(draft)
+                                activeTab = Tab.DICTATE
+                            },
+                            onGrantPermissions = {
+                                micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                                try {
+                                    val intent = Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    Toast.makeText(context, "Could not open Accessibility settings", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            onDismissRetry = { skippedSetup = false }
                         )
-                        Tab.STATS -> StatsTab(viewModel)
-                        Tab.MODELS -> ModelsTab(viewModel)
-                        Tab.DICTIONARY -> DictionaryTab(viewModel)
-                        Tab.HISTORY -> HistoryTab(viewModel)
-                        Tab.SHARED -> SharedAudioTab(viewModel)
                     }
                 }
             }
@@ -413,6 +480,44 @@ fun MainScreen(
         }
     }
 }
+
+}
+
+@Composable
+private fun MainTabContent(
+    viewModel: MainViewModel,
+    activeTab: Tab,
+    showSetupRetryBanner: Boolean,
+    showFloatingAssistantCard: Boolean,
+    onOpenAccessibilitySettings: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onReuseHistory: (String) -> Unit,
+    onGrantPermissions: () -> Unit,
+    onDismissRetry: () -> Unit
+) {
+    if (showSetupRetryBanner) {
+        SetupRetryBanner(
+            onGrantPermissions = onGrantPermissions,
+            onDismiss = onDismissRetry
+        )
+    }
+
+    when (activeTab) {
+        Tab.DICTATE -> DictateTab(
+            viewModel = viewModel,
+            showFloatingAssistantCard = showFloatingAssistantCard,
+            onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+            onOpenSettings = onOpenSettings
+        )
+        Tab.MODELS -> ModelsTab(viewModel)
+        Tab.STATS -> StatsTab(viewModel)
+        Tab.DICTIONARY -> DictionaryTab(viewModel)
+        Tab.HISTORY -> HistoryTab(
+            viewModel = viewModel,
+            onReuse = onReuseHistory
+        )
+        Tab.SHARED -> SharedAudioTab(viewModel)
+    }
 }
 
 @Composable

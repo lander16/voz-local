@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -119,7 +121,7 @@ fun SettingsSheet(
                             color = TextPrimary
                         )
                         Text(
-                            text = "On-Device Engine & System Customization",
+                            text = "Local privacy, model, and dictation controls",
                             fontSize = 12.sp,
                             color = TextSecondary
                         )
@@ -140,10 +142,42 @@ fun SettingsSheet(
 
             HorizontalDivider(color = GlassBorder)
 
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.35f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(PrimaryColor.copy(alpha = 0.15f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(18.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(text = "Local-only by design", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(
+                            text = "No telemetry, no cloud dictation. Model downloads are the only network use.",
+                            fontSize = 12.sp,
+                            color = TextSecondary,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+
             // Section 1: Appearance
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Appearance",
+                    text = "Theme",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -151,7 +185,7 @@ fun SettingsSheet(
                 )
 
                 Text(
-                    text = "Choose how VozLocal looks across the app.",
+                    text = "Choose light, dark, or follow your phone.",
                     fontSize = 13.sp,
                     color = TextSecondary,
                     lineHeight = 18.sp
@@ -160,7 +194,7 @@ fun SettingsSheet(
                 val themeOptions = listOf(
                     "light" to "Light",
                     "dark" to "Dark",
-                    "system" to "System (default Dark)"
+                    "system" to "System"
                 )
 
                 Row(
@@ -198,7 +232,7 @@ fun SettingsSheet(
             // Section 2: Audio & Transcription Language
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Transcription engine language",
+                    text = "Dictation language",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -206,7 +240,7 @@ fun SettingsSheet(
                 )
 
                 Text(
-                    text = "Explicitly selecting your target language avoids Whisper auto-detection latency (~200ms speedup).",
+                    text = "Pick a language to skip Whisper auto-detect and start faster.",
                     fontSize = 13.sp,
                     color = TextSecondary,
                     lineHeight = 18.sp
@@ -255,7 +289,7 @@ fun SettingsSheet(
             // Section 3: Post-Processing & AI Polisher
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Text post-processing & local AI",
+                    text = "Text cleanup",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -280,8 +314,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Smart Pause Correction", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Fuses speech pauses into punctuation", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Smart punctuation", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Turns pauses into punctuation", fontSize = 13.sp, color = TextSecondary)
                     }
                     Switch(
                         checked = smartPunctuation,
@@ -308,7 +342,7 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Auto-Capitalization", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Auto-capitalize", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                         Text(text = "Starts sentences with uppercase", fontSize = 13.sp, color = TextSecondary)
                     }
                     Switch(
@@ -336,8 +370,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Apply Custom Dictionary", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Auto-replaces custom vocabulary", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Custom dictionary", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Replaces words you’ve added", fontSize = 13.sp, color = TextSecondary)
                     }
                     Switch(
                         checked = applyDictionary,
@@ -364,8 +398,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "AI Text Polisher", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Removes stutters and filler words locally", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Local text polisher", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Removes stutters and filler words", fontSize = 13.sp, color = TextSecondary)
                     }
                     Switch(
                         checked = useAiPolisher,
@@ -380,7 +414,7 @@ fun SettingsSheet(
             // Section 4: System Overlay Assistant
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Floating assistant overlay",
+                    text = "Floating assistant",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -404,8 +438,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Show Only On Input Focus", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Hides floating button when no text box is focused", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Only show on text fields", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Hides the mic when no input is focused", fontSize = 13.sp, color = TextSecondary)
                     }
                     Switch(
                         checked = showOnlyOnInput,
@@ -420,7 +454,7 @@ fun SettingsSheet(
             // Section 5: History Retention Limits
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "History storage retention limit",
+                    text = "History & storage",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -446,8 +480,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Save Transcription History", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "When off, transcriptions are never written to local storage", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Save transcripts locally", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Turn off to keep transcripts out of the database", fontSize = 13.sp, color = TextSecondary)
                     }
                     Switch(
                         checked = saveHistory,
@@ -458,7 +492,7 @@ fun SettingsSheet(
 
                 // Retention limit chips (dimmed when saving is off)
                 Text(
-                    text = "Configure maximum history items retained in your local SQLite database.",
+                    text = "Limit how many local transcripts are kept on device.",
                     fontSize = 13.sp,
                     color = if (saveHistory) TextSecondary else TextSecondary.copy(alpha = 0.4f)
                 )
@@ -507,7 +541,7 @@ fun SettingsSheet(
             // Section 6: AI Engine
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "AI Engine",
+                    text = "Advanced engine",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = PrimaryColor,
@@ -515,7 +549,7 @@ fun SettingsSheet(
                 )
 
                 Text(
-                    text = "Tune whisper_full_params (initial prompt, VAD, and the segment rejection thresholds).",
+                    text = "Tune whisper.cpp for your voice and hardware.",
                     fontSize = 13.sp,
                     color = TextSecondary,
                     lineHeight = 18.sp
@@ -605,7 +639,7 @@ fun SettingsSheet(
                         },
                         minLines = 4,
                         maxLines = 6,
-                        textStyle = LocalTextStyle.current.copy(fontSize = 14.sp, color = TextPrimary),
+                        textStyle = TextStyle(fontSize = 14.sp, color = TextPrimary),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = PrimaryColor,
                             unfocusedBorderColor = GlassBorder,
@@ -683,6 +717,30 @@ fun SettingsSheet(
                         onCheckedChange = null,
                         colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                     )
+                }
+            }
+
+            HorizontalDivider(color = GlassBorder)
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, GlassBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text = "Privacy & trust", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor, letterSpacing = 1.sp)
+                    Text(text = "Everything here is stored locally. Network access is only used for model downloads.", fontSize = 13.sp, color = TextSecondary, lineHeight = 18.sp)
+                    listOf(
+                        "Accessibility scope is kept narrow",
+                        "Models and history stay in app-private storage",
+                        "Release builds don’t log raw transcripts"
+                    ).forEach { line ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                            Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(100.dp)).background(PrimaryColor).padding(top = 5.dp))
+                            Text(text = line, fontSize = 12.sp, color = TextSecondary, lineHeight = 16.sp)
+                        }
+                    }
                 }
             }
 

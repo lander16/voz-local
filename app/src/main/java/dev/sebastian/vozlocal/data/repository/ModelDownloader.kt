@@ -73,6 +73,12 @@ class ModelDownloader(private val context: Context) {
         "silero_vad" to null
     )
 
+    fun verificationLabel(modelId: String): String = if (sha256Map[modelId].isNullOrBlank()) {
+        "Unverified"
+    } else {
+        "Verified"
+    }
+
     suspend fun downloadModel(
         modelId: String,
         onProgress: suspend (Float) -> Unit
