@@ -44,7 +44,8 @@ class WhisperContext private constructor(private var ptr: Long) {
             params.vadModelPath,
             params.beamSize,
             params.noTimestamps,
-            params.temperatureInc
+            params.temperatureInc,
+            params.noContext
         )
 
         val textCount = WhisperLib.getTextSegmentCount(ptr)
@@ -174,7 +175,8 @@ private class WhisperLib {
             vadModelPath: String?,
             beamSize: Int,
             noTimestamps: Boolean,
-            temperatureInc: Float
+            temperatureInc: Float,
+            noContext: Boolean
         )
         external fun getTextSegmentCount(contextPtr: Long): Int
         external fun getTextSegment(contextPtr: Long, index: Int): String

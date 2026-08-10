@@ -108,11 +108,16 @@ class AudioRecorder {
             isRecording = true
             audioRecord?.startRecording()
 
+            // Keep one stable native recorder reference for the lifetime of this reader.
+            // `stopRecording()` stops it before joining this job, which unblocks a
+            // pending blocking read without allowing a new session to swap the field
+            // underneath the reader.
+            val recorder = audioRecord ?: return false
             recordingJob = scope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(minBufferSize / 2)
 
                 while (isActive && isRecording) {
-                    val readCount = audioRecord?.read(buffer, 0, buffer.size) ?: -1
+                    val readCount = recorder.read(buffer, 0, buffer.size)
                     if (readCount > 0) {
                         val sumSquares: Double
                         synchronized(floatBuffer) {
@@ -134,7 +139,7 @@ class AudioRecorder {
     fun stopRecording(): FloatArray {
         synchronized(this) {
             isRecording = false
-            recordingJob?.cancel()
+            val readerJob = recordingJob
             recordingJob = null
 
             try {
@@ -144,12 +149,20 @@ class AudioRecorder {
                 Log.e(TAG, "Error stopping AudioRecord", e)
             }
             audioRecord = null
-        }
 
-        synchronized(floatBuffer) {
-            val samples = floatBuffer.toFloatArray()
-            floatBuffer.reset()
-            return AudioSilenceTrimmer.trim(samples)
+            // Do not snapshot/reset the shared PCM buffer until the reader has
+            // completely exited. A cancelled coroutine can still be returning from
+            // AudioRecord.read(); without this join it could append one final block
+            // after the snapshot, losing the end of an utterance (or leaking it into
+            // the next session).
+            readerJob?.cancel()
+            runBlocking { readerJob?.join() }
+
+            synchronized(floatBuffer) {
+                val samples = floatBuffer.toFloatArray()
+                floatBuffer.reset()
+                return AudioSilenceTrimmer.trim(samples)
+            }
         }
     }
 
@@ -161,7 +174,7 @@ class AudioRecorder {
     fun release() {
         synchronized(this) {
             isRecording = false
-            recordingJob?.cancel()
+            val readerJob = recordingJob
             recordingJob = null
 
             try {
@@ -171,10 +184,15 @@ class AudioRecorder {
                 Log.e(TAG, "Error releasing AudioRecord", e)
             }
             audioRecord = null
-        }
 
-        synchronized(floatBuffer) {
-            floatBuffer.reset()
+            // Apply the same ordering as stopRecording: a reader that is just
+            // returning from a blocking read must finish before its buffer is reset.
+            readerJob?.cancel()
+            runBlocking { readerJob?.join() }
+
+            synchronized(floatBuffer) {
+                floatBuffer.reset()
+            }
         }
     }
 }

@@ -78,7 +78,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
         jboolean single_segment, jboolean print_timestamps,
         jfloat no_speech_thold, jfloat logprob_thold, jfloat entropy_thold,
         jstring vad_model_path, jint beam_size, jboolean no_timestamps,
-        jfloat temperature_inc) {
+        jfloat temperature_inc, jboolean no_context) {
     UNUSED(thiz);
 
     struct whisper_context *context = (struct whisper_context *) context_ptr;
@@ -162,7 +162,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
         params.beam_search.beam_size = beam_size;
     }
     params.n_threads = num_threads;
-    params.no_context = true;
+    params.no_context = no_context;
     params.offset_ms = 0;
 
     LOGI("whisper_full: strategy=%s, language=%s, threads=%d, samples=%d, "

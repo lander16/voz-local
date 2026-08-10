@@ -13,6 +13,7 @@ import dev.sebastian.vozlocal.polish.QwenEngine
 import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
 import dev.sebastian.vozlocal.whisper.WhisperEngine
 import dev.sebastian.vozlocal.whisper.WhisperParams
+import dev.sebastian.vozlocal.whisper.forLiveAudio
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -183,7 +184,7 @@ class DictationRepository(private val context: Context) {
     }
 
     fun getNoSpeechThold(): Float {
-        return prefs.getFloat("no_speech_thold", 0.4f)
+        return prefs.getFloat("no_speech_thold", 0.6f)
     }
 
     fun saveNoSpeechThold(value: Float) {
@@ -191,7 +192,7 @@ class DictationRepository(private val context: Context) {
     }
 
     fun getLogprobThold(): Float {
-        return prefs.getFloat("logprob_thold", -0.5f)
+        return prefs.getFloat("logprob_thold", -1.0f)
     }
 
     fun saveLogprobThold(value: Float) {
@@ -534,9 +535,8 @@ class DictationRepository(private val context: Context) {
             samples,
             language = getLanguage(),
             params = currentWhisperParams()
+                .forLiveAudio(samples.size)
                 .copy(
-                    noTimestamps = true,
-                    printTimestamps = false,
                     vadModelPath = vadPathFor(samples.size, sharedFile = false),
                     modelIdHint = modelId
                 )
@@ -577,6 +577,7 @@ class DictationRepository(private val context: Context) {
                 singleSegment = false,
                 printTimestamps = true,
                 noTimestamps = false,
+                noContext = false,
                 vadModelPath = vadPathFor(samples.size, sharedFile = true),
                 modelIdHint = modelId
             )

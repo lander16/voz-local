@@ -2,6 +2,7 @@ package dev.sebastian.vozlocal.audio
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.junit.Assert.assertFalse
@@ -48,6 +49,26 @@ class AudioRecorderSyncTest {
     fun stopRecording_emptyArrayWhenNeverStarted() {
         val samples = AudioRecorder().stopRecording()
         assertTrue(samples.isEmpty())
+    }
+
+    @Test
+    fun stopRecording_waitsForCaptureReaderToExit() {
+        val recorder = AudioRecorder()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        assertTrue("Robolectric AudioRecord should initialize", recorder.startRecording(scope))
+        val readerJob = AudioRecorder::class.java
+            .getDeclaredField("recordingJob")
+            .apply { isAccessible = true }
+            .get(recorder) as Job
+
+        recorder.stopRecording()
+
+        // The snapshot/reset in stopRecording must happen only after this job has
+        // completed; otherwise an in-flight AudioRecord.read() can append PCM after
+        // the returned samples have already been copied.
+        assertTrue("capture reader must be complete before stop returns", readerJob.isCompleted)
+        scope.cancel()
     }
 
     @Test
