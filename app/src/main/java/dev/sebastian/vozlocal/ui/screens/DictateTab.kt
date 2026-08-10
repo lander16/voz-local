@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 import java.util.Locale
@@ -689,7 +690,7 @@ fun DictateTab(
         // Post-Processing Filters Summary Card
         item {
             val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
-            val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
+            val cleanupMode by viewModel.cleanupMode.collectAsStateWithLifecycle()
             val modelsList by viewModel.modelsList.collectAsStateWithLifecycle()
             val qwenModel = modelsList.find { it.id == "qwen2.5_0.5b" }
             val isQwenDownloaded = qwenModel?.isDownloaded == true
@@ -712,7 +713,7 @@ fun DictateTab(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "AI Post-Processing Filters",
+                            text = "Local post-processing filters",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = TextPrimary
@@ -758,18 +759,12 @@ fun DictateTab(
 
                     HorizontalDivider(color = GlassBorder)
 
-                    // AI Polisher row
+                    // Local cleanup summary row
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .semantics(mergeDescendants = true) {}
-                            .toggleable(
-                                value = useAiPolisher,
-                                role = Role.Switch,
-                                onValueChange = { viewModel.setUseAiPolisher(it) }
-                            )
                             .padding(vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -781,14 +776,13 @@ fun DictateTab(
                         ) {
                             Icon(imageVector = Icons.Default.Psychology, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(text = "AI Text Polisher", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text(text = "Cleans up filler words & polishes dictation locally.", fontSize = 11.sp, color = TextSecondary)
+                                Text(text = "Local text cleanup", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(text = "Rule-based cleanup for fillers, pauses, and punctuation.", fontSize = 11.sp, color = TextSecondary)
                             }
                         }
-                        Switch(
-                            checked = useAiPolisher,
-                            onCheckedChange = null,
-                            colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
+                        StatusPill(
+                            text = cleanupMode.displayLabel(),
+                            active = cleanupMode != CleanupMode.MINIMAL
                         )
                     }
                 }
@@ -866,6 +860,12 @@ private fun StatusPill(text: String, active: Boolean) {
 private fun formatVadSize(bytes: Long): String {
     val mb = bytes / 1024f / 1024f
     return String.format(Locale.US, "%.1f MB", mb)
+}
+
+private fun CleanupMode.displayLabel(): String = when (this) {
+    CleanupMode.MINIMAL -> "Minimal"
+    CleanupMode.BALANCED -> "Balanced"
+    CleanupMode.AGGRESSIVE -> "Aggressive"
 }
 
 @Composable

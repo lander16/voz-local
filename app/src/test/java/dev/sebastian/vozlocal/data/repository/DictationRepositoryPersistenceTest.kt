@@ -2,6 +2,7 @@ package dev.sebastian.vozlocal.data.repository
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -94,6 +95,16 @@ class DictationRepositoryPersistenceTest {
     }
 
     @Test
+    fun cleanupMode_defaultsToBalancedAndRoundTrips() {
+        val repo = newRepository()
+        assertEquals(CleanupMode.BALANCED, repo.getCleanupMode())
+        repo.saveCleanupMode(CleanupMode.MINIMAL)
+        assertEquals(CleanupMode.MINIMAL, repo.getCleanupMode())
+        repo.saveCleanupMode(CleanupMode.AGGRESSIVE)
+        assertEquals(CleanupMode.AGGRESSIVE, newRepository().getCleanupMode())
+    }
+
+    @Test
     fun allPersistedAcrossNewRepositoryInstance() {
         val repo = newRepository()
         repo.saveSmartPunctuation(false)
@@ -102,6 +113,7 @@ class DictationRepositoryPersistenceTest {
         repo.saveThemeMode("light")
         repo.saveLanguage("en")
         repo.saveUseAiPolisher(true)
+        repo.saveCleanupMode(CleanupMode.AGGRESSIVE)
 
         // A second repository against the same Context must read the same persisted prefs.
         val repo2 = newRepository()
@@ -111,5 +123,6 @@ class DictationRepositoryPersistenceTest {
         assertEquals("light", repo2.getThemeMode())
         assertEquals("en", repo2.getLanguage())
         assertTrue(repo2.getUseAiPolisher())
+        assertEquals(CleanupMode.AGGRESSIVE, repo2.getCleanupMode())
     }
 }

@@ -1,6 +1,7 @@
 package dev.sebastian.vozlocal.polish
 
 import kotlinx.coroutines.test.runTest
+import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -58,6 +59,26 @@ class QwenEngineTest {
     @Test
     fun polish_collapsesRepeatedWord() = runTest {
         assertEquals("The cat sat.", engine.polish("the the cat sat"))
+    }
+
+    @Test
+    fun polish_minimalPreservesFillersAndRepeats() = runTest {
+        assertEquals("Um um the the code works.", engine.polish("um um the the code works", "en", CleanupMode.MINIMAL))
+    }
+
+    @Test
+    fun polish_aggressiveRemovesOnlyExactRepeatedTechnicalWords() = runTest {
+        assertEquals("Kotlin flow API works.", engine.polish("kotlin kotlin flow flow API API works", "en", CleanupMode.AGGRESSIVE))
+    }
+
+    @Test
+    fun polish_aggressivePreservesDiscourseWords() = runTest {
+        assertEquals("Well so like este bueno claro.", engine.polish("well so like este bueno claro", "en", CleanupMode.AGGRESSIVE))
+    }
+
+    @Test
+    fun polish_capitalizesAfterSpanishInvertedMarks() = runTest {
+        assertEquals("¿Cómo estás? ¡Bien!", engine.polish("¿cómo estás? ¡bien!", "es", CleanupMode.MINIMAL))
     }
 
     @Test

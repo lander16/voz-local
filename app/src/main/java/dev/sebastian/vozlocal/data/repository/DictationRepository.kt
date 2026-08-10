@@ -10,6 +10,7 @@ import dev.sebastian.vozlocal.data.model.DictationStat
 import dev.sebastian.vozlocal.data.model.DictionaryWord
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.polish.QwenEngine
+import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
 import dev.sebastian.vozlocal.whisper.WhisperEngine
 import dev.sebastian.vozlocal.whisper.WhisperParams
 import kotlinx.coroutines.CoroutineScope
@@ -138,6 +139,15 @@ class DictationRepository(private val context: Context) {
 
     fun saveUseAiPolisher(value: Boolean) {
         prefs.edit { putBoolean("use_ai_polisher", value) }
+    }
+
+    fun getCleanupMode(): CleanupMode {
+        val raw = prefs.getString("cleanup_mode", CleanupMode.BALANCED.name) ?: CleanupMode.BALANCED.name
+        return CleanupMode.values().firstOrNull { it.name.equals(raw, ignoreCase = true) } ?: CleanupMode.BALANCED
+    }
+
+    fun saveCleanupMode(value: CleanupMode) {
+        prefs.edit { putString("cleanup_mode", value.name) }
     }
 
     fun getSmartPunctuation(): Boolean {
@@ -654,7 +664,8 @@ class DictationRepository(private val context: Context) {
         smartPunctuation: Boolean,
         autoCapitalize: Boolean,
         applyDict: Boolean,
-        useAiPolisher: Boolean = false
+        useAiPolisher: Boolean = false,
+        cleanupMode: CleanupMode = getCleanupMode()
     ): String = withContext(Dispatchers.Default) {
         var result = text
 
@@ -746,38 +757,39 @@ class DictationRepository(private val context: Context) {
 
         // 5. Optional local rule-based "AI" polisher pass (filler removal, punctuation polish)
         if (useAiPolisher) {
-            result = qwenEngine.polish(result, getLanguage())
+            result = qwenEngine.polish(result, getLanguage(), cleanupMode)
         }
 
         result
     }
 
     private fun applySpokenPunctuationCommands(text: String): String {
-        var result = text
-        for ((regex, replacement) in SPOKEN_PUNCTUATION_COMMANDS) {
-            result = result.replace(regex, replacement)
-        }
-        return result
+        return text
+            .split(REGEX_COMMAND_PHRASE_SPLIT)
+            .joinToString(" ") { phrase ->
+                val trimmed = phrase.trim()
+                SPOKEN_PUNCTUATION_COMMANDS.firstOrNull { (regex, _) -> regex.matches(trimmed) }?.second ?: phrase
+            }
     }
 
     companion object {
         private val REGEX_SPACES = Regex("\\s+")
-        private val REGEX_ES_PUNTO = Regex("(?i)\\bpunto\\b")
-        private val REGEX_ES_COMA = Regex("(?i)\\bcoma\\b")
-        private val REGEX_ES_DOS_PUNTOS = Regex("(?i)\\bdos puntos\\b")
-        private val REGEX_ES_INTERROGACION = Regex("(?i)\\bsigno de (interrogacion|interrogación)\\b")
-        private val REGEX_ES_EXCLAMACION = Regex("(?i)\\bsigno de (exclamacion|exclamación)\\b")
-        private val REGEX_ES_NUEVA_LINEA = Regex("(?i)\\bnueva l[ií]nea\\b")
-        private val REGEX_ES_NUEVO_PARRAFO = Regex("(?i)\\bnuevo p[aá]rrafo\\b")
+        private val REGEX_ES_PUNTO = Regex("(?i)^punto( final)?$")
+        private val REGEX_ES_COMA = Regex("(?i)^coma$")
+        private val REGEX_ES_DOS_PUNTOS = Regex("(?i)^dos puntos$")
+        private val REGEX_ES_INTERROGACION = Regex("(?i)^signo de (interrogacion|interrogación)$")
+        private val REGEX_ES_EXCLAMACION = Regex("(?i)^signo de (exclamacion|exclamación)$")
+        private val REGEX_ES_NUEVA_LINEA = Regex("(?i)^nueva l[ií]nea$")
+        private val REGEX_ES_NUEVO_PARRAFO = Regex("(?i)^nuevo p[aá]rrafo$")
 
-        private val REGEX_EN_PERIOD = Regex("(?i)\\bperiod\\b")
-        private val REGEX_EN_FULL_STOP = Regex("(?i)\\bfull stop\\b")
-        private val REGEX_EN_COMMA = Regex("(?i)\\bcomma\\b")
-        private val REGEX_EN_COLON = Regex("(?i)\\bcolon\\b")
-        private val REGEX_EN_QUESTION_MARK = Regex("(?i)\\bquestion mark\\b")
-        private val REGEX_EN_EXCLAMATION_MARK = Regex("(?i)\\bexclamation (mark|point)\\b")
-        private val REGEX_EN_NEW_LINE = Regex("(?i)\\bnew line\\b")
-        private val REGEX_EN_NEW_PARAGRAPH = Regex("(?i)\\bnew paragraph\\b")
+        private val REGEX_EN_PERIOD = Regex("(?i)^period$")
+        private val REGEX_EN_FULL_STOP = Regex("(?i)^full stop$")
+        private val REGEX_EN_COMMA = Regex("(?i)^comma$")
+        private val REGEX_EN_COLON = Regex("(?i)^colon$")
+        private val REGEX_EN_QUESTION_MARK = Regex("(?i)^question mark$")
+        private val REGEX_EN_EXCLAMATION_MARK = Regex("(?i)^exclamation (mark|point)$")
+        private val REGEX_EN_NEW_LINE = Regex("(?i)^new line$")
+        private val REGEX_EN_NEW_PARAGRAPH = Regex("(?i)^new paragraph$")
 
         private val REGEX_SPACES_BEFORE_PUNCT = Regex("\\s+([,.?!:])")
         private val REGEX_SPACE_AFTER_PUNCT = Regex("([,.?!:])([^\\s\\d,.?!:])")
@@ -789,7 +801,8 @@ class DictationRepository(private val context: Context) {
         private val REGEX_ES_QUESTION_END = Regex("(?i)\\b(verdad|cierto|no\\s+crees|o\\s+no)\\s*[.]?$")
         private val REGEX_EN_QUESTION_START = Regex("(?i)^\\s*(what|why|where|when|who|whom|whose|which|how|is|are|was|were|do|does|did|can|could|would|should|will|shall|have|has|had|am|isnt|arent|wasnt|werent|dont|doesnt|didnt|cant|couldnt|wouldnt|shouldnt|wont)\\s+(you|i|we|it|he|she|they|this|that|there)\\b")
         private val REGEX_EN_QUESTION_END = Regex("(?i)\\b(right|correct|is\\s+it|don't\\s+you|don't\\s+you\\s+think)\\s*[.]?$")
-        private val REGEX_AUTO_CAPITALIZE = Regex("([.!?¿\\n]\\s*)([a-zñáéíóú])")
+        private val REGEX_AUTO_CAPITALIZE = Regex("([.!?¿¡\\n]\\s*)([a-zñáéíóúüàâçèêëîïôùûäöß])")
+        private val REGEX_COMMAND_PHRASE_SPLIT = Regex("\\s*(?:[,.;]|\\n)+\\s*")
         private val SPOKEN_PUNCTUATION_COMMANDS = listOf(
             REGEX_ES_DOS_PUNTOS to ":",
             REGEX_ES_INTERROGACION to "?",

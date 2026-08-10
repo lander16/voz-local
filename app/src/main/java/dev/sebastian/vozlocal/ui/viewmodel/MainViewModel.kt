@@ -13,6 +13,8 @@ import dev.sebastian.vozlocal.data.model.DictionaryWord
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.data.repository.DictationRepository
 import dev.sebastian.vozlocal.data.repository.VadDownloadStatus
+import dev.sebastian.vozlocal.polish.QwenEngine
+import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.ArrayList
@@ -133,6 +135,7 @@ class MainViewModel(
     val showOnlyOnInput = MutableStateFlow(repository.getShowOnlyOnInput())
     val whisperLanguage = MutableStateFlow(repository.getLanguage())
     val useAiPolisher = MutableStateFlow(repository.getUseAiPolisher())
+    val cleanupMode = MutableStateFlow(CleanupMode.valueOf(repository.getCleanupMode().name))
 
     // AI Engine Settings (whisper_full_params surface)
     val noSpeechThold = MutableStateFlow(repository.getNoSpeechThold())
@@ -228,6 +231,11 @@ class MainViewModel(
     fun setUseAiPolisher(value: Boolean) {
         repository.saveUseAiPolisher(value)
         useAiPolisher.value = value
+    }
+
+    fun setCleanupMode(value: CleanupMode) {
+        repository.saveCleanupMode(QwenEngine.CleanupMode.valueOf(value.name))
+        cleanupMode.value = value
     }
 
     fun setNoSpeechThold(value: Float) {
@@ -488,7 +496,8 @@ class MainViewModel(
                 smartPunctuation = smartPunctuation.value,
                 autoCapitalize = autoCapitalization.value,
                 applyDict = applyDictionary.value,
-                useAiPolisher = useAiPolisher.value
+                useAiPolisher = useAiPolisher.value,
+                cleanupMode = QwenEngine.CleanupMode.valueOf(cleanupMode.value.name)
             )
 
             val wordCount = processedText.split(REGEX_WORD_SPLIT).count { it.isNotBlank() }
@@ -572,7 +581,8 @@ class MainViewModel(
                 smartPunctuation = smartPunctuation.value,
                 autoCapitalize = autoCapitalization.value,
                 applyDict = applyDictionary.value,
-                useAiPolisher = useAiPolisher.value
+                useAiPolisher = useAiPolisher.value,
+                cleanupMode = QwenEngine.CleanupMode.valueOf(cleanupMode.value.name)
             )
 
             repository.insertHistory(

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 import java.util.Locale
@@ -51,7 +52,7 @@ fun SettingsSheet(
     val smartPunctuation by viewModel.smartPunctuation.collectAsStateWithLifecycle()
     val autoCapitalization by viewModel.autoCapitalization.collectAsStateWithLifecycle()
     val applyDictionary by viewModel.applyDictionary.collectAsStateWithLifecycle()
-    val useAiPolisher by viewModel.useAiPolisher.collectAsStateWithLifecycle()
+    val cleanupMode by viewModel.cleanupMode.collectAsStateWithLifecycle()
     val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
     val whisperLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -286,7 +287,7 @@ fun SettingsSheet(
 
             HorizontalDivider(color = GlassBorder)
 
-            // Section 3: Post-Processing & AI Polisher
+            // Section 3: Post-Processing & Cleanup
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
                     text = "Text cleanup",
@@ -380,31 +381,31 @@ fun SettingsSheet(
                     )
                 }
 
-                // AI Polisher
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
-                        .toggleable(
-                            value = useAiPolisher,
-                            role = Role.Switch,
-                            onValueChange = { viewModel.setUseAiPolisher(it) }
-                        )
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Local text polisher", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Removes stutters and filler words", fontSize = 13.sp, color = TextSecondary)
-                    }
-                    Switch(
-                        checked = useAiPolisher,
-                        onCheckedChange = null,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = AccentViolet)
+                Text(
+                    text = "Local cleanup is rule-based, not AI/LLM.",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    lineHeight = 16.sp
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    cleanupOptionRow(
+                        title = "Minimal",
+                        description = "Keeps the transcript closest to raw speech.",
+                        selected = cleanupMode == CleanupMode.MINIMAL,
+                        onClick = { viewModel.setCleanupMode(CleanupMode.MINIMAL) }
+                    )
+                    cleanupOptionRow(
+                        title = "Balanced",
+                        description = "Default cleanup for fillers, pauses, and punctuation.",
+                        selected = cleanupMode == CleanupMode.BALANCED,
+                        onClick = { viewModel.setCleanupMode(CleanupMode.BALANCED) }
+                    )
+                    cleanupOptionRow(
+                        title = "Aggressive",
+                        description = "Stronger cleanup for rough dictation, with more rewriting.",
+                        selected = cleanupMode == CleanupMode.AGGRESSIVE,
+                        onClick = { viewModel.setCleanupMode(CleanupMode.AGGRESSIVE) }
                     )
                 }
             }
@@ -754,6 +755,60 @@ fun SettingsSheet(
                     .heightIn(min = 48.dp)
             ) {
                 Text(text = "Done", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun cleanupOptionRow(
+    title: String,
+    description: String,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) PrimaryColor.copy(alpha = 0.16f) else SurfaceCard)
+            .border(BorderStroke(1.dp, if (selected) PrimaryColor else GlassBorder), RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                text = title,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (selected) PrimaryColor else TextPrimary
+            )
+            Text(
+                text = description,
+                fontSize = 12.sp,
+                color = TextSecondary,
+                lineHeight = 16.sp
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .size(18.dp)
+                .clip(RoundedCornerShape(100.dp))
+                .background(if (selected) PrimaryColor else Color.Transparent)
+                .border(BorderStroke(1.5.dp, if (selected) PrimaryColor else GlassBorder), RoundedCornerShape(100.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            if (selected) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp)
+                )
             }
         }
     }
