@@ -15,6 +15,7 @@ import dev.sebastian.vozlocal.data.repository.DictationRepository
 import dev.sebastian.vozlocal.data.repository.VadDownloadStatus
 import dev.sebastian.vozlocal.polish.QwenEngine
 import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
+import dev.sebastian.vozlocal.whisper.StreamingTranscriptReconciler
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.ArrayList
@@ -87,6 +88,7 @@ class MainViewModel(
 
     private val _currentLiveTranscription = MutableStateFlow("")
     val currentLiveTranscription: StateFlow<String> = _currentLiveTranscription.asStateFlow()
+    private var streamingJob: Job? = null
 
     // Shared File Transcription State
     private val _sharedAudioUri = MutableStateFlow<Uri?>(null)
@@ -144,6 +146,7 @@ class MainViewModel(
     val initialPrompt = MutableStateFlow(repository.getInitialPrompt() ?: "")
     val useVad = MutableStateFlow(repository.getUseVad())
     val spokenPunctuationCommands = MutableStateFlow(repository.getSpokenPunctuationCommands())
+    val useStreamingDictation = MutableStateFlow(repository.getUseStreamingDictation())
 
     // Silero VAD + model-loading state (updated by the app-start background work)
     val isVadModelReady: StateFlow<Boolean> = repository.isVadModelReady
@@ -185,6 +188,9 @@ class MainViewModel(
 
     companion object {
         private val REGEX_WORD_SPLIT = Regex("\\s+")
+        private const val STREAMING_WINDOW_SAMPLES = 8 * 16_000
+        private const val STREAMING_MIN_SAMPLES = 3 * 16_000
+        private const val STREAMING_INTERVAL_MS = 2_500L
 
         // Supported whisper.cpp language codes for the selector
         val LANGUAGE_OPTIONS = listOf(
@@ -266,6 +272,11 @@ class MainViewModel(
     fun setSpokenPunctuationCommands(value: Boolean) {
         repository.saveSpokenPunctuationCommands(value)
         spokenPunctuationCommands.value = value
+    }
+
+    fun setUseStreamingDictation(value: Boolean) {
+        repository.saveUseStreamingDictation(value)
+        useStreamingDictation.value = value
     }
 
     fun downloadVadModel() {
@@ -443,6 +454,9 @@ class MainViewModel(
                 return
             }
             ownsRecorderSession = true
+            if (useStreamingDictation.value) {
+                selectedModel.value?.takeIf { it.isDownloaded }?.let(::startStreamingPreview)
+            }
         } catch (e: SecurityException) {
             timerJob?.cancel()
             timerJob = null
@@ -458,6 +472,9 @@ class MainViewModel(
         timerJob?.cancel()
         _isRecording.value = false
 
+        val activeStreamingJob = streamingJob
+        streamingJob = null
+        activeStreamingJob?.cancel()
         val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
         ownsRecorderSession = false
         val finalDuration = _recordDurationSec.value
@@ -481,6 +498,9 @@ class MainViewModel(
         _currentLiveTranscription.value = "Running local Whisper model inference..."
 
         viewModelScope.launch(Dispatchers.Default) {
+            // Do not race the authoritative final pass with an in-flight preview
+            // inference against the same non-thread-safe Whisper context.
+            activeStreamingJob?.join()
             val rawOutput = repository.transcribeAudio(samples, model.id)
 
             if (rawOutput.isEmpty()) {
@@ -524,6 +544,28 @@ class MainViewModel(
             withContext(Dispatchers.Main) {
                 _currentLiveTranscription.value = processedText
                 _liveWaveform.value = emptyList()
+            }
+        }
+    }
+
+    /**
+     * Experimental in-app preview: every pass transcribes an overlapping rolling
+     * window. The reconciler commits only text preceding a confirmed overlap; the
+     * final full-recording pass above remains authoritative for history/copying.
+     */
+    private fun startStreamingPreview(model: DictationModel) {
+        streamingJob?.cancel()
+        streamingJob = viewModelScope.launch(Dispatchers.Default) {
+            val reconciler = StreamingTranscriptReconciler()
+            while (isActive && _isRecording.value) {
+                delay(STREAMING_INTERVAL_MS)
+                val window = audioRecorder.snapshotRecording(STREAMING_WINDOW_SAMPLES)
+                if (window.size < STREAMING_MIN_SAMPLES) continue
+
+                val preview = repository.transcribeAudio(window, model.id)
+                if (preview.isNotBlank() && isActive && _isRecording.value) {
+                    _currentLiveTranscription.value = reconciler.accept(preview).text
+                }
             }
         }
     }
@@ -649,6 +691,8 @@ class MainViewModel(
     }
 
     override fun onCleared() {
+        streamingJob?.cancel()
+        streamingJob = null
         if (ownsRecorderSession) {
             audioRecorder.stopRecording()
             ownsRecorderSession = false

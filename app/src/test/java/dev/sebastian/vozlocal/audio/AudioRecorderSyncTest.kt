@@ -5,7 +5,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,6 +52,47 @@ class AudioRecorderSyncTest {
     fun stopRecording_emptyArrayWhenNeverStarted() {
         val samples = AudioRecorder().stopRecording()
         assertTrue(samples.isEmpty())
+    }
+
+    @Test
+    fun snapshotRecording_emptyArrayWhenNeverStarted() {
+        val recorder = AudioRecorder()
+
+        assertTrue(recorder.snapshotRecording().isEmpty())
+        assertFalse(recorder.isRecording())
+    }
+
+    @Test
+    fun snapshotRecording_returnsIndependentNonConsumingCopy() {
+        val recorder = AudioRecorder()
+        appendSamplesForTest(recorder, shortArrayOf(0, 8192, -16384, 32767))
+
+        val first = recorder.snapshotRecording()
+        first[1] = -1f
+        val second = recorder.snapshotRecording()
+
+        assertArrayEquals(
+            floatArrayOf(0f, 0.25f, -0.5f, 32767 / 32768f),
+            second,
+            0.000001f
+        )
+        assertEquals("snapshot must not consume accumulated PCM", first.size, second.size)
+    }
+
+    @Test
+    fun snapshotRecording_canLimitCopyToLatestSamples() {
+        val recorder = AudioRecorder()
+        appendSamplesForTest(recorder, shortArrayOf(0, 4096, 8192, 12288))
+
+        assertArrayEquals(
+            floatArrayOf(0.25f, 0.375f),
+            recorder.snapshotRecording(maxSamples = 2),
+            0.000001f
+        )
+        assertTrue(recorder.snapshotRecording(maxSamples = 0).isEmpty())
+        assertThrows(IllegalArgumentException::class.java) {
+            recorder.snapshotRecording(maxSamples = -1)
+        }
     }
 
     @Test
@@ -119,5 +163,19 @@ class AudioRecorderSyncTest {
         // Releasing afterwards must also be safe.
         recorder.release()
         scope.cancel()
+    }
+
+    private fun appendSamplesForTest(recorder: AudioRecorder, samples: ShortArray) {
+        val buffer = AudioRecorder::class.java
+            .getDeclaredField("floatBuffer")
+            .apply { isAccessible = true }
+            .get(recorder) ?: error("AudioRecorder.floatBuffer must be initialized")
+        val appendPcm16 = buffer.javaClass
+            .getDeclaredMethod("appendPCM16", ShortArray::class.java, Int::class.javaPrimitiveType)
+            .apply { isAccessible = true }
+
+        synchronized(buffer) {
+            appendPcm16.invoke(buffer, samples, samples.size)
+        }
     }
 }

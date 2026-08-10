@@ -95,6 +95,14 @@ class DictationRepositoryPersistenceTest {
     }
 
     @Test
+    fun streamingDictation_defaultsToFalseAndRoundTrips() {
+        val repo = newRepository()
+        assertFalse(repo.getUseStreamingDictation())
+        repo.saveUseStreamingDictation(true)
+        assertTrue(repo.getUseStreamingDictation())
+    }
+
+    @Test
     fun cleanupMode_defaultsToBalancedAndRoundTrips() {
         val repo = newRepository()
         assertEquals(CleanupMode.BALANCED, repo.getCleanupMode())

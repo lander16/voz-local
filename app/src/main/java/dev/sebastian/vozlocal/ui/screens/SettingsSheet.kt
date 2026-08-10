@@ -63,6 +63,7 @@ fun SettingsSheet(
     val isVadModelReady by viewModel.isVadModelReady.collectAsStateWithLifecycle()
     val useVad by viewModel.useVad.collectAsStateWithLifecycle()
     val spokenPunctuationCommands by viewModel.spokenPunctuationCommands.collectAsStateWithLifecycle()
+    val useStreamingDictation by viewModel.useStreamingDictation.collectAsStateWithLifecycle()
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -673,6 +674,33 @@ fun SettingsSheet(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isVadModelReady) Color(0xFF10B981) else TextSecondary
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SurfaceCard)
+                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .toggleable(
+                            value = useStreamingDictation,
+                            role = Role.Switch,
+                            onValueChange = { viewModel.setUseStreamingDictation(it) }
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(text = "Streaming dictation (experimental)", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Shows text while you speak; may revise the latest words.", fontSize = 13.sp, color = TextSecondary)
+                    }
+                    Switch(
+                        checked = useStreamingDictation,
+                        onCheckedChange = null,
+                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                     )
                 }
 

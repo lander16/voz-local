@@ -43,6 +43,12 @@ private class FastFloatBuffer(initialCapacity: Int = SAMPLE_RATE * 15) {
         return buffer.copyOf(size)
     }
 
+    fun snapshotLast(maxSamples: Int): FloatArray {
+        require(maxSamples >= 0) { "maxSamples must be non-negative" }
+        val sampleCount = minOf(size, maxSamples)
+        return buffer.copyOfRange(size - sampleCount, size)
+    }
+
     fun reset() {
         size = 0
     }
@@ -163,6 +169,23 @@ class AudioRecorder {
                 floatBuffer.reset()
                 return AudioSilenceTrimmer.trim(samples)
             }
+        }
+    }
+
+    /**
+     * Returns a point-in-time copy of the raw PCM accumulated by the active session.
+     *
+     * This does not stop capture, trim silence, or consume samples. Callers implementing
+     * opt-in streaming can request only their rolling window via [maxSamples], avoiding an
+     * ever-growing copy for long recordings. The returned array never aliases the recorder's
+     * internal buffer and is therefore safe to transcribe or mutate on another thread.
+     *
+     * When no session has produced audio yet this returns an empty array. The final, trimmed
+     * recording remains available through [stopRecording] exactly as before.
+     */
+    fun snapshotRecording(maxSamples: Int = Int.MAX_VALUE): FloatArray {
+        synchronized(floatBuffer) {
+            return floatBuffer.snapshotLast(maxSamples)
         }
     }
 
