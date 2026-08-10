@@ -6,16 +6,16 @@
 [![Language](https://img.shields.io/badge/Language-Kotlin-purple.svg?style=flat&logo=kotlin)](https://kotlinlang.org)
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-blue.svg?style=flat&logo=jetpackcompose)](https://developer.android.com/jetpack/compose)
 [![Engine](https://img.shields.io/badge/Engine-whisper.cpp-orange.svg?style=flat)](https://github.com/ggerganov/whisper.cpp)
-[![Polisher](https://img.shields.io/badge/AI%20Polisher-Local%20Rule--Based-red.svg?style=flat)](#architecture--tech-stack)
+[![Cleanup](https://img.shields.io/badge/Text%20Cleanup-Local%20Rule--Based-red.svg?style=flat)](#architecture--tech-stack)
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline-brightgreen.svg?style=flat)](#privacy--security)
 
-**VozLocal** is a privacy-first, ultra-fast Android application for local speech-to-text dictation and audio file transcription. It runs on-device using quantized OpenAI Whisper GGUF/bin models via `whisper.cpp` and a local rule-based text polisher — **no cloud APIs, no telemetry, no third-party SDKs that phone home**. Network access is used only to download model files. A global floating accessibility overlay lets you dictate into any app on the device.
+**VozLocal** is a privacy-first, ultra-fast Android application for local speech-to-text dictation and audio file transcription. It runs on-device using quantized OpenAI Whisper GGUF/bin models via `whisper.cpp` and local rule-based text cleanup — **no cloud APIs, no telemetry, no third-party SDKs that phone home**. Network access is used only to download model files. A global floating accessibility overlay lets you dictate into any app on the device.
 
 ---
 
 ## 📱 Application Screenshots
 
-| Live Dictate | AI Speech Models | Shared Audio File |
+| Live Dictate | Speech Models | Shared Audio File |
 | :---: | :---: | :---: |
 | <img src="docs/images/screen_dictate.png" width="280"/> | <img src="docs/images/screen_models.png" width="280"/> | <img src="docs/images/screen_shared.png" width="280"/> |
 
@@ -30,10 +30,10 @@
 - 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). No cloud APIs or subscriptions.
 - 🎈 **Global Floating Dictation Overlay** — Accessibility Service + `WindowManager` show a floating microphone button over **any application** (WhatsApp, Gmail, Chrome, Notes). Recognized text is injected directly into the focused input field. The button is hidden when no text field is focused.
 - 📁 **Shared Audio File Transcription** — Receives shared audio files via Android `SEND` intents (WhatsApp voice notes, Voice Memos, podcast snippets) and transcribes them offline with `MediaCodec` + PCM.
-- 🧹 **Local Text Polisher** — A pure-Kotlin rule-based engine strips filler words ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies smart capitalization/punctuation. Runs on `Dispatchers.Default`, no model file required. The `QwenEngine` is the final implementation — the LLM backend was scoped out.
-- 🎯 **Optimized On-Device STT** — The project-owned JNI shim (`app/src/main/jni/vozlocal-jni/vozlocal-jni.c`) exposes the full `whisper_full_params` surface to Kotlin via `WhisperParams`: explicit language, an optional initial prompt (Spanish gets a default priming prompt), `single_segment` for low-latency dictation, tunable no-speech / log-probability / entropy rejection thresholds, optional beam search, and native **Silero VAD** (~2 MB, downloaded at app start and user-toggleable). A post-transcription `HallucinationFilter` strips known outro phrases only at the tail and collapses verbatim repeated sentences. Thresholds, initial prompt, VAD, and spoken punctuation commands are configurable in **Settings → AI Engine**, persisted to SharedPreferences. If the selected model is already downloaded, it is preloaded in the background at process start to reduce first-dictation latency.
+- 🧹 **Local Text Cleanup Modes** — A pure-Kotlin rule-based engine strips safe filler vocalizations ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies capitalization/punctuation. It has **Minimal**, **Balanced** (default), and **Aggressive** modes, all persisted in settings. No LLM or extra model file is used; the historical `QwenEngine` class name now refers to this local cleanup implementation.
+- 🎯 **Optimized On-Device STT** — The project-owned JNI shim (`app/src/main/jni/vozlocal-jni/vozlocal-jni.c`) exposes the full `whisper_full_params` surface to Kotlin via `WhisperParams`: explicit language, an optional initial prompt (Spanish gets a default priming prompt), `single_segment` for low-latency dictation, tunable no-speech / log-probability / entropy rejection thresholds, optional beam search, and native **Silero VAD** (~0.9 MB, downloaded from `ggml-org/whisper-vad` and user-toggleable). A post-transcription `HallucinationFilter` strips known outro phrases only at the tail and collapses verbatim repeated sentences. Thresholds, initial prompt, VAD, spoken punctuation commands, and cleanup mode are configurable in **Settings → Speech engine**, persisted to SharedPreferences. If the selected model is already downloaded, it is preloaded in the background at process start to reduce first-dictation latency.
 - 📚 **Personal Dictation Dictionary** — Vocabulary biasing and phonetic-replacement rules. Compiled regexes are cached and invalidated on insert/delete, so post-processing stays O(words) per transcription.
-- ⚡ **Local Post-Processing Pipeline** — Smart pause correction, auto-capitalization, dictionary replacement, and optional polisher — all stitched together in `DictationRepository.postProcessText`.
+- ⚡ **Local Post-Processing Pipeline** — Smart pause correction, auto-capitalization, dictionary replacement, spoken punctuation commands, hallucination filtering, and cleanup modes — all stitched together in `DictationRepository.postProcessText`.
 - 📊 **Performance Stats & Analytics** — Per-day WPM, total speak time, and accuracy breakdown per model, backed by Room.
 - 💾 **Persistent Transcription History** — Room database with a paged query (`LIMIT 200`) so the History tab never re-emits the entire table on insert.
 - 🎨 **Modern Material 3 Jetpack Compose UI** — `ModalNavigationDrawer` + `ModalBottomSheet` settings + light/dark/system theming + canvas audio waveform visualizer + press-scale micro-interactions (now via `pointerInput`, not the previous clickable-swallowing bug).
@@ -109,7 +109,7 @@ Compose Screen
                  ├─ WhisperEngine     (JNI bridge to whisper.cpp)
                  ├─ AudioDecoder      (MediaCodec + PCM resample)
                  ├─ ModelDownloader   (OkHttp + SHA-256 verify)
-                 ├─ QwenEngine        (rule-based polisher)
+                 ├─ QwenEngine        (rule-based cleanup)
                  └─ Room DAOs         (model / history / dictionary / stats)
 ```
 
@@ -118,7 +118,7 @@ Compose Screen
 `DictationAccessibilityService` does **not** re-implement recording or transcription. It:
 1. Borrows the same `AudioRecorder` singleton from `VozLocalApp`.
 2. Uses its own `serviceScope` for floating-overlay-only work.
-3. Queries `repository.allModels.first()` and `repository.postProcessText(..., useAiPolisher = repository.getUseAiPolisher())` to share the canonical post-processing pipeline with the in-app ViewModel.
+3. Queries `repository.allModels.first()` and `repository.postProcessText(...)` with the persisted cleanup settings to share the canonical post-processing pipeline with the in-app ViewModel.
 
 A `SharedPreferences.OnSharedPreferenceChangeListener` is registered in the service for `show_only_on_input` so overlay visibility updates instantly when the user toggles the setting in the app.
 
@@ -130,7 +130,7 @@ A `SharedPreferences.OnSharedPreferenceChangeListener` is registered in the serv
 | **UI Framework** | Jetpack Compose (Material 3, BOM 2024.09.00) |
 | **Architecture** | MVVM, Kotlin Coroutines, `StateFlow`, process-scoped singletons |
 | **STT Engine** | `whisper.cpp` (q8_0 / q5_0 GGML quantized) |
-| **AI Polisher** | Local rule-based Kotlin engine (`QwenEngine`) — pure Kotlin, no model file |
+| **Text Cleanup** | Local rule-based Kotlin engine (`QwenEngine`) — Minimal / Balanced / Aggressive modes, pure Kotlin, no model file |
 | **Persistence** | Room 2.7.0 (version 2, with stub `MIGRATION_1_2`, no destructive fallback) |
 | **Audio Capture** | `AudioRecord` API (16 kHz mono PCM, `VOICE_RECOGNITION` source) |
 | **Audio Decoding** | `MediaCodec` + `MediaExtractor`; drains output EOS, handles decoder PCM format changes, downmixes channels, and resamples to 16 kHz |
@@ -213,7 +213,7 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 ### 6. Settings
 - **Appearance** — Light, Dark, or System. ("System" follows the OS setting via `isSystemInDarkTheme()` inside `MyApplicationTheme`.)
 - **Language** — the same set as in the Dictate tab.
-- **Post-processing** — Smart pause correction, auto-capitalization, dictionary, optional polisher, optional spoken punctuation commands, and VAD usage. These settings are persisted to SharedPreferences.
+- **Post-processing** — Smart pause correction, auto-capitalization, dictionary, local cleanup mode (Minimal / Balanced / Aggressive), spoken punctuation commands, and VAD usage. These settings are persisted to SharedPreferences.
 - **Overlay** — show floating button only when a text field is focused.
 - **History** — opt-out of saving transcripts, or cap history at 5 / 10 / 20 / 50 / unlimited.
 - **Done** — closes the sheet (settings are saved instantly on toggle).
@@ -242,9 +242,12 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 | Dictionary regexes | Re-compiled every transcription | Hash-keyed cache, invalidated on insert/delete |
 | Download progress | Wrote Room on every 1% (100 writes for an 800 MB model) | In-memory `MutableStateFlow<Map<String,Float>>`; DB written only on completion/failure |
 | Model downloads | Direct writes to final path + placeholder SHA strings | Unique `.part` files, complete-length/size validation, atomic move, explicit unverified state until real SHA-256 hashes are pinned |
+| Silero VAD download | Broken upstream URL / oversized validation floor | Downloads from `ggml-org/whisper-vad`, accepts the current ~0.9 MB asset, and keeps VAD optional/user-toggleable |
 | History list | Full table re-emit on every insert | `LIMIT 200` paged flow for the UI; full table retained for stats |
 | Filter toggles | Reset on every app restart | Persisted to SharedPreferences via proper setters |
-| `postProcessText` signature | Fixed booleans | `useAiPolisher: Boolean = false` parameter, with `QwenEngine` running the new rule-based polisher |
+| Cleanup modes | One optional cleanup toggle | Persisted Minimal / Balanced / Aggressive modes exposed in ViewModel and Settings; Dictate tab shows the current mode |
+| Spoken punctuation commands | Could replace punctuation words inside normal prose | Phrase-isolated commands, so dictation like “question mark is useful” is preserved while standalone commands still insert punctuation |
+| `postProcessText` signature | Fixed booleans | Cleanup mode and spoken punctuation settings flow through the shared repository pipeline used by the app and overlay |
 | Database schema | `fallbackToDestructiveMigration(dropAllTables = true)` | `addMigrations(MIGRATION_1_2)`, no destructive fallback; version bumped to 2 |
 | Accessibility service | `typeAllMask` + key-filter | Narrowed to `typeViewFocused | typeWindowStateChanged | typeWindowContentChanged` |
 | Backup rules | Empty TODOs → default behavior leaked 1.5 GB models to cloud | `models/` + database explicitly excluded |
@@ -253,6 +256,7 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 | `minSdk` / `targetSdk` | 24 / 36 (unreleased) | 26 / 36 (with a comment to pin to 35 once AGP 9.3.1 is verified on 35) |
 | `compileSdk` | `release(36) { minorApiLevel = 1 }` | Same (SDK 36 still tracked) |
 | `WhisperEngine` | Hardcoded `language="en"`, no VAD, no initial_prompt, no threshold tuning, single_segment=false | Project-owned JNI shim exposes language, initial_prompt, single_segment, no_speech_thold / logprob_thold / entropy_thold, beam_size, and optional Silero VAD. Defaults are tuned for Spanish dictation (no_speech_thold 0.4, logprob_thold -0.5). Live dictation uses `single_segment=true`; shared-file keeps multi-segment for the timeline UI. Hallucination post-filter strips known loop phrases only at the tail. |
+| Verification coverage | Sparse post-processing coverage | Unit tests now cover cleanup modes, cleanup-mode persistence, punctuation command isolation, multilingual capitalization, and VAD download integrity behavior |
 
 ---
 
