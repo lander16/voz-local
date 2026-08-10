@@ -31,7 +31,7 @@
 - 🎈 **Global Floating Dictation Overlay** — Accessibility Service + `WindowManager` show a floating microphone button over **any application** (WhatsApp, Gmail, Chrome, Notes). Recognized text is injected directly into the focused input field. The button is hidden when no text field is focused.
 - 📁 **Shared Audio File Transcription** — Receives shared audio files via Android `SEND` intents (WhatsApp voice notes, Voice Memos, podcast snippets) and transcribes them offline with `MediaCodec` + PCM.
 - 🧹 **Local Text Cleanup Modes** — A pure-Kotlin rule-based engine strips safe filler vocalizations ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies capitalization/punctuation. It has **Minimal**, **Balanced** (default), and **Aggressive** modes, all persisted in settings. No LLM or extra model file is used; the historical `QwenEngine` class name now refers to this local cleanup implementation.
-- 🎯 **Optimized On-Device STT** — The project-owned JNI shim (`app/src/main/jni/vozlocal-jni/vozlocal-jni.c`) exposes the full `whisper_full_params` surface to Kotlin via `WhisperParams`: explicit language, an optional initial prompt (Spanish gets a default priming prompt), `single_segment` for low-latency dictation, tunable no-speech / log-probability / entropy rejection thresholds, optional beam search, and native **Silero VAD** (~0.9 MB, downloaded from `ggml-org/whisper-vad` and user-toggleable). A post-transcription `HallucinationFilter` strips known outro phrases only at the tail and collapses verbatim repeated sentences. Thresholds, initial prompt, VAD, spoken punctuation commands, and cleanup mode are configurable in **Settings → Speech engine**, persisted to SharedPreferences. If the selected model is already downloaded, it is preloaded in the background at process start to reduce first-dictation latency.
+- 🎯 **Optimized On-Device STT** — The project-owned JNI shim (`app/src/main/jni/vozlocal-jni/vozlocal-jni.c`) exposes high-value `whisper_full_params` controls to Kotlin: explicit language, an optional initial prompt (Spanish gets a default priming prompt), low-latency single-window dictation, confidence thresholds, temperature fallback, optional beam search, decoder context, and native **Silero VAD** (~0.9 MB, downloaded from `ggml-org/whisper-vad` and user-toggleable). Short dictations use the low-latency path; recordings over 25 seconds switch to multi-window decoding so Whisper processes the complete recording. A post-transcription `HallucinationFilter` strips known outro phrases only at the tail and collapses verbatim repeated sentences. If the selected model is already downloaded, it is preloaded in the background at process start to reduce first-dictation latency.
 - 📚 **Personal Dictation Dictionary** — Vocabulary biasing and phonetic-replacement rules. Compiled regexes are cached and invalidated on insert/delete, so post-processing stays O(words) per transcription.
 - ⚡ **Local Post-Processing Pipeline** — Smart pause correction, auto-capitalization, dictionary replacement, spoken punctuation commands, hallucination filtering, and cleanup modes — all stitched together in `DictationRepository.postProcessText`.
 - 📊 **Performance Stats & Analytics** — Per-day WPM, total speak time, and accuracy breakdown per model, backed by Room.
@@ -157,6 +157,22 @@ Models are downloaded on-demand from Hugging Face directly to `context.filesDir/
 
 ---
 
+## ⚖️ Accuracy & Performance
+
+VozLocal optimizes for complete, accurate local transcription before micro-latency:
+
+- **Capture integrity** — stopping the microphone stops and joins the PCM reader before samples are copied, so a final in-flight audio block cannot be lost.
+- **Long dictation safety** — dictations up to 25 seconds retain Whisper’s fast single-window path. Longer recordings automatically enable multi-window decoding, avoiding 30-second-window truncation.
+- **Accuracy-oriented decoding** — the default no-speech and log-probability thresholds are `0.6` and `-1.0`; a `0.2` temperature increment lets Whisper retry uncertain passages. Advanced thresholds remain configurable in Settings.
+- **Long-file coherence** — shared audio uses timestamps, multi-window decoding, and previous decoder context rather than treating every Whisper window as unrelated speech.
+- **Measurable comparisons** — the `benchmark` package provides deterministic Unicode-aware WER/CER scoring and records model, quantization, threads, VAD, timing, real-time factor, optional memory, and thermal status. Model labels in the UI and table are guidance, not device-specific measurements.
+
+### Pixel 8 Pro baseline
+
+For accuracy-first use, benchmark `large-v3-turbo q5_0` against `small q8_0` on representative recordings before choosing a default. Test 3–6 threads, cold and warm starts, and sustained 10-minute sessions; select the configuration with the best WER/CER that remains comfortably faster than real time without thermal throttling. The app supplies benchmark foundations, but does not yet ship a benchmark UI or hard-code unverified Pixel measurements.
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -255,18 +271,19 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 | Dependencies | Firebase BOM, Retrofit, Moshi, logging-interceptor (all unused) | Removed; only Compose, Lifecycle, Room, Coroutines, OkHttp, Accompanist, Robolectric/Roborazzi |
 | `minSdk` / `targetSdk` | 24 / 36 (unreleased) | 26 / 36 (with a comment to pin to 35 once AGP 9.3.1 is verified on 35) |
 | `compileSdk` | `release(36) { minorApiLevel = 1 }` | Same (SDK 36 still tracked) |
-| `WhisperEngine` | Hardcoded `language="en"`, no VAD, no initial_prompt, no threshold tuning, single_segment=false | Project-owned JNI shim exposes language, initial_prompt, single_segment, no_speech_thold / logprob_thold / entropy_thold, beam_size, and optional Silero VAD. Defaults are tuned for Spanish dictation (no_speech_thold 0.4, logprob_thold -0.5). Live dictation uses `single_segment=true`; shared-file keeps multi-segment for the timeline UI. Hallucination post-filter strips known loop phrases only at the tail. |
+| `WhisperEngine` | Hardcoded `language="en"`, no VAD, no initial_prompt, no threshold tuning, single_segment=false | Project-owned JNI shim exposes language, initial_prompt, single_segment, no_speech_thold / logprob_thold / entropy_thold, beam_size, temperature fallback, decoder context, and optional Silero VAD. Accuracy-first defaults use `0.6` / `-1.0` rejection thresholds and a `0.2` fallback increment. Live dictation stays single-window only through 25 seconds; longer recordings and shared files use multi-window decoding. Hallucination post-filter strips known loop phrases only at the tail. |
 | Verification coverage | Sparse post-processing coverage | Unit tests now cover cleanup modes, cleanup-mode persistence, punctuation command isolation, multilingual capitalization, and VAD download integrity behavior |
 
 ---
 
 ## 🛣️ Roadmap
 
-**Deferred from the STT optimization pass (intentionally out of scope — see commit `3d1307c` and the `[J]` notes below):**
+**Deferred from the current STT correctness and measurement pass:**
 
 - [ ] **[J] GPU / Vulkan / OpenCL delegate on Android** — vendored whisper.cpp is CPU-only. Switching to GPU would require forking the build, adding `GGML_VULKAN=ON` / `GGML_OPENCL=ON` to the project-owned CMakeLists, and shipping per-driver fallbacks. Vulkan on Android is immature, the community has reports of bad WER regressions on some Adreno/Mali GPUs, and it adds ~15 MB to the APK. Net benefit is unclear.
-- [ ] **[J] Word-by-word streaming for long recordings** — VAD + `single_segment=true` already gives the per-utterance latency win that matters for dictation. Real token-by-token streaming requires a persistent decoder state (`whisper_full_with_state`), a token-diffing renderer in Compose, and a small `WhisperContext` per session. Significant complexity for marginal UX value at the typical 10-30 s dictation length.
-- [ ] **[J] Audio resampling quality** — `AudioDecoder` now uses weighted averaging when downsampling to reduce obvious aliasing without new dependencies. A windowed-sinc (Kaiser) resampler would still be better for maximum imported-audio fidelity.
+- [ ] **Word-by-word streaming for long recordings** — current live transcription starts after recording stops. Real incremental transcription needs VAD-aligned overlapping windows, stable-text reconciliation, and bounded decoder context.
+- [ ] **Audio resampling quality** — replace the current linear resampler with a streaming band-limited/windowed-sinc resampler before 16 kHz Whisper inference; select the cleanest stereo channel rather than always averaging channels.
+- [ ] **Pixel calibration UI** — run the benchmark matrix for model, quantization, thread count, VAD, audio source, and decoding profile; persist the best sustainable configuration per device.
 
 **Open items:**
 
