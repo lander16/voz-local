@@ -63,6 +63,8 @@ fun DictateTab(
     val liveText by viewModel.currentLiveTranscription.collectAsStateWithLifecycle()
     val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
     val isModelLoading by viewModel.isModelLoading.collectAsStateWithLifecycle()
+    val vadDownloadUiState by viewModel.vadDownloadUiState.collectAsStateWithLifecycle()
+    var confirmVadDelete by remember { mutableStateOf(false) }
 
     // Modifier Switches
     val smartPunctuation by viewModel.smartPunctuation.collectAsStateWithLifecycle()
@@ -247,6 +249,172 @@ fun DictateTab(
                         fontWeight = FontWeight.ExtraBold,
                         color = TextSecondary
                     )
+                }
+            }
+        }
+
+        // Silero VAD status / download card
+        item {
+            val sizeText = vadDownloadUiState.sizeBytes?.let(::formatVadSize)
+            if (confirmVadDelete) {
+                AlertDialog(
+                    onDismissRequest = { confirmVadDelete = false },
+                    title = { Text("Delete VAD model?") },
+                    text = { Text("This removes the small Silero VAD file from local storage. You can download it again later.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            viewModel.deleteVadModel()
+                            confirmVadDelete = false
+                        }) { Text("Delete", color = TertiaryColor) }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmVadDelete = false }) { Text("Cancel") } }
+                )
+            }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, if (vadDownloadUiState.isReady) Color(0xFF10B981).copy(alpha = 0.35f) else GlassBorder)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(PrimaryColor.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = null,
+                                    tint = PrimaryColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Silero VAD model",
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 14.sp,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "Small (~2 MB) silence handling model for longer dictations and shared audio",
+                                    fontSize = 12.sp,
+                                    color = TextSecondary,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+
+                        StatusPill(
+                            text = when {
+                                vadDownloadUiState.isReady -> "Ready"
+                                vadDownloadUiState.isDownloading -> "Downloading"
+                                vadDownloadUiState.isError -> "Needs retry"
+                                else -> "Not downloaded"
+                            },
+                            active = vadDownloadUiState.isReady || vadDownloadUiState.isDownloading
+                        )
+                    }
+
+                    when {
+                        vadDownloadUiState.isDownloading -> {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(
+                                        text = vadDownloadUiState.statusLabel,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = PrimaryColor
+                                    )
+                                    Text(
+                                        text = "${(vadDownloadUiState.progress * 100).toInt()}%",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = PrimaryColor
+                                    )
+                                }
+                                LinearProgressIndicator(
+                                    progress = { vadDownloadUiState.progress.coerceIn(0f, 1f) },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = PrimaryColor,
+                                    trackColor = SurfaceCard
+                                )
+                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                    Text(
+                                        text = sizeText?.let { "${formatVadSize((vadDownloadUiState.progress * (vadDownloadUiState.sizeBytes ?: 0L)).toLong())} / $it" } ?: "Downloading…",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary
+                                    )
+                                }
+                            }
+                        }
+
+                        vadDownloadUiState.isReady -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(text = "Ready to improve silence handling", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                    Text(text = "Used automatically when VAD is enabled in settings.", fontSize = 12.sp, color = TextSecondary)
+                                }
+                                OutlinedButton(
+                                    onClick = { confirmVadDelete = true },
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TertiaryColor),
+                                    border = BorderStroke(1.dp, TertiaryColor.copy(alpha = 0.4f)),
+                                    modifier = Modifier.heightIn(min = 48.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Delete")
+                                }
+                            }
+                        }
+
+                        else -> {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = vadDownloadUiState.statusMessage,
+                                    fontSize = 12.sp,
+                                    color = TextSecondary,
+                                    lineHeight = 16.sp
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Button(
+                                        onClick = { viewModel.downloadVadModel() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier.heightIn(min = 48.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Download VAD", color = Color.White, fontWeight = FontWeight.Bold)
+                                    }
+                                    if (vadDownloadUiState.isError) {
+                                        OutlinedButton(
+                                            onClick = { viewModel.retryVadDownload() },
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryColor),
+                                            border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.4f)),
+                                            modifier = Modifier.heightIn(min = 48.dp)
+                                        ) {
+                                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("Retry")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -680,6 +848,24 @@ fun DictateTab(
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
     }
+}
+
+@Composable
+private fun StatusPill(text: String, active: Boolean) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(100.dp))
+            .background(if (active) PrimaryColor.copy(alpha = 0.15f) else SurfaceCard)
+            .border(BorderStroke(1.dp, if (active) PrimaryColor.copy(alpha = 0.35f) else GlassBorder), RoundedCornerShape(100.dp))
+            .padding(horizontal = 10.dp, vertical = 5.dp)
+    ) {
+        Text(text = text, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) PrimaryColor else TextSecondary)
+    }
+}
+
+private fun formatVadSize(bytes: Long): String {
+    val mb = bytes / 1024f / 1024f
+    return String.format(Locale.US, "%.1f MB", mb)
 }
 
 @Composable

@@ -29,6 +29,13 @@ import androidx.core.content.edit
 
 private const val TAG = "DictationRepository"
 
+enum class VadDownloadStatus {
+    READY,
+    DOWNLOADING,
+    ERROR,
+    NOT_DOWNLOADED
+}
+
 class DictationRepository(private val context: Context) {
     private val database = AppDatabase.getDatabase(context)
     private val modelDao = database.modelDao()
@@ -55,6 +62,21 @@ class DictationRepository(private val context: Context) {
 
     private val _vadModelPath = MutableStateFlow<String?>(null)
     val vadModelPath: StateFlow<String?> = _vadModelPath.asStateFlow()
+
+    private val _vadDownloadProgress = MutableStateFlow(0f)
+    val vadDownloadProgress: StateFlow<Float> = _vadDownloadProgress.asStateFlow()
+
+    private val _vadDownloadStatus = MutableStateFlow(VadDownloadStatus.NOT_DOWNLOADED)
+    val vadDownloadStatus: StateFlow<VadDownloadStatus> = _vadDownloadStatus.asStateFlow()
+
+    private val _vadStatusLabel = MutableStateFlow("Not downloaded")
+    val vadStatusLabel: StateFlow<String> = _vadStatusLabel.asStateFlow()
+
+    private val _vadStatusMessage = MutableStateFlow("Silero VAD model is not downloaded.")
+    val vadStatusMessage: StateFlow<String> = _vadStatusMessage.asStateFlow()
+
+    private val _vadModelSizeBytes = MutableStateFlow<Long?>(null)
+    val vadModelSizeBytes: StateFlow<Long?> = _vadModelSizeBytes.asStateFlow()
 
     // True only while a Whisper model is actually loaded in the native engine.
     private val _modelLoaded = MutableStateFlow(false)
@@ -210,11 +232,41 @@ class DictationRepository(private val context: Context) {
      * kicked off at app start and finishes in the background.
      */
     suspend fun ensureVadModel() {
-        val path = modelDownloader.downloadVadModel()
+        _vadDownloadStatus.value = VadDownloadStatus.DOWNLOADING
+        _vadStatusLabel.value = "Downloading"
+        _vadStatusMessage.value = "Downloading Silero VAD model..."
+        _vadDownloadProgress.value = 0.01f
+        val path = modelDownloader.downloadVadModel(
+            onProgress = { progress -> _vadDownloadProgress.value = progress.coerceIn(0f, 1f) },
+            onContentLength = { bytes -> _vadModelSizeBytes.value = bytes }
+        )
         if (path != null) {
             _vadModelPath.value = path
             _vadModelReady.value = true
+            _vadDownloadProgress.value = 1f
+            _vadDownloadStatus.value = VadDownloadStatus.READY
+            _vadStatusLabel.value = "Ready"
+            _vadStatusMessage.value = "Silero VAD model is ready."
+            _vadModelSizeBytes.value = modelDownloader.vadModelFile().length().takeIf { it > 0L } ?: _vadModelSizeBytes.value
+        } else {
+            _vadModelReady.value = false
+            _vadModelPath.value = null
+            _vadDownloadProgress.value = 0f
+            _vadDownloadStatus.value = VadDownloadStatus.ERROR
+            _vadStatusLabel.value = "Download failed"
+            _vadStatusMessage.value = "Silero VAD model could not be downloaded."
         }
+    }
+
+    suspend fun deleteVadModel() = withContext(Dispatchers.IO) {
+        modelDownloader.deleteVadModel()
+        _vadModelReady.value = false
+        _vadModelPath.value = null
+        _vadDownloadProgress.value = 0f
+        _vadDownloadStatus.value = VadDownloadStatus.NOT_DOWNLOADED
+        _vadStatusLabel.value = "Not downloaded"
+        _vadStatusMessage.value = "Silero VAD model is not downloaded."
+        _vadModelSizeBytes.value = ModelUrls.minimumValidBytes("silero_vad")
     }
 
     /**
@@ -260,9 +312,14 @@ class DictationRepository(private val context: Context) {
     init {
         // If the VAD model is already on disk (e.g. from a previous run), publish it now.
         val vadFile = modelDownloader.vadModelFile()
-        if (vadFile.exists() && vadFile.length() > 0L) {
+        _vadModelSizeBytes.value = vadFile.length().takeIf { it > 0L } ?: ModelUrls.minimumValidBytes("silero_vad")
+        if (ModelUrls.isValidDownloadedFile(vadFile, "silero_vad")) {
             _vadModelPath.value = vadFile.absolutePath
             _vadModelReady.value = true
+            _vadDownloadProgress.value = 1f
+            _vadDownloadStatus.value = VadDownloadStatus.READY
+            _vadStatusLabel.value = "Ready"
+            _vadStatusMessage.value = "Silero VAD model is ready."
         }
 
         // Model seeding/sync is owned by VozLocalApp.applicationScope so startup

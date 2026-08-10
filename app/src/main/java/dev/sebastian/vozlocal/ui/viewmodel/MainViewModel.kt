@@ -12,6 +12,7 @@ import dev.sebastian.vozlocal.data.model.DictationStat
 import dev.sebastian.vozlocal.data.model.DictionaryWord
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.data.repository.DictationRepository
+import dev.sebastian.vozlocal.data.repository.VadDownloadStatus
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.ArrayList
@@ -31,6 +32,18 @@ data class ModelDownloadUiState(
     val etaSeconds: Int? = null,
     val verificationLabel: String = "Unverified",
     val statusLabel: String = "Preparing"
+)
+
+data class VadDownloadUiState(
+    val progress: Float = 0f,
+    val status: VadDownloadStatus = VadDownloadStatus.NOT_DOWNLOADED,
+    val statusLabel: String = "Not downloaded",
+    val statusMessage: String = "Silero VAD model is not downloaded.",
+    val sizeBytes: Long? = null,
+    val isReady: Boolean = false,
+    val isDownloading: Boolean = false,
+    val isError: Boolean = false,
+    val path: String? = null
 )
 
 class MainViewModel(
@@ -132,6 +145,35 @@ class MainViewModel(
     // Silero VAD + model-loading state (updated by the app-start background work)
     val isVadModelReady: StateFlow<Boolean> = repository.isVadModelReady
     val vadModelPath: StateFlow<String?> = repository.vadModelPath
+    val vadDownloadProgress: StateFlow<Float> = repository.vadDownloadProgress
+    val vadDownloadStatus: StateFlow<VadDownloadStatus> = repository.vadDownloadStatus
+    val vadStatusLabel: StateFlow<String> = repository.vadStatusLabel
+    val vadStatusMessage: StateFlow<String> = repository.vadStatusMessage
+    val vadModelSizeBytes: StateFlow<Long?> = repository.vadModelSizeBytes
+    val vadDownloadUiState: StateFlow<VadDownloadUiState> = combine(
+        listOf(
+            repository.vadDownloadProgress.map { it as Any? },
+            repository.vadDownloadStatus.map { it as Any? },
+            repository.vadStatusLabel.map { it as Any? },
+            repository.vadStatusMessage.map { it as Any? },
+            repository.vadModelSizeBytes.map { it as Any? },
+            repository.isVadModelReady.map { it as Any? },
+            repository.vadModelPath.map { it as Any? }
+        )
+    ) { values ->
+        val status = values[1] as VadDownloadStatus
+        VadDownloadUiState(
+            progress = values[0] as Float,
+            status = status,
+            statusLabel = values[2] as String,
+            statusMessage = values[3] as String,
+            sizeBytes = values[4] as Long?,
+            isReady = values[5] as Boolean,
+            isDownloading = status == VadDownloadStatus.DOWNLOADING,
+            isError = status == VadDownloadStatus.ERROR,
+            path = values[6] as String?
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), VadDownloadUiState())
 
     // The engine can load on demand when recording stops. Do not block dictation
     // just because no model is preloaded yet; missing downloads are reported as
@@ -216,6 +258,20 @@ class MainViewModel(
     fun setSpokenPunctuationCommands(value: Boolean) {
         repository.saveSpokenPunctuationCommands(value)
         spokenPunctuationCommands.value = value
+    }
+
+    fun downloadVadModel() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.ensureVadModel()
+        }
+    }
+
+    fun retryVadDownload() = downloadVadModel()
+
+    fun deleteVadModel() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteVadModel()
+        }
     }
 
     fun setSaveHistory(value: Boolean) {

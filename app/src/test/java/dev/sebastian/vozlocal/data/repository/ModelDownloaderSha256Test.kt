@@ -3,6 +3,7 @@ package dev.sebastian.vozlocal.data.repository
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -70,5 +71,15 @@ class ModelDownloaderSha256Test {
         } finally {
             file.delete()
         }
+    }
+
+    @Test
+    fun vadModelFile_usesSileroVadValidationIdAndStableName() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val file = ModelDownloader(context).vadModelFile()
+
+        assertEquals("ggml-silero-vad.bin", file.name)
+        assertFalse(ModelUrls.isValidDownloadedFile(file, "silero_vad"))
+        assertTrue((ModelUrls.minimumValidBytes("silero_vad") ?: 0L) > 0L)
     }
 }

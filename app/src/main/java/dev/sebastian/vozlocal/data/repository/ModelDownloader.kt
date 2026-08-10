@@ -23,7 +23,7 @@ object ModelUrls {
         "whisper_small" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q8_0.bin",
         "whisper_medium" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q8_0.bin",
         "whisper_large_v3_turbo" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
-        "silero_vad" to "https://huggingface.co/ggml-org/whisper.cpp/resolve/main/ggml-silero-v6.2.0.bin"
+        "silero_vad" to "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
     )
 
     private val MIN_VALID_BYTES = mapOf(
@@ -32,7 +32,7 @@ object ModelUrls {
         "whisper_small" to 200_000_000L,
         "whisper_medium" to 650_000_000L,
         "whisper_large_v3_turbo" to 430_000_000L,
-        "silero_vad" to 1_000_000L
+        "silero_vad" to 800_000L
     )
 
     fun getModelFile(context: Context, modelId: String): File {
@@ -57,6 +57,8 @@ object ModelUrls {
         val minBytes = MIN_VALID_BYTES[modelId] ?: 1_000_000L
         return file.exists() && file.length() >= minBytes
     }
+
+    fun minimumValidBytes(modelId: String): Long? = MIN_VALID_BYTES[modelId]
 }
 
 class ModelDownloader(private val context: Context) {
@@ -104,17 +106,29 @@ class ModelDownloader(private val context: Context) {
      * Downloads the Silero VAD model (~2 MB) if not already present. Returns the
      * absolute local path on success, null on failure.
      */
-    suspend fun downloadVadModel(): String? {
+    suspend fun downloadVadModel(
+        onProgress: suspend (Float) -> Unit = {},
+        onContentLength: suspend (Long) -> Unit = {}
+    ): String? {
         val file = vadModelFile()
         if (ModelUrls.isValidDownloadedFile(file, "silero_vad")) {
             Log.i(TAG, "VAD model already present at ${file.absolutePath}")
+            onContentLength(file.length())
+            onProgress(1.0f)
             return file.absolutePath
         }
+        deleteStalePartFiles(file)
         val url = ModelUrls.URL_MAP["silero_vad"] ?: return null
-        val ok = downloadTo(url, file, "silero_vad", sha256Map["silero_vad"]) { }
+        val ok = downloadTo(url, file, "silero_vad", sha256Map["silero_vad"], onProgress, onContentLength)
         if (!ok) return null
         Log.i(TAG, "VAD model downloaded to ${file.absolutePath}")
         return file.absolutePath
+    }
+
+    fun deleteVadModel(): Boolean {
+        val file = vadModelFile()
+        deleteStalePartFiles(file)
+        return !file.exists() || file.delete()
     }
 
     private suspend fun downloadTo(
@@ -122,7 +136,8 @@ class ModelDownloader(private val context: Context) {
         outputFile: File,
         modelId: String,
         expectedSha: String?,
-        onProgress: suspend (Float) -> Unit
+        onProgress: suspend (Float) -> Unit,
+        onContentLength: suspend (Long) -> Unit = {}
     ): Boolean {
         val partFile = File(outputFile.parentFile, "${outputFile.name}.${UUID.randomUUID()}.part")
         try {
@@ -137,6 +152,7 @@ class ModelDownloader(private val context: Context) {
 
                 val body = response.body ?: return false
                 val contentLength = body.contentLength()
+                if (contentLength > 0) onContentLength(contentLength)
                 val inputStream: InputStream = body.byteStream()
 
                 val buffer = ByteArray(65536) // 64KB buffer for faster throughput
@@ -187,9 +203,12 @@ class ModelDownloader(private val context: Context) {
                     StandardCopyOption.REPLACE_EXISTING
                 )
             } catch (e: AtomicMoveNotSupportedException) {
-                Log.e(TAG, "Atomic move not supported for ${outputFile.absolutePath}", e)
-                partFile.delete()
-                return false
+                Log.w(TAG, "Atomic move not supported for ${outputFile.absolutePath}; falling back to replace move", e)
+                Files.move(
+                    partFile.toPath(),
+                    outputFile.toPath(),
+                    StandardCopyOption.REPLACE_EXISTING
+                )
             }
 
             onProgress(1.0f)
@@ -200,6 +219,16 @@ class ModelDownloader(private val context: Context) {
             Log.e(TAG, "Exception downloading to ${outputFile.absolutePath}", e)
             partFile.delete()
             return false
+        }
+    }
+
+    private fun deleteStalePartFiles(outputFile: File) {
+        outputFile.parentFile?.listFiles { file ->
+            file.isFile && file.name.startsWith(outputFile.name) && file.name.endsWith(".part")
+        }?.forEach { stale ->
+            if (stale.delete()) {
+                Log.i(TAG, "Deleted stale partial download ${stale.absolutePath}")
+            }
         }
     }
 
