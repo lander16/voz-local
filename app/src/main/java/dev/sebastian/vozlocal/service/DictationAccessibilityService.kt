@@ -3,8 +3,6 @@ package dev.sebastian.vozlocal.service
 import android.accessibilityservice.AccessibilityService
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
 import androidx.core.graphics.toColorInt
@@ -24,7 +22,6 @@ import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.view.accessibility.AccessibilityWindowInfo
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -45,7 +42,9 @@ class DictationAccessibilityService : AccessibilityService() {
     private var buttonView: FrameLayout? = null
     private var isRecording = false
     private var ownsRecorderSession = false
-    private var lastFocusedNode: AccessibilityNodeInfo? = null
+    private var currentPackageName: String? = null
+    private var currentTarget: AccessibilityTarget? = null
+    private var recordingTarget: AccessibilityTarget? = null
     private var startTimestamp: Long = 0
     private var timerJob: Job? = null
 
@@ -159,34 +158,39 @@ class DictationAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun isInputNode(node: AccessibilityNodeInfo?): Boolean {
-        if (node == null) return false
-        if (node.isEditable) return true
-        val className = node.className?.toString() ?: ""
-        return className.contains("EditText", ignoreCase = true) ||
-               className.contains("Input", ignoreCase = true) ||
-               className.contains("TextField", ignoreCase = true) ||
-               className.contains("AutoComplete", ignoreCase = true) ||
-               className.contains("SearchView", ignoreCase = true)
+    private fun deniedPackages(): Set<String> = repository.getDeniedPackages()
+
+    private fun nodeTarget(node: AccessibilityNodeInfo?): AccessibilityTarget? {
+        if (node == null) return null
+        val packageName = node.packageName?.toString() ?: return null
+        val sensitive = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            node.isAccessibilityDataSensitive
+        return AccessibilityTarget(
+            packageName = packageName,
+            windowId = node.windowId,
+            editable = node.isEditable,
+            enabled = node.isEnabled,
+            password = node.isPassword,
+            accessibilityDataSensitive = sensitive,
+        )
     }
 
-    private fun isKeyboardVisible(): Boolean {
-        return try {
-            val activeWindows = windows
-            if (activeWindows != null) {
-                for (window in activeWindows) {
-                    if (window.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
-                        return true
-                    }
-                }
-            }
-            false
-        } catch (e: Exception) {
-            false
-        }
+    private fun focusedAllowedTarget(): AccessibilityTarget? {
+        val target = nodeTarget(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
+        return target?.takeIf { AccessibilityTargetPolicy.canTarget(it, deniedPackages()) }
+    }
+
+    private fun clearTarget() {
+        currentTarget = null
+        recordingTarget = null
     }
 
     private fun updateFloatingViewVisibility() {
+        if (!AccessibilityTargetPolicy.canObservePackage(currentPackageName, deniedPackages())) {
+            floatingView?.visibility = View.GONE
+            return
+        }
+
         if (isRecording) {
             floatingView?.visibility = View.VISIBLE
             return
@@ -198,16 +202,12 @@ class DictationAccessibilityService : AccessibilityService() {
             return
         }
 
-        val keyboardOpen = isKeyboardVisible()
-        val activeFocus = findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: lastFocusedNode
-        val isEditing = isInputNode(activeFocus)
-
-        // Only show floating button when the soft keyboard is open AND a text field is active
-        floatingView?.visibility = if (keyboardOpen && isEditing) View.VISIBLE else View.GONE
+        currentTarget = focusedAllowedTarget()
+        floatingView?.visibility = if (currentTarget != null) View.VISIBLE else View.GONE
     }
 
     private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "show_only_on_input") {
+        if (key == "show_only_on_input" || key == "denied_accessibility_packages") {
             updateFloatingViewVisibility()
         }
     }
@@ -355,12 +355,7 @@ class DictationAccessibilityService : AccessibilityService() {
         val layoutParams = WindowManager.LayoutParams(
             totalWidth,
             btnSize,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
-            } else {
-                @Suppress("DEPRECATION")
-                WindowManager.LayoutParams.TYPE_PHONE
-            },
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
             PixelFormat.TRANSLUCENT
         ).apply {
@@ -431,6 +426,7 @@ class DictationAccessibilityService : AccessibilityService() {
 
     private fun stopRecordingUI() {
         isRecording = false
+        recordingTarget = null
         timerJob?.cancel()
         timerJob = null
         stopWaveformAnimation()
@@ -447,7 +443,14 @@ class DictationAccessibilityService : AccessibilityService() {
         }
 
         if (!isRecording) {
+            val target = focusedAllowedTarget()
+            if (target == null) {
+                // Never start a global recording without a current, safe insertion target.
+                updateFloatingViewVisibility()
+                return
+            }
             isRecording = true
+            recordingTarget = target
             startTimestamp = System.currentTimeMillis()
             micIcon.setColorFilter(Color.WHITE)
             micIcon.setImageResource(android.R.drawable.ic_media_pause)
@@ -593,8 +596,13 @@ class DictationAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun pasteTextToActiveInput(text: String) {
-        val targetNode = findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: lastFocusedNode
+    private fun pasteTextToActiveInput(text: String): Boolean {
+        val targetNode = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        val target = nodeTarget(targetNode)
+        if (!AccessibilityTargetPolicy.canTarget(target, deniedPackages()) ||
+            !AccessibilityTargetPolicy.matchesRecordingTarget(recordingTarget, target)) {
+            return false
+        }
         if (targetNode != null) {
             val existingText = targetNode.text?.toString().orEmpty()
             val selectionStart = targetNode.textSelectionStart
@@ -609,29 +617,48 @@ class DictationAccessibilityService : AccessibilityService() {
             val arguments = Bundle()
             arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText)
             val success = targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-
-            if (!success) {
-                try {
-                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("VozLocal Dictation", text)
-                    clipboard.setPrimaryClip(clip)
-                    targetNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Paste failed", e)
-                }
-            }
+            if (!success) Log.w(TAG, "Direct text insertion was rejected by the target app")
+            return success
         }
+        return false
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        val source = event.source
-        if (source != null && isInputNode(source)) {
-            @Suppress("DEPRECATION")
-            lastFocusedNode?.recycle()
-            lastFocusedNode = source
+        val packageName = event.packageName?.toString()
+        if (!AccessibilityTargetPolicy.canObservePackage(packageName, deniedPackages())) {
+            currentPackageName = packageName
+            clearTarget()
+            if (isRecording) {
+                stopAndDiscardForSensitiveApp()
+            } else {
+                floatingView?.visibility = View.GONE
+            }
+            return
         }
 
+        if (currentPackageName != packageName) {
+            currentPackageName = packageName
+            currentTarget = null
+        }
+
+        // Only retrieve the event source after the package denylist check.
+        val source = event.source
+        val target = nodeTarget(source)
+        currentTarget = target?.takeIf { AccessibilityTargetPolicy.canTarget(it, deniedPackages()) }
         updateFloatingViewVisibility()
+    }
+
+    private fun stopAndDiscardForSensitiveApp() {
+        isRecording = false
+        timerJob?.cancel()
+        timerJob = null
+        if (ownsRecorderSession) {
+            audioRecorder.stopRecording() // Intentionally discard the returned PCM.
+            ownsRecorderSession = false
+        }
+        clearTarget()
+        stopRecordingUI()
+        floatingView?.visibility = View.GONE
     }
 
     override fun onInterrupt() {
@@ -641,6 +668,7 @@ class DictationAccessibilityService : AccessibilityService() {
             audioRecorder.stopRecording()
             ownsRecorderSession = false
         }
+        clearTarget()
     }
 
     override fun onDestroy() {
@@ -649,9 +677,7 @@ class DictationAccessibilityService : AccessibilityService() {
             ownsRecorderSession = false
         }
         serviceScope.cancel()
-        @Suppress("DEPRECATION")
-        lastFocusedNode?.recycle()
-        lastFocusedNode = null
+        clearTarget()
         val prefs = getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
         if (floatingView != null) {

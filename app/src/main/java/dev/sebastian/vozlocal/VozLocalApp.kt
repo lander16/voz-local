@@ -31,11 +31,8 @@ class VozLocalApp : Application() {
         applicationScope.launch {
             repository.initializeModels()
         }
-        // Small background tasks: Silero VAD model (~2 MB) + warm-start model preload.
-        // Both must not block the UI; they complete in the background on applicationScope.
-        applicationScope.launch {
-            repository.ensureVadModel()
-        }
+        // Model downloads are always user-initiated. Preloading only reads a model
+        // already stored locally and never opens a network connection.
         applicationScope.launch {
             repository.preloadModel()
         }

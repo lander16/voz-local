@@ -12,6 +12,7 @@ import dev.sebastian.vozlocal.data.model.DictationStat
 import dev.sebastian.vozlocal.data.model.DictionaryWord
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.data.repository.DictationRepository
+import dev.sebastian.vozlocal.data.repository.SensitiveApp
 import dev.sebastian.vozlocal.data.repository.VadDownloadStatus
 import dev.sebastian.vozlocal.polish.QwenEngine
 import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
@@ -147,6 +148,9 @@ class MainViewModel(
     val useVad = MutableStateFlow(repository.getUseVad())
     val spokenPunctuationCommands = MutableStateFlow(repository.getSpokenPunctuationCommands())
     val useStreamingDictation = MutableStateFlow(repository.getUseStreamingDictation())
+    val deniedPackages = MutableStateFlow(repository.getDeniedPackages())
+    private val _launchableApps = MutableStateFlow<List<SensitiveApp>>(emptyList())
+    val launchableApps: StateFlow<List<SensitiveApp>> = _launchableApps.asStateFlow()
 
     // Silero VAD + model-loading state (updated by the app-start background work)
     val isVadModelReady: StateFlow<Boolean> = repository.isVadModelReady
@@ -277,6 +281,21 @@ class MainViewModel(
     fun setUseStreamingDictation(value: Boolean) {
         repository.saveUseStreamingDictation(value)
         useStreamingDictation.value = value
+    }
+
+    fun loadLaunchableApps() {
+        if (_launchableApps.value.isNotEmpty()) return
+        viewModelScope.launch(Dispatchers.Default) {
+            _launchableApps.value = repository.getLaunchableApps()
+        }
+    }
+
+    fun setPackageDenied(packageName: String, denied: Boolean) {
+        val next = deniedPackages.value.toMutableSet().apply {
+            if (denied) add(packageName) else remove(packageName)
+        }
+        repository.saveDeniedPackages(next)
+        deniedPackages.value = next
     }
 
     fun downloadVadModel() {

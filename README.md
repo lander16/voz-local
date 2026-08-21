@@ -28,7 +28,7 @@
 ## ✨ Key Features
 
 - 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). No cloud APIs or subscriptions.
-- 🎈 **Global Floating Dictation Overlay** — Accessibility Service + `WindowManager` show a floating microphone button over **any application** (WhatsApp, Gmail, Chrome, Notes). Recognized text is injected directly into the focused input field. The button is hidden when no text field is focused.
+- 🎈 **Protected Floating Dictation Overlay** — Accessibility Service + `WindowManager` show a floating microphone button in permitted apps. A local sensitive-app denylist hides it in banks, password managers, authenticators, and payment apps; only direct, validated text insertion is used.
 - 📁 **Shared Audio File Transcription** — Receives shared audio files via Android `SEND` intents (WhatsApp voice notes, Voice Memos, podcast snippets) and transcribes them offline with `MediaCodec` + PCM.
 - 🧹 **Local Text Cleanup Modes** — A pure-Kotlin rule-based engine strips safe filler vocalizations ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies capitalization/punctuation. It has **Minimal**, **Balanced** (default), and **Aggressive** modes, all persisted in settings. No LLM or extra model file is used; the historical `QwenEngine` class name now refers to this local cleanup implementation.
 - 🎯 **Optimized On-Device STT** — The project-owned JNI shim (`app/src/main/jni/vozlocal-jni/vozlocal-jni.c`) exposes high-value `whisper_full_params` controls to Kotlin: explicit language, an optional initial prompt (Spanish gets a default priming prompt), low-latency single-window dictation, confidence thresholds, temperature fallback, optional beam search, decoder context, and native **Silero VAD** (~0.9 MB, downloaded from `ggml-org/whisper-vad` and user-toggleable). Short dictations use the low-latency path; recordings over 25 seconds switch to multi-window decoding so Whisper processes the complete recording. A post-transcription `HallucinationFilter` strips known outro phrases only at the tail and collapses verbatim repeated sentences. If the selected model is already downloaded, it is preloaded in the background at process start to reduce first-dictation latency.
@@ -211,13 +211,14 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 1. Open the **Dictate** tab.
 2. (Optional) Pick a language (Spanish, English, etc.) — explicit language skips Whisper's auto-detect overhead.
 3. Tap the large circular microphone to start. The pulse aura, live waveform, and timer will all light up.
-4. Tap the mic (or the stop icon) to finish. The transcript is auto-saved and copied to your clipboard.
+4. Tap the mic (or the stop icon) to finish. The transcript is auto-saved locally and can be copied or shared from the app.
 
 ### 3. Using the Global Floating Assistant
 1. Enable **VozLocal Floating Dictation** in Android's *Accessibility Settings*.
-2. Open any app (WhatsApp, Gmail, Chrome, Notes).
-3. Tap on a text field — the floating mic icon appears (it stays hidden when no field is focused).
-4. Tap the floating mic to dictate; text is inserted at the active selection/cursor when available, using `ACTION_SET_TEXT` with a clipboard fallback.
+2. In **Settings → Floating assistant**, add banks, password managers, authenticators, and payment apps to **Protect sensitive apps**.
+3. Open a permitted app (WhatsApp, Gmail, Chrome, Notes).
+4. Tap on a text field — the floating mic icon appears (it stays hidden when no field is focused).
+5. Tap the floating mic to dictate; text is inserted only with direct `ACTION_SET_TEXT` into the original permitted app/window. If the target changes or rejects insertion, the transcript stays local in history.
 
 ### 4. Transcribing Shared Audio Files
 1. In WhatsApp, Voice Memos, or Files, tap **Share** on any audio file (`.wav`, `.mp3`, `.m4a`, `.ogg`).
@@ -231,8 +232,8 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 ### 6. Settings
 - **Appearance** — Light, Dark, or System. ("System" follows the OS setting via `isSystemInDarkTheme()` inside `MyApplicationTheme`.)
 - **Language** — the same set as in the Dictate tab.
-- **Post-processing** — Smart pause correction, auto-capitalization, dictionary, local cleanup mode (Minimal / Balanced / Aggressive), spoken punctuation commands, and VAD usage. These settings are persisted to SharedPreferences.
-- **Overlay** — show floating button only when a text field is focused.
+- **Post-processing** — Smart pause correction, auto-capitalization, dictionary, local cleanup mode (Minimal / Balanced / Aggressive), spoken punctuation commands, and optional VAD. The VAD model downloads only when you explicitly request it. These settings are persisted to SharedPreferences.
+- **Overlay** — show the floating button only on text fields and select sensitive apps where it must never appear.
 - **History** — opt-out of saving transcripts, or cap history at 5 / 10 / 20 / 50 / unlimited.
 - **Done** — closes the sheet (settings are saved instantly on toggle).
 
@@ -241,9 +242,11 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 ## 🔒 Privacy & Security
 
 - 🚫 **Zero telemetry, no tracking.** No Firebase, no analytics SDK, no third-party network call after model download.
-- ✈️ **Air-gapped operation.** Once model weights are downloaded, turn off Wi-Fi and cellular — the app continues to work at 100% capacity. Model downloads are the only network call.
+- ✈️ **Air-gapped operation.** Once model weights are downloaded, turn off Wi-Fi and cellular — the app continues to work at 100% capacity. Downloads are user-initiated and are the only network call.
 - 🔐 **Local storage only.** All dictionary entries and dictation history live in the device's private Room database (`vozlocal_database`). The DB is **excluded** from cloud backup and device-transfer rules (`backup_rules.xml` and `data_extraction_rules.xml`) so transcript text is not silently uploaded or migrated. The downloaded `models/` directory is also excluded.
-- 🪟 **Narrowed accessibility scope.** The accessibility service only subscribes to `typeViewFocused | typeWindowStateChanged | typeWindowContentChanged` and does not request key-filter or "not important views" flags. This is the minimum scope needed to detect a focused text field.
+- 🪟 **Hardened accessibility scope.** The service listens only for focus/window-state changes, does not retrieve interactive-window lists, does not filter keys or request gestures/screenshots, and checks the local sensitive-app denylist before retrieving an event source. Password and Android-marked sensitive nodes are never targets.
+- 🏦 **Banking-app limitation.** Android and bank apps can still detect that an accessibility service is enabled system-wide. Adding a bank to the denylist prevents VozLocal from showing, recording, reading a source node, or inserting text there; disable the accessibility service entirely if a bank requires it.
+- 📋 **No accessibility clipboard fallback.** If direct text insertion fails, VozLocal saves the local transcript but never copies it to the system clipboard on behalf of the overlay.
 - 🔒 **No `FOREGROUND_SERVICE_MICROPHONE` permission declared.** The permission is removed from the manifest because no foreground service with `foregroundServiceType="microphone"` is currently registered. A future release will add a real foreground service for background recording; the permission will be re-added at the same time.
 - 🪵 **No raw transcripts in logs.** `WhisperEngine` only logs the raw transcription text under `BuildConfig.DEBUG` — release builds log nothing user-identifiable.
 
@@ -267,7 +270,7 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 | Spoken punctuation commands | Could replace punctuation words inside normal prose | Phrase-isolated commands, so dictation like “question mark is useful” is preserved while standalone commands still insert punctuation |
 | `postProcessText` signature | Fixed booleans | Cleanup mode and spoken punctuation settings flow through the shared repository pipeline used by the app and overlay |
 | Database schema | `fallbackToDestructiveMigration(dropAllTables = true)` | `addMigrations(MIGRATION_1_2)`, no destructive fallback; version bumped to 2 |
-| Accessibility service | `typeAllMask` + key-filter | Narrowed to `typeViewFocused | typeWindowStateChanged | typeWindowContentChanged` |
+| Accessibility service | `typeAllMask` + key-filter | Focus/window-state events only; no interactive-window retrieval; local sensitive-app denylist is checked before source access; password/sensitive nodes and stale targets are rejected |
 | Backup rules | Empty TODOs → default behavior leaked 1.5 GB models to cloud | `models/` + database explicitly excluded |
 | Build | `isMinifyEnabled = false`, no ProGuard rules | `isMinifyEnabled = true`, `isShrinkResources = true`, explicit keep rules for JNI/Room/AccessibilityService |
 | Dependencies | Firebase BOM, Retrofit, Moshi, logging-interceptor (all unused) | Removed; only Compose, Lifecycle, Room, Coroutines, OkHttp, Accompanist, Robolectric/Roborazzi |

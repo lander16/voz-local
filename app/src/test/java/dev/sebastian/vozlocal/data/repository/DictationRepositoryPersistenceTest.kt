@@ -103,6 +103,16 @@ class DictationRepositoryPersistenceTest {
     }
 
     @Test
+    fun deniedPackages_roundTripAsIndependentSet() {
+        val repo = newRepository()
+        repo.saveDeniedPackages(setOf("com.example.bank", "com.example.passwords"))
+        val saved = repo.getDeniedPackages()
+
+        assertEquals(setOf("com.example.bank", "com.example.passwords"), saved)
+        assertFalse(saved === repo.getDeniedPackages())
+    }
+
+    @Test
     fun cleanupMode_defaultsToBalancedAndRoundTrips() {
         val repo = newRepository()
         assertEquals(CleanupMode.BALANCED, repo.getCleanupMode())

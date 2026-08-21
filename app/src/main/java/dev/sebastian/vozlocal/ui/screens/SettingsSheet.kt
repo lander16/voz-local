@@ -64,6 +64,64 @@ fun SettingsSheet(
     val useVad by viewModel.useVad.collectAsStateWithLifecycle()
     val spokenPunctuationCommands by viewModel.spokenPunctuationCommands.collectAsStateWithLifecycle()
     val useStreamingDictation by viewModel.useStreamingDictation.collectAsStateWithLifecycle()
+    val deniedPackages by viewModel.deniedPackages.collectAsStateWithLifecycle()
+    val launchableApps by viewModel.launchableApps.collectAsStateWithLifecycle()
+    var showSensitiveAppsDialog by remember { mutableStateOf(false) }
+    var sensitiveAppsQuery by remember { mutableStateOf("") }
+
+    if (showSensitiveAppsDialog) {
+        val normalizedQuery = sensitiveAppsQuery.trim()
+        val filteredApps = launchableApps.filter { app ->
+            normalizedQuery.isBlank() || app.label.contains(normalizedQuery, ignoreCase = true) ||
+                app.packageName.contains(normalizedQuery, ignoreCase = true)
+        }
+        AlertDialog(
+            onDismissRequest = { showSensitiveAppsDialog = false },
+            containerColor = SurfaceCard,
+            title = { Text("Sensitive apps", color = TextPrimary, fontWeight = FontWeight.ExtraBold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "VozLocal hides its floating mic and rejects all text actions in selected apps. Add banks, password managers, authenticators, and payment apps.",
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                    OutlinedTextField(
+                        value = sensitiveAppsQuery,
+                        onValueChange = { sensitiveAppsQuery = it },
+                        singleLine = true,
+                        label = { Text("Search installed apps") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Column(
+                        modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())
+                    ) {
+                        filteredApps.forEach { app ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clickable { viewModel.setPackageDenied(app.packageName, app.packageName !in deniedPackages) },
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Checkbox(
+                                    checked = app.packageName in deniedPackages,
+                                    onCheckedChange = { checked -> viewModel.setPackageDenied(app.packageName, checked) }
+                                )
+                                Column(modifier = Modifier.padding(start = 8.dp)) {
+                                    Text(app.label, color = TextPrimary, fontSize = 14.sp)
+                                    Text(app.packageName, color = TextSecondary, fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSensitiveAppsDialog = false }) { Text("Done") }
+            }
+        )
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -140,6 +198,7 @@ fun SettingsSheet(
                         tint = TextSecondary
                     )
                 }
+
             }
 
             HorizontalDivider(color = GlassBorder)
@@ -409,6 +468,7 @@ fun SettingsSheet(
                         onClick = { viewModel.setCleanupMode(CleanupMode.AGGRESSIVE) }
                     )
                 }
+
             }
 
             HorizontalDivider(color = GlassBorder)
@@ -449,6 +509,25 @@ fun SettingsSheet(
                         colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
                     )
                 }
+
+                OutlinedButton(
+                    onClick = {
+                        viewModel.loadLaunchableApps()
+                        showSensitiveAppsDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        if (deniedPackages.isEmpty()) "Protect sensitive apps" else "Protected apps: ${deniedPackages.size}",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Text(
+                    "Selected apps never receive the floating mic or text insertion. Banks can still warn whenever an accessibility service is enabled system-wide.",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    lineHeight = 16.sp
+                )
             }
 
             HorizontalDivider(color = GlassBorder)
@@ -670,7 +749,7 @@ fun SettingsSheet(
                         Text(text = "Voice-activity detection removes silence before inference", fontSize = 13.sp, color = TextSecondary)
                     }
                     Text(
-                        text = if (isVadModelReady) "Ready" else "Downloading...",
+                        text = if (isVadModelReady) "Ready" else "Not downloaded",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = if (isVadModelReady) Color(0xFF10B981) else TextSecondary

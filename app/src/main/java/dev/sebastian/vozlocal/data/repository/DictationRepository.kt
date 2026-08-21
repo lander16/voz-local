@@ -1,6 +1,7 @@
 package dev.sebastian.vozlocal.data.repository
 
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import dev.sebastian.vozlocal.audio.AudioDecoder
@@ -38,6 +39,12 @@ enum class VadDownloadStatus {
     NOT_DOWNLOADED
 }
 
+/** A launchable app that can be excluded from the floating accessibility overlay. */
+data class SensitiveApp(
+    val packageName: String,
+    val label: String,
+)
+
 class DictationRepository(private val context: Context) {
     private val database = AppDatabase.getDatabase(context)
     private val modelDao = database.modelDao()
@@ -58,7 +65,7 @@ class DictationRepository(private val context: Context) {
     private var lastDictHash: Int = 0
     @Volatile private var dictionarySnapshot: List<DictionaryWord> = emptyList()
 
-    // Silero VAD model state: populated at app start by ensureVadModel().
+    // Silero VAD model state: populated from disk or by an explicit user download.
     private val _vadModelReady = MutableStateFlow(false)
     val isVadModelReady: StateFlow<Boolean> = _vadModelReady.asStateFlow()
 
@@ -123,6 +130,30 @@ class DictationRepository(private val context: Context) {
 
     fun saveShowOnlyOnInput(value: Boolean) {
         prefs.edit { putBoolean("show_only_on_input", value) }
+    }
+
+    fun getDeniedPackages(): Set<String> =
+        prefs.getStringSet("denied_accessibility_packages", emptySet())?.toSet() ?: emptySet()
+
+    fun saveDeniedPackages(packages: Set<String>) {
+        prefs.edit { putStringSet("denied_accessibility_packages", packages.toSet()) }
+    }
+
+    @Suppress("DEPRECATION")
+    fun getLaunchableApps(): List<SensitiveApp> {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return context.packageManager.queryIntentActivities(intent, 0)
+            .asSequence()
+            .map { resolveInfo ->
+                SensitiveApp(
+                    packageName = resolveInfo.activityInfo.packageName,
+                    label = resolveInfo.loadLabel(context.packageManager).toString()
+                )
+            }
+            .filter { it.packageName != context.packageName }
+            .distinctBy { it.packageName }
+            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.label })
+            .toList()
     }
 
     // Language preference — "es" by default, avoids expensive auto-detection (~200-500ms)
@@ -251,7 +282,7 @@ class DictationRepository(private val context: Context) {
     /**
      * Downloads the Silero VAD model if not already present and publishes its
      * absolute path + readiness. The VAD model is small (~2 MB), so this is
-     * kicked off at app start and finishes in the background.
+     * initiated explicitly from the UI and never automatically at app startup.
      */
     suspend fun ensureVadModel() {
         _vadDownloadStatus.value = VadDownloadStatus.DOWNLOADING
