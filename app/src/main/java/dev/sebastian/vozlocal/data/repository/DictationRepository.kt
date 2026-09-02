@@ -799,29 +799,35 @@ class DictationRepository(private val context: Context) {
 
             // Clean duplicate commas or periods
             result = result.replace(REGEX_DUP_COMMAS, ",")
-            result = result.replace(REGEX_DUP_PERIODS, ".")
+            result = result.replace(REGEX_DUP_PERIODS_SPACED, ".")
+            result = result.replace(REGEX_DUP_PERIODS_EXACT2, ".")
+            result = result.replace(REGEX_DUP_PERIODS_4PLUS, "...")
 
             // 3.5. Grammatical Intent & Question Detection (Spanish + English)
-            val rawSentences = result.split(REGEX_SENTENCE_SPLIT).toMutableList()
-            for (i in rawSentences.indices) {
-                val sentence = rawSentences[i].trim()
-                if (sentence.isEmpty() || sentence.endsWith("?") || sentence.endsWith("!")) continue
+            val lines = result.split("\n")
+            val processedLines = lines.map { line ->
+                val rawSentences = line.split(REGEX_SENTENCE_SPLIT).toMutableList()
+                for (i in rawSentences.indices) {
+                    val sentence = rawSentences[i].trim()
+                    if (sentence.isEmpty() || sentence.endsWith("?") || sentence.endsWith("!")) continue
 
-                // Check Spanish Question Intent
-                val isSpanishQuestion = REGEX_ES_QUESTION_START.containsMatchIn(sentence) || REGEX_ES_QUESTION_END.containsMatchIn(sentence)
+                    // Check Spanish Question Intent
+                    val isSpanishQuestion = REGEX_ES_QUESTION_START.containsMatchIn(sentence) || REGEX_ES_QUESTION_END.containsMatchIn(sentence)
 
-                // Check English Question Intent
-                val isEnglishQuestion = REGEX_EN_QUESTION_START.containsMatchIn(sentence) || REGEX_EN_QUESTION_END.containsMatchIn(sentence)
+                    // Check English Question Intent
+                    val isEnglishQuestion = REGEX_EN_QUESTION_START.containsMatchIn(sentence) || REGEX_EN_QUESTION_END.containsMatchIn(sentence)
 
-                if (isSpanishQuestion || isEnglishQuestion) {
-                    var formatted = sentence.removeSuffix(".")
-                    if (isSpanishQuestion && !formatted.startsWith("¿")) {
-                        formatted = "¿$formatted"
+                    if (isSpanishQuestion || isEnglishQuestion) {
+                        var formatted = sentence.removeSuffix(".")
+                        if (isSpanishQuestion && !formatted.startsWith("¿")) {
+                            formatted = "¿$formatted"
+                        }
+                        rawSentences[i] = "$formatted?"
                     }
-                    rawSentences[i] = "$formatted?"
                 }
+                rawSentences.joinToString(" ")
             }
-            result = rawSentences.joinToString(" ")
+            result = processedLines.joinToString("\n")
         }
 
         // 4. Auto-Capitalization
@@ -829,7 +835,7 @@ class DictationRepository(private val context: Context) {
             // Capitalize start of string
             result = result.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
 
-            // Capitalize first letter after sentence ending punctuation (. ! ? ¿) or newlines
+            // Capitalize first letter after sentence ending punctuation (. ! ? ¿ ¡ " () or newlines
             result = REGEX_AUTO_CAPITALIZE.replace(result) { matchResult ->
                 matchResult.groupValues[1] + matchResult.groupValues[2].uppercase()
             }
@@ -845,62 +851,128 @@ class DictationRepository(private val context: Context) {
         result
     }
 
-    private fun applySpokenPunctuationCommands(text: String): String {
-        return text
-            .split(REGEX_COMMAND_PHRASE_SPLIT)
-            .joinToString(" ") { phrase ->
-                val trimmed = phrase.trim()
-                SPOKEN_PUNCTUATION_COMMANDS.firstOrNull { (regex, _) -> regex.matches(trimmed) }?.second ?: phrase
-            }
+    internal fun applySpokenPunctuationCommands(text: String): String {
+        var result = text
+        for ((regex, replacement) in SPOKEN_PUNCTUATION_COMMANDS) {
+            result = result.replace(regex, replacement)
+        }
+        return formatPunctuationSpacing(result)
+    }
+
+    internal fun formatPunctuationSpacing(text: String): String {
+        var result = text
+
+        // 1. Closing punctuation attaches to preceding word without leading space:
+        // (',', '.', ';', ':', '?', '!', ')', '"', '...')
+        result = result.replace(REGEX_SPACES_BEFORE_CLOSING_PUNCT, "$1")
+        result = result.replace(REGEX_RAW_CLOSING_QUOTE_SPACE, "$1\"")
+
+        // 2. Opening punctuation attaches to following word:
+        // ('¿', '¡', '(', '"')
+        result = result.replace(REGEX_SPACES_AFTER_OPENING_PUNCT, "$1")
+        result = result.replace(REGEX_RAW_OPENING_QUOTE_SPACE, "\"$1")
+
+        // 3. Opening punctuation has a space before if preceded by a letter/word character:
+        result = result.replace(REGEX_SPACE_BEFORE_OPENING_PUNCT, "$1 $2")
+        result = result.replace(REGEX_RAW_OPENING_QUOTE_LETTER_BEFORE, "$1 \"")
+
+        // 4. Ensure single space after closing punctuation if followed by a letter:
+        result = result.replace(REGEX_SPACE_AFTER_CLOSING_PUNCT, "$1 $2")
+        result = result.replace(REGEX_RAW_CLOSING_QUOTE_LETTER_AFTER, "$1 $2")
+
+        // 5. Ensure single space between closing punctuation and opening punctuation:
+        result = result.replace(REGEX_SPACE_CLOSING_TO_OPENING, "$1 $2")
+
+        // 6. Convert quote tokens to standard quote marks:
+        result = result.replace(TOKEN_OPEN_QUOTE, "\"").replace(TOKEN_CLOSE_QUOTE, "\"")
+
+        // 7. Clean duplicate commas or periods (protecting ellipsis ...)
+        result = result.replace(REGEX_DUP_COMMAS, ",")
+        result = result.replace(REGEX_DUP_PERIODS_SPACED, ".")
+        result = result.replace(REGEX_DUP_PERIODS_EXACT2, ".")
+        result = result.replace(REGEX_DUP_PERIODS_4PLUS, "...")
+
+        // 8. Newline formatting: clean line breaks without trailing or leading stray spaces on the new line:
+        result = result.replace(REGEX_CLEAN_NEWLINES, "\n")
+        result = result.replace(REGEX_COLLAPSE_NEWLINES, "\n\n")
+
+        // 9. Clean duplicate spaces on horizontal lines:
+        result = result.replace(REGEX_CLEAN_HORIZONTAL_SPACES, " ")
+
+        return result.trim()
     }
 
     companion object {
         private val REGEX_SPACES = Regex("\\s+")
-        private val REGEX_ES_PUNTO = Regex("(?i)^punto( final)?$")
-        private val REGEX_ES_COMA = Regex("(?i)^coma$")
-        private val REGEX_ES_DOS_PUNTOS = Regex("(?i)^dos puntos$")
-        private val REGEX_ES_INTERROGACION = Regex("(?i)^signo de (interrogacion|interrogación)$")
-        private val REGEX_ES_EXCLAMACION = Regex("(?i)^signo de (exclamacion|exclamación)$")
-        private val REGEX_ES_NUEVA_LINEA = Regex("(?i)^nueva l[ií]nea$")
-        private val REGEX_ES_NUEVO_PARRAFO = Regex("(?i)^nuevo p[aá]rrafo$")
 
-        private val REGEX_EN_PERIOD = Regex("(?i)^period$")
-        private val REGEX_EN_FULL_STOP = Regex("(?i)^full stop$")
-        private val REGEX_EN_COMMA = Regex("(?i)^comma$")
-        private val REGEX_EN_COLON = Regex("(?i)^colon$")
-        private val REGEX_EN_QUESTION_MARK = Regex("(?i)^question mark$")
-        private val REGEX_EN_EXCLAMATION_MARK = Regex("(?i)^exclamation (mark|point)$")
-        private val REGEX_EN_NEW_LINE = Regex("(?i)^new line$")
-        private val REGEX_EN_NEW_PARAGRAPH = Regex("(?i)^new paragraph$")
+        internal const val TOKEN_OPEN_QUOTE = "\uE000"
+        internal const val TOKEN_CLOSE_QUOTE = "\uE001"
 
-        private val REGEX_SPACES_BEFORE_PUNCT = Regex("\\s+([,.?!:])")
-        private val REGEX_SPACE_AFTER_PUNCT = Regex("([,.?!:])([^\\s\\d,.?!:])")
-        private val REGEX_DUP_COMMAS = Regex(",\\s*,")
-        private val REGEX_DUP_PERIODS = Regex("\\.\\s*\\.(?!\\.)")
-        private val REGEX_SENTENCE_SPLIT = Regex("(?<=[.\\n])\\s*")
+        private val REGEX_SPACES_BEFORE_CLOSING_PUNCT = Regex("[ \\t]+([,.?!:;)\\uE001]|\\.\\.\\.)")
+        private val REGEX_RAW_CLOSING_QUOTE_SPACE = Regex("([\\wñáéíóúüàâçèêëîïôùûäöß])[ \\t]+\"")
+        private val REGEX_SPACES_AFTER_OPENING_PUNCT = Regex("([¿¡(\\uE000])[ \\t]+")
+        private val REGEX_RAW_OPENING_QUOTE_SPACE = Regex("\"[ \\t]+([\\wñáéíóúüàâçèêëîïôùûäöß])")
+        private val REGEX_SPACE_BEFORE_OPENING_PUNCT = Regex("([\\wñáéíóúüàâçèêëîïôùûäöß])([¿¡(\\uE000])")
+        private val REGEX_RAW_OPENING_QUOTE_LETTER_BEFORE = Regex("([\\wñáéíóúüàâçèêëîïôùûäöß])\"(?=[\\wñáéíóúüàâçèêëîïôùûäöß])")
+        private val REGEX_SPACE_AFTER_CLOSING_PUNCT = Regex("([,.?!:;)\\uE001]|\\.\\.\\.)([a-zA-Zñáéíóúüàâçèêëîïôùûäöß])")
+        private val REGEX_RAW_CLOSING_QUOTE_LETTER_AFTER = Regex("([\\wñáéíóúüàâçèêëîïôùûäöß]\")([a-zA-Zñáéíóúüàâçèêëîïôùûäöß])")
+        private val REGEX_SPACE_CLOSING_TO_OPENING = Regex("([,.?!:;)\\uE001\"]|\\.\\.\\.)([¿¡(\\uE000])")
+
+        private val REGEX_CLEAN_NEWLINES = Regex("[ \\t]*\\r?\\n[ \\t]*")
+        private val REGEX_COLLAPSE_NEWLINES = Regex("\\n{3,}")
+        private val REGEX_CLEAN_HORIZONTAL_SPACES = Regex("[ \\t]{2,}")
+
+        private val REGEX_SPACES_BEFORE_PUNCT = Regex("[ \\t]+([,.?!:;)])")
+        private val REGEX_SPACE_AFTER_PUNCT = Regex("([,.?!:;)])([^\\s\\d,.?!:;)])")
+        private val REGEX_DUP_COMMAS = Regex(",(?:[ \\t]*,)+")
+        private val REGEX_DUP_PERIODS_EXACT2 = Regex("(?<!\\.)\\.{2}(?!\\.)")
+        private val REGEX_DUP_PERIODS_SPACED = Regex("(?<!\\.)\\.[ \\t]+\\.(?!\\.)")
+        private val REGEX_DUP_PERIODS_4PLUS = Regex("\\.{4,}")
+        private val REGEX_SENTENCE_SPLIT = Regex("(?<=[.!?])\\s+")
 
         private val REGEX_ES_QUESTION_START = Regex("(?i)^\\s*([¿]|qu[eé]|cu[aá]l|cu[aá]les|qui[eé]n|qui[eé]nes|d[oó]nde|cu[aá]ndo|por\\s*qu[eé]|c[oó]mo|cu[aá]nto|cu[aá]ntos|cu[aá]nta|cu[aá]ntas|sabes|sabes\\s+si|ser[aá]|te\\s+parece|puedes|podr[ií]as|quieres|tienes|crees|te\\s+gustar[ií]a)\\b")
         private val REGEX_ES_QUESTION_END = Regex("(?i)\\b(verdad|cierto|no\\s+crees|o\\s+no)\\s*[.]?$")
         private val REGEX_EN_QUESTION_START = Regex("(?i)^\\s*(what|why|where|when|who|whom|whose|which|how|is|are|was|were|do|does|did|can|could|would|should|will|shall|have|has|had|am|isnt|arent|wasnt|werent|dont|doesnt|didnt|cant|couldnt|wouldnt|shouldnt|wont)\\s+(you|i|we|it|he|she|they|this|that|there)\\b")
         private val REGEX_EN_QUESTION_END = Regex("(?i)\\b(right|correct|is\\s+it|don't\\s+you|don't\\s+you\\s+think)\\s*[.]?$")
-        private val REGEX_AUTO_CAPITALIZE = Regex("([.!?¿¡\\n]\\s*)([a-zñáéíóúüàâçèêëîïôùûäöß])")
-        private val REGEX_COMMAND_PHRASE_SPLIT = Regex("\\s*(?:[,.;]|\\n)+\\s*")
-        private val SPOKEN_PUNCTUATION_COMMANDS = listOf(
-            REGEX_ES_DOS_PUNTOS to ":",
-            REGEX_ES_INTERROGACION to "?",
-            REGEX_ES_EXCLAMACION to "!",
-            REGEX_ES_NUEVO_PARRAFO to "\n\n",
-            REGEX_ES_NUEVA_LINEA to "\n",
-            REGEX_ES_PUNTO to ".",
-            REGEX_ES_COMA to ",",
-            REGEX_EN_QUESTION_MARK to "?",
-            REGEX_EN_EXCLAMATION_MARK to "!",
-            REGEX_EN_NEW_PARAGRAPH to "\n\n",
-            REGEX_EN_NEW_LINE to "\n",
-            REGEX_EN_FULL_STOP to ".",
-            REGEX_EN_PERIOD to ".",
-            REGEX_EN_COMMA to ",",
-            REGEX_EN_COLON to ":",
+        private val REGEX_AUTO_CAPITALIZE = Regex("([.!?¿¡\\n\"(]\\s*)([a-zñáéíóúüàâçèêëîïôùûäöß])")
+
+        internal val SPOKEN_PUNCTUATION_COMMANDS = listOf(
+            // Spanish
+            Regex("(?iu)\\bpuntos\\s+suspensivos\\b") to "...",
+            Regex("(?iu)\\bpunto\\s+y\\s+coma\\b") to ";",
+            Regex("(?iu)\\bdos\\s+puntos\\b") to ":",
+            Regex("(?iu)\\bpunto\\s+(?:final|y\\s+seguido|y\\s+aparte)\\b") to ".",
+            Regex("(?iu)\\babrir\\s+(?:signo\\s+de\\s+)?interrogaci[oó]n\\b") to "¿",
+            Regex("(?iu)\\b(?:cerrar\\s+(?:signo\\s+de\\s+)?interrogaci[oó]n|signo\\s+de\\s+interrogaci[oó]n)\\b") to "?",
+            Regex("(?iu)\\babrir\\s+(?:signo\\s+de\\s+)?(?:exclamaci[oó]n|admiraci[oó]n)\\b") to "¡",
+            Regex("(?iu)\\b(?:cerrar\\s+(?:signo\\s+de\\s+)?(?:exclamaci[oó]n|admiraci[oó]n)|signo\\s+de\\s+(?:exclamaci[oó]n|admiraci[oó]n))\\b") to "!",
+            Regex("(?iu)\\babrir\\s+comillas\\b") to TOKEN_OPEN_QUOTE,
+            Regex("(?iu)\\bcerrar\\s+comillas\\b") to TOKEN_CLOSE_QUOTE,
+            Regex("(?iu)\\babrir\\s+par[eé]ntesis\\b") to "(",
+            Regex("(?iu)\\bcerrar\\s+par[eé]ntesis\\b") to ")",
+            Regex("(?iu)\\bnuevo\\s+p[aá]rrafo\\b") to "\n\n",
+            Regex("(?iu)\\bnueva\\s+l[ií]nea\\b") to "\n",
+            Regex("(?iu)\\bpunto\\b") to ".",
+            Regex("(?iu)\\bcoma\\b") to ",",
+            Regex("(?iu)\\bgu[ií]?[oó]n\\b") to "-",
+
+            // English
+            Regex("(?iu)\\bdot\\s+dot\\s+dot\\b") to "...",
+            Regex("(?iu)\\bellipsis\\b") to "...",
+            Regex("(?iu)\\bquestion\\s+mark\\b") to "?",
+            Regex("(?iu)\\bexclamation\\s+(?:mark|point)\\b") to "!",
+            Regex("(?iu)\\bsemicolon\\b") to ";",
+            Regex("(?iu)\\bcolon\\b") to ":",
+            Regex("(?iu)\\bopen\\s+quot(?:ation\\s+mark|e)\\b") to TOKEN_OPEN_QUOTE,
+            Regex("(?iu)\\bclose\\s+quot(?:ation\\s+mark|e)\\b") to TOKEN_CLOSE_QUOTE,
+            Regex("(?iu)\\bopen\\s+paren(?:thesis)?\\b") to "(",
+            Regex("(?iu)\\bclose\\s+paren(?:thesis)?\\b") to ")",
+            Regex("(?iu)\\bnew\\s+paragraph\\b") to "\n\n",
+            Regex("(?iu)\\bnew\\s+line\\b") to "\n",
+            Regex("(?iu)\\bfull\\s+stop\\b") to ".",
+            Regex("(?iu)\\bperiod\\b") to ".",
+            Regex("(?iu)\\bcomma\\b") to ",",
+            Regex("(?iu)\\b(?:hyphen|dash)\\b") to "-",
         )
     }
 }

@@ -35,9 +35,9 @@ class PostProcessingCleanupTest {
     }
 
     @Test
-    fun spokenPunctuationDoesNotReplaceInsideNormalProse() = runTest {
+    fun spokenPunctuationDoesNotReplaceWhenDisabled() = runTest {
         val r = repo()
-        r.saveSpokenPunctuationCommands(true)
+        r.saveSpokenPunctuationCommands(false)
         val result = r.postProcessText("la palabra coma aparece en medicina", true, true, false, false)
         assertEquals("La palabra coma aparece en medicina", result)
     }
@@ -47,7 +47,7 @@ class PostProcessingCleanupTest {
         val r = repo()
         r.saveSpokenPunctuationCommands(true)
         val result = r.postProcessText("hola coma mundo punto", true, true, false, false)
-        assertEquals("Hola coma mundo punto", result)
+        assertEquals("Hola, mundo.", result)
     }
 
     @Test
