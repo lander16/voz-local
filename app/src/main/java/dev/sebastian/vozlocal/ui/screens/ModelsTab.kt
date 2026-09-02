@@ -181,7 +181,7 @@ fun ModelCard(
             ) {
                 // Spanish accuracy
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Spanish accuracy", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                    Text(text = "Spanish accuracy", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -193,15 +193,15 @@ fun ModelCard(
                                 .height(4.dp)
                                 .clip(RoundedCornerShape(2.dp)),
                             color = PrimaryColor,
-                            trackColor = Color.DarkGray
+                            trackColor = MaterialTheme.colorScheme.surfaceContainer
                         )
-                        Text(text = "${model.accuracySpanish}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "${model.accuracySpanish}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
 
                 // Speed factor
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Mobile decoding speed", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                    Text(text = "Mobile decoding speed", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -212,7 +212,7 @@ fun ModelCard(
                             fontWeight = FontWeight.ExtraBold,
                             color = if (model.speedMultiplier > 4f) PrimaryColor else SecondaryColor
                         )
-                        Text(text = "multiplier", fontSize = 11.sp, color = TextSecondary)
+                        Text(text = "multiplier", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -236,13 +236,13 @@ fun ModelCard(
                         )
                         Column(horizontalAlignment = Alignment.End) {
                             Text(text = "${(downloadProgress * 100).toInt()}%", fontSize = 11.sp, color = PrimaryColor, fontWeight = FontWeight.Bold)
-                            Text(text = formatEta(downloadStatus?.etaSeconds) ?: "Sizing…", fontSize = 11.sp, color = TextSecondary)
+                            Text(text = formatEta(downloadStatus?.etaSeconds) ?: "Sizing…", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Text(
                         text = downloadStatus?.let { formatDownloadProgress(it.downloadedMb, it.totalMb) } ?: "0 MB / ${model.sizeMb.toInt()} MB",
                         fontSize = 11.sp,
-                        color = TextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     LinearProgressIndicator(
                         progress = { downloadProgress },
@@ -291,8 +291,8 @@ fun ModelCard(
                             onClick = onSelect,
                             enabled = !model.isSelected,
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (model.isSelected) Color.Transparent else PrimaryColor,
-                                disabledContainerColor = SurfaceLightDark
+                                containerColor = if (model.isSelected) Color.Transparent else MaterialTheme.colorScheme.primary,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
                             ),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
@@ -303,13 +303,13 @@ fun ModelCard(
                                 text = if (model.isSelected) "Active" else "Activate",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = if (model.isSelected) TextSecondary else Color.Black
+                                color = if (model.isSelected) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
                             )
                         }
                     } else {
                         Button(
                             onClick = onDownload,
-                            colors = ButtonDefaults.buttonColors(containerColor = SecondaryColor),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                             shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .heightIn(min = 48.dp)
@@ -323,13 +323,13 @@ fun ModelCard(
                                     imageVector = Icons.Default.Download,
                                     contentDescription = null,
                                     modifier = Modifier.size(14.dp),
-                                    tint = Color.White
+                                    tint = MaterialTheme.colorScheme.onSecondary
                                 )
                                 Text(
                                     text = "Download Model",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
+                                    color = MaterialTheme.colorScheme.onSecondary
                                 )
                             }
                         }
@@ -341,14 +341,14 @@ fun ModelCard(
 }
 
 @Composable
-private fun ModelMetaChip(text: String, active: Boolean, accent: Color = TextSecondary) {
+private fun ModelMetaChip(text: String, active: Boolean, accent: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(100.dp))
-            .background(if (active) accent.copy(alpha = 0.15f) else SurfaceCard)
-            .border(BorderStroke(1.dp, if (active) accent.copy(alpha = 0.35f) else GlassBorder), RoundedCornerShape(100.dp))
+            .background(if (active) accent.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceContainer)
+            .border(BorderStroke(1.dp, if (active) accent.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(100.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
-        Text(text = text, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) accent else TextSecondary)
+        Text(text = text, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) accent else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

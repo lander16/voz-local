@@ -79,8 +79,8 @@ fun HistoryTab(
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Transcription history", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
-                        Text(text = "Search, copy, share, or reuse saved dictations.", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Transcription history", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "Search, copy, share, or reuse saved dictations.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (history.isNotEmpty()) {
                         TextButton(
@@ -103,11 +103,11 @@ fun HistoryTab(
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryColor,
-                        unfocusedBorderColor = GlassBorder,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                         focusedLeadingIconColor = PrimaryColor,
-                        unfocusedLeadingIconColor = TextSecondary,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
+                        unfocusedLeadingIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -124,14 +124,14 @@ fun HistoryTab(
                         Icon(
                             imageVector = if (query.isBlank()) Icons.Default.HistoryToggleOff else Icons.Default.Search,
                             contentDescription = null,
-                            tint = TextSecondary.copy(alpha = 0.3f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                             modifier = Modifier.size(56.dp)
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = if (query.isBlank()) "No transcript history yet." else "No results for \"$query\".",
                             fontSize = 14.sp,
-                            color = TextSecondary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -141,7 +141,7 @@ fun HistoryTab(
                 item {
                     Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                         Text(text = groupLabel, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor, letterSpacing = 1.sp)
-                        Text(text = "${groupItems.size} item${if (groupItems.size == 1) "" else "s"}", fontSize = 11.sp, color = TextMuted)
+                        Text(text = "${groupItems.size} item${if (groupItems.size == 1) "" else "s"}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
@@ -212,29 +212,29 @@ fun HistoryCard(
                         letterSpacing = 1.sp
                     )
                 }
-                Text(text = dateStr, fontSize = 11.sp, color = TextSecondary)
+                Text(text = dateStr, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             if (!item.fileName.isNullOrEmpty()) {
                 Text(
                     text = "File: ${item.fileName}",
                     fontSize = 12.sp,
-                    color = TextPrimary,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Text(text = item.text, fontSize = 14.sp, color = TextPrimary, lineHeight = 20.sp)
+            Text(text = item.text, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 20.sp)
 
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(modifier = Modifier.background(SurfaceLightDark, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text(text = item.modelUsed, fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                    Box(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        Text(text = item.modelUsed, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                     }
                     if (item.durationSec > 0) {
-                        Text(text = "${item.durationSec}s", fontSize = 11.sp, color = TextSecondary)
+                        Text(text = "${item.durationSec}s", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
@@ -243,13 +243,13 @@ fun HistoryCard(
                         Icon(imageVector = Icons.Default.Replay, contentDescription = "Reuse transcript", tint = PrimaryColor, modifier = Modifier.size(20.dp))
                     }
                     IconButton(onClick = onShare) {
-                        Icon(imageVector = Icons.Default.Share, contentDescription = "Share transcript", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                        Icon(imageVector = Icons.Default.Share, contentDescription = "Share transcript", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                     }
                     IconButton(onClick = onCopy) {
                         Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy transcription text", tint = PrimaryColor, modifier = Modifier.size(20.dp))
                     }
                     IconButton(onClick = { confirmDelete = true }) {
-                        Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = "Delete history log", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                        Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = "Delete history log", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                     }
                 }
             }

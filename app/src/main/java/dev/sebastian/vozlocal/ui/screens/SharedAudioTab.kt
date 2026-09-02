@@ -71,12 +71,12 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                     text = "Shared Audio Transcriber",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "Transcribe voice notes from WhatsApp/Telegram, or select local audio files directly from your phone storage.",
                     fontSize = 13.sp,
-                    color = TextSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -89,25 +89,24 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                         .fillMaxWidth()
                         .clickable { filePickerLauncher.launch("audio/*") },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.5.dp, PrimaryColor.copy(alpha = 0.4f))
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(56.dp)
-                                .clip(CircleShape)
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(PrimaryColor.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.FolderOpen,
+                                imageVector = Icons.Default.CloudUpload,
                                 contentDescription = null,
                                 tint = PrimaryColor,
                                 modifier = Modifier.size(28.dp)
@@ -115,34 +114,16 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                         }
 
                         Text(
-                            text = "Select Local Audio File",
-                            fontSize = 17.sp,
+                            text = "Tap to choose audio file",
                             fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-
                         Text(
-                            text = "Tap to pick any .wav, .mp3, .m4a, or .ogg file from storage, or share a voice note directly from another app.",
-                            fontSize = 13.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
+                            text = "Supports MP3, WAV, M4A, OGG, FLAC and OPUS",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-
-                        Button(
-                            onClick = { filePickerLauncher.launch("audio/*") },
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.heightIn(min = 48.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.UploadFile,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(text = "Browse Storage Files", fontWeight = FontWeight.Bold, color = Color.White)
-                        }
                     }
                 }
             } else {
@@ -152,21 +133,23 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(PrimaryColor.copy(alpha = 0.2f)),
+                                .background(SecondaryColor.copy(alpha = 0.15f)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Audiotrack,
+                                imageVector = Icons.Default.AudioFile,
                                 contentDescription = null,
-                                tint = PrimaryColor,
+                                tint = SecondaryColor,
                                 modifier = Modifier.size(26.dp)
                             )
                         }
@@ -176,7 +159,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 text = audioName,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
-                                color = TextPrimary,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -187,7 +170,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 Text(
                                     text = "Size: ${audioSize.ifBlank { "Loading…" }}",
                                     fontSize = 12.sp,
-                                    color = TextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 if (audioSize.isBlank()) {
                                     CircularProgressIndicator(
@@ -203,7 +186,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Clear selected shared file",
-                                tint = TextSecondary
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -244,7 +227,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                             Text(
                                 text = statusText,
                                 fontSize = 12.sp,
-                                color = TextPrimary,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Center
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -283,7 +266,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                         Icon(
                                             imageVector = Icons.Default.Share,
                                             contentDescription = "Share text",
-                                            tint = TextSecondary
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     IconButton(
@@ -305,13 +288,13 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(8.dp))
-                                    .background(SurfaceLightDark)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
                                     .padding(12.dp)
                             ) {
                                 Text(
                                     text = resultText,
                                     fontSize = 14.sp,
-                                    color = TextPrimary,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     lineHeight = 20.sp
                                 )
                             }
@@ -325,17 +308,17 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 text = "Ready to Transcribe",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = TextPrimary
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "Active Transcription Model: ${activeModel?.name ?: "No model selected"}",
                                 fontSize = 12.sp,
-                                color = TextSecondary
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = if (audioSize.isBlank()) "Waiting for file metadata…" else "Loaded file: $audioSize",
                                 fontSize = 11.sp,
-                                color = TextMuted
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
                             Button(
@@ -353,13 +336,13 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                     Icon(
                                         imageVector = Icons.Default.PlayArrow,
                                         contentDescription = null,
-                                        tint = Color.Black
+                                        tint = MaterialTheme.colorScheme.onPrimary
                                     )
                                     Text(
                                         text = "Start Offline Transcription",
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 13.sp,
-                                        color = Color.Black
+                                        color = MaterialTheme.colorScheme.onPrimary
                                     )
                                 }
                             }
@@ -408,7 +391,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                             Text(
                                 text = stepText,
                                 fontSize = 13.sp,
-                                color = TextSecondary,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 lineHeight = 18.sp
                             )
                         }
@@ -426,11 +409,11 @@ private fun StagePill(label: String, active: Boolean) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(100.dp))
-            .background(if (active) PrimaryColor.copy(alpha = 0.18f) else SurfaceCard)
-            .border(BorderStroke(1.dp, if (active) PrimaryColor.copy(alpha = 0.35f) else GlassBorder), RoundedCornerShape(100.dp))
+            .background(if (active) PrimaryColor.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceContainer)
+            .border(BorderStroke(1.dp, if (active) PrimaryColor.copy(alpha = 0.35f) else MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(100.dp))
             .padding(horizontal = 10.dp, vertical = 5.dp)
     ) {
-        Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) PrimaryColor else TextSecondary)
+        Text(text = label, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) PrimaryColor else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

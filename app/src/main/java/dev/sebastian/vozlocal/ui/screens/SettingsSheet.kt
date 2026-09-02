@@ -364,9 +364,9 @@ fun SettingsSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (selected) PrimaryColor else MaterialTheme.colorScheme.surfaceContainer)
+                                .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer)
                                 .border(
-                                    BorderStroke(1.dp, if (selected) PrimaryColor else MaterialTheme.colorScheme.outlineVariant),
+                                    BorderStroke(1.dp, if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
                                     RoundedCornerShape(12.dp)
                                 )
                                 .clickable { viewModel.setThemeMode(value) },
@@ -374,7 +374,7 @@ fun SettingsSheet(
                         ) {
                             Text(
                                 text = label,
-                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                 fontSize = 13.sp,
                                 fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
                             )
@@ -411,9 +411,9 @@ fun SettingsSheet(
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) PrimaryColor.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceContainer)
+                                .background(if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surfaceContainer)
                                 .border(
-                                    BorderStroke(1.dp, if (isSelected) PrimaryColor else MaterialTheme.colorScheme.outlineVariant),
+                                    BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
                                     RoundedCornerShape(12.dp)
                                 )
                                 .clickable { viewModel.setLanguage(code) }
@@ -425,13 +425,13 @@ fun SettingsSheet(
                                 text = label,
                                 fontSize = 15.sp,
                                 fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
                             )
                             if (isSelected) {
                                 Icon(
                                     imageVector = Icons.Default.CheckCircle,
                                     contentDescription = "Selected",
-                                    tint = PrimaryColor,
+                                    tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -694,9 +694,9 @@ fun SettingsSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) PrimaryColor else MaterialTheme.colorScheme.surfaceContainer)
+                                .background(if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainer)
                                 .border(
-                                    BorderStroke(1.dp, if (isSelected) PrimaryColor else MaterialTheme.colorScheme.outlineVariant),
+                                    BorderStroke(1.dp, if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant),
                                     RoundedCornerShape(12.dp)
                                 )
                                 .clickable { viewModel.setHistoryLimit(valLimit) },
@@ -704,7 +704,7 @@ fun SettingsSheet(
                         ) {
                             Text(
                                 text = label,
-                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )

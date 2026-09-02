@@ -205,8 +205,8 @@ fun DictateTab(
                     Surface(
                         onClick = onOpenSettings,
                         shape = RoundedCornerShape(100.dp),
-                        color = PrimaryColor.copy(alpha = 0.12f),
-                        border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.3f))
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
@@ -217,7 +217,7 @@ fun DictateTab(
                                 text = "🌐 ${currentLanguage.uppercase()}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = PrimaryColor
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
@@ -286,7 +286,7 @@ fun DictateTab(
                         } else {
                             Button(
                                 onClick = { viewModel.downloadModel(targetModelId) },
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -294,14 +294,14 @@ fun DictateTab(
                                     imageVector = Icons.Default.Download,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp),
-                                    tint = Color.Black
+                                    tint = MaterialTheme.colorScheme.onPrimary
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Download ${selectedModel?.name ?: "Whisper Base"} (78 MB)",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
-                                    color = Color.Black
+                                    color = MaterialTheme.colorScheme.onPrimary
                                 )
                             }
                         }

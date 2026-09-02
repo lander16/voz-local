@@ -243,7 +243,7 @@ fun MainScreen(
                             drawerItems.forEach { (tab, label, icon) ->
                                 val selected = activeTab == tab
                                 NavigationDrawerItem(
-                                    icon = { Icon(imageVector = icon, contentDescription = null, tint = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant) },
+                                    icon = { Icon(imageVector = icon, contentDescription = null, tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant) },
                                     label = { Text(text = label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 14.sp) },
                                     selected = selected,
                                     onClick = {
@@ -251,8 +251,8 @@ fun MainScreen(
                                         coroutineScope.launch { drawerState.close() }
                                     },
                                     colors = NavigationDrawerItemDefaults.colors(
-                                        selectedContainerColor = PrimaryColor,
-                                        selectedTextColor = Color.White,
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.onPrimary,
                                         unselectedContainerColor = Color.Transparent,
                                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     ),
@@ -361,9 +361,9 @@ fun MainScreen(
                                     icon = { Icon(imageVector = icon, contentDescription = label) },
                                     label = { Text(text = label, fontWeight = FontWeight.Bold, fontSize = 12.sp) },
                                     colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = Color.White,
-                                        selectedTextColor = PrimaryColor,
-                                        indicatorColor = PrimaryColor.copy(alpha = 0.35f),
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                                         unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -399,9 +399,9 @@ fun MainScreen(
                                         icon = { Icon(imageVector = icon, contentDescription = label) },
                                         label = { Text(text = label) },
                                         colors = NavigationRailItemDefaults.colors(
-                                            selectedIconColor = Color.White,
-                                            selectedTextColor = PrimaryColor,
-                                            indicatorColor = PrimaryColor.copy(alpha = 0.35f),
+                                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                                            indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
                                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

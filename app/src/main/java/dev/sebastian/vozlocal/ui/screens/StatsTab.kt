@@ -106,12 +106,12 @@ fun StatsTab(viewModel: MainViewModel) {
                     text = "Offline Dictation Analytics",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "Track your typing efficiency, dictation word count and verbal speech rate (WPM) processed locally on device.",
                     fontSize = 13.sp,
-                    color = TextSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -207,12 +207,12 @@ fun StatsTab(viewModel: MainViewModel) {
                                 text = "Weekly Dictation Trend",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
-                                color = TextPrimary
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = "Total words dictated per day",
                                 fontSize = 11.sp,
-                                color = TextSecondary
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
@@ -246,7 +246,7 @@ fun StatsTab(viewModel: MainViewModel) {
                                         text = wordCount.toString(),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = TextPrimary,
+                                        color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.padding(bottom = 4.dp)
                                     )
                                 } else {
@@ -271,7 +271,7 @@ fun StatsTab(viewModel: MainViewModel) {
                                     text = day,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = TextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -304,29 +304,29 @@ fun StatsTab(viewModel: MainViewModel) {
                     ) {
                         // Stat Item 1
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Lifetime words", fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
-                            Text(text = totalWords.toString(), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                            Text(text = "Lifetime words", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                            Text(text = totalWords.toString(), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
                         }
 
                         // Stat Item 2
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Total speak time", fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
+                            Text(text = "Total speak time", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
                             Text(
                                 text = String.format(Locale.US, "%.1f min", totalMinutes),
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = TextPrimary
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
                         // Stat Item 3
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Dictations", fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.Bold)
-                            Text(text = stats.size.toString(), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = TextPrimary)
+                            Text(text = "Dictations", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                            Text(text = stats.size.toString(), fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
 
-                    HorizontalDivider(color = Color.DarkGray.copy(alpha = 0.3f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                     // Helpful Insight
                     Row(
@@ -349,7 +349,7 @@ fun StatsTab(viewModel: MainViewModel) {
                         Text(
                             text = insightsText,
                             fontSize = 11.sp,
-                            color = TextSecondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 15.sp
                         )
                     }

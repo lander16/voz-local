@@ -44,12 +44,12 @@ fun DictionaryTab(viewModel: MainViewModel) {
                     text = "Personal Dictation Dictionary",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "Add custom words, proper names, or jargon you use often and want the model to recognize. They are sent directly to the local model's biasing vocabulary list. You can also specify common misheard variations to automatically replace them.",
                     fontSize = 13.sp,
-                    color = TextSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -83,7 +83,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                             placeholder = { Text("e.g. VozLocal") },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = PrimaryColor,
-                                unfocusedBorderColor = Color.DarkGray,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                                 focusedLabelColor = PrimaryColor
                             ),
                             singleLine = true,
@@ -97,7 +97,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                             placeholder = { Text("e.g. voz local, voice local, bos local") },
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = PrimaryColor,
-                                unfocusedBorderColor = Color.DarkGray,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
                                 focusedLabelColor = PrimaryColor
                             ),
                             singleLine = true,
@@ -123,7 +123,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                             text = "Add Custom Word",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
-                            color = Color.Black
+                            color = MaterialTheme.colorScheme.onPrimary
                         )
                     }
                 }
@@ -139,7 +139,7 @@ fun DictionaryTab(viewModel: MainViewModel) {
                     text = "Recognized Words (${words.size})",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
-                    color = TextSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -156,14 +156,14 @@ fun DictionaryTab(viewModel: MainViewModel) {
                         Icon(
                             imageVector = Icons.Default.Book,
                             contentDescription = null,
-                            tint = TextSecondary.copy(alpha = 0.3f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                             modifier = Modifier.size(48.dp)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "No custom words saved yet.",
                             fontSize = 13.sp,
-                            color = TextSecondary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -231,7 +231,7 @@ fun DictionaryRow(word: DictionaryWord, onDelete: () -> Unit) {
                     Text(
                         text = "Phonetic variations: ${word.replacement}",
                         fontSize = 11.sp,
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = androidx.compose.ui.text.TextStyle(fontStyle = FontStyle.Italic)
                     )
                 } else {
@@ -249,7 +249,7 @@ fun DictionaryRow(word: DictionaryWord, onDelete: () -> Unit) {
                 Icon(
                     imageVector = Icons.Default.DeleteOutline,
                     contentDescription = "Delete dictionary word",
-                    tint = TextSecondary,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
             }

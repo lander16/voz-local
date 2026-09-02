@@ -49,7 +49,7 @@ fun SetupWizardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .background(MaterialTheme.colorScheme.background)
             .padding(24.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -78,14 +78,14 @@ fun SetupWizardScreen(
             text = "Welcome to VozLocal",
             fontWeight = FontWeight.ExtraBold,
             fontSize = 24.sp,
-            color = TextPrimary,
+            color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center
         )
         
         Text(
             text = "100% on-device, private speech-to-text dictation. Set up the floating button to dictate alongside your keyboard in any app!",
             fontSize = 13.sp,
-            color = TextSecondary,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             lineHeight = 18.sp,
             modifier = Modifier.padding(horizontal = 12.dp)
@@ -104,25 +104,25 @@ fun SetupWizardScreen(
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, GlassBorder)
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(text = "Setup progress", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
-                    Text(text = "${(completionProgress * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor)
+                    Text(text = "Setup progress", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = "${(completionProgress * 100).toInt()}%", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
                 }
                 LinearProgressIndicator(
                     progress = { completionProgress },
                     modifier = Modifier.fillMaxWidth().height(6.dp),
-                    color = PrimaryColor,
-                    trackColor = SurfaceCard
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainer
                 )
                 Text(
                     text = "Grant mic, enable the floating button, and download a model to dictate 100% offline.",
                     fontSize = 12.sp,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp
                 )
             }
@@ -157,9 +157,9 @@ fun SetupWizardScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("setup_step_model"),
-            colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             shape = RoundedCornerShape(16.dp),
-            border = BorderStroke(1.dp, if (hasDownloadedModel) Color(0xFF10B981).copy(alpha = 0.5f) else GlassBorder)
+            border = BorderStroke(1.dp, if (hasDownloadedModel) Color(0xFF10B981).copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -174,7 +174,7 @@ fun SetupWizardScreen(
                         text = "3. Offline Speech Model",
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
-                        color = TextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
                     if (hasDownloadedModel) {
@@ -236,7 +236,7 @@ fun SetupWizardScreen(
                     else
                         "VozLocal transcribes audio 100% on-device with zero cloud servers. Download the recommended model (Whisper Base, 78 MB) to enable speech recognition.",
                     fontSize = 12.sp,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp
                 )
 
@@ -250,7 +250,7 @@ fun SetupWizardScreen(
                                     .height(8.dp)
                                     .clip(RoundedCornerShape(4.dp)),
                                 color = PrimaryColor,
-                                trackColor = SurfaceCard
+                                trackColor = MaterialTheme.colorScheme.surfaceContainer
                             )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -265,7 +265,7 @@ fun SetupWizardScreen(
                                 Text(
                                     text = "${String.format(java.util.Locale.US, "%.1f", downloadStatus?.downloadedMb ?: 0f)} / ${recommendedModel?.sizeMb?.toInt() ?: 78} MB",
                                     fontSize = 11.sp,
-                                    color = TextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -281,27 +281,27 @@ fun SetupWizardScreen(
                                 Text(
                                     text = "Or Tiny (42 MB)",
                                     fontSize = 11.sp,
-                                    color = TextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
 
                             Button(
                                 onClick = { viewModel.downloadModel(targetModelId) },
-                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 shape = RoundedCornerShape(8.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Download,
                                     contentDescription = null,
                                     modifier = Modifier.size(14.dp),
-                                    tint = Color.Black
+                                    tint = MaterialTheme.colorScheme.onPrimary
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = "Download Model (78 MB)",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.sp,
-                                    color = Color.Black
+                                    color = MaterialTheme.colorScheme.onPrimary
                                 )
                             }
                         }
@@ -318,7 +318,7 @@ fun SetupWizardScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("setup_config_card"),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
@@ -339,14 +339,14 @@ fun SetupWizardScreen(
                             text = "Overlay Button Preference",
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
-                            color = TextPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     }
 
                     Text(
                         text = "VozLocal can automatically hide the floating overlay button when no text input is focused, ensuring your screen remains clean and clutter-free.",
                         fontSize = 12.sp,
-                        color = TextSecondary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 16.sp
                     )
 
@@ -361,17 +361,17 @@ fun SetupWizardScreen(
                             text = "Show button ONLY on clicking inputs",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
                         Switch(
                             checked = showOnlyOnInput,
                             onCheckedChange = { viewModel.setShowOnlyOnInput(it) },
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.Black,
-                                checkedTrackColor = PrimaryColor,
-                                uncheckedThumbColor = Color.LightGray,
-                                uncheckedTrackColor = Color.DarkGray
+                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                                checkedTrackColor = MaterialTheme.colorScheme.primary,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
+                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainer
                             ),
                             modifier = Modifier.testTag("setup_only_on_input_switch")
                         )
@@ -381,9 +381,9 @@ fun SetupWizardScreen(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, GlassBorder)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(text = "Privacy reassurance", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor, letterSpacing = 1.sp)
@@ -394,7 +394,7 @@ fun SetupWizardScreen(
                     ).forEach { line ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                             Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(PrimaryColor).padding(top = 5.dp))
-                            Text(text = line, fontSize = 12.sp, color = TextSecondary, lineHeight = 16.sp)
+                            Text(text = line, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
                         }
                     }
                 }
@@ -408,8 +408,8 @@ fun SetupWizardScreen(
                 onClick = onDone,
                 enabled = isReadyToStart,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = PrimaryColor,
-                    disabledContainerColor = SurfaceCard
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant
                 ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
@@ -425,12 +425,12 @@ fun SetupWizardScreen(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = if (isReadyToStart) Color.Black else TextSecondary
+                        tint = if (isReadyToStart) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = if (isReadyToStart) "Start Using VozLocal" else "Download a Model Above to Continue",
                         fontWeight = FontWeight.Bold,
-                        color = if (isReadyToStart) Color.Black else TextSecondary,
+                        color = if (isReadyToStart) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 14.sp
                     )
                 }
@@ -438,7 +438,7 @@ fun SetupWizardScreen(
 
             TextButton(
                 onClick = onSkip,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("setup_skip_button")
@@ -448,7 +448,7 @@ fun SetupWizardScreen(
         } else {
             TextButton(
                 onClick = onSkip,
-                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("setup_skip_button")
@@ -487,7 +487,7 @@ fun SetupStepCard(
                 ),
                 RoundedCornerShape(16.dp)
             ),
-        colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(
@@ -503,7 +503,7 @@ fun SetupStepCard(
                     text = title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 15.sp,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 
                 if (isGranted) {
@@ -554,14 +554,14 @@ fun SetupStepCard(
             Text(
                 text = description,
                 fontSize = 12.sp,
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 16.sp
             )
             
             if (!isGranted) {
                 Button(
                     onClick = onAction,
-                    colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.align(Alignment.End)
                 ) {
@@ -569,7 +569,7 @@ fun SetupStepCard(
                         text = buttonText,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp,
-                        color = Color.Black
+                        color = MaterialTheme.colorScheme.onPrimary
                     )
                 }
             }
