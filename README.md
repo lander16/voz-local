@@ -159,6 +159,8 @@ Models are downloaded on-demand from Hugging Face directly to `context.filesDir/
 
 VozLocal optimizes for complete, accurate local transcription before micro-latency:
 
+- **Multi-core CPU threading optimization** — `WhisperCpuConfig` dynamically discovers high-performance CPU cores by parsing `/sys/devices/system/cpu/` and `/proc/cpuinfo`. It safely allocates up to 4 performance cores (capping at 2 on lower-core devices) while reserving CPU budget for the audio recording and UI threads. This avoids mobile thermal throttling and oversubscription during sustained dictation. Allocation also scales by active model size (e.g. reserving 4 cores for Large/Medium and 2-3 for Base/Tiny), with configurable JVM override (`-Dvozlocal.whisper.threads=N`).
+- **Input-focus zero-latency model warmup** — In `DictationAccessibilityService`, whenever a permitted text input field receives focus (`TYPE_VIEW_FOCUSED` or `TYPE_WINDOW_STATE_CHANGED`), a background coroutine on `Dispatchers.Default` warms up the active Whisper model in memory (`warmupModelIfNeeded()`). This eliminates cold-start JNI initialization pauses (~300–800ms), ensuring dictation begins instantaneously the moment you tap the floating microphone.
 - **Capture integrity** — stopping the microphone stops and joins the PCM reader before samples are copied, so a final in-flight audio block cannot be lost.
 - **Long dictation safety** — dictations up to 25 seconds retain Whisper’s fast single-window path. Longer recordings automatically enable multi-window decoding, avoiding 30-second-window truncation.
 - **Accuracy-oriented decoding** — the default no-speech and log-probability thresholds are `0.6` and `-1.0`; a `0.2` temperature increment lets Whisper retry uncertain passages. Advanced thresholds remain configurable in Settings.
@@ -236,21 +238,93 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 
 ---
 
-## 🔒 Privacy & Security
+## 🎈 Floating Microphone Gestures
 
-- 🚫 **Zero telemetry, no tracking.** No Firebase, no analytics SDK, no third-party network call after model download.
-- ✈️ **Air-gapped operation.** Once model weights are downloaded, turn off Wi-Fi and cellular — the app continues to work at 100% capacity. Downloads are user-initiated and are the only network call.
-- 🔐 **Local storage only.** All dictionary entries and dictation history live in the device's private Room database (`vozlocal_database`). The DB is **excluded** from cloud backup and device-transfer rules (`backup_rules.xml` and `data_extraction_rules.xml`) so transcript text is not silently uploaded or migrated. The downloaded `models/` directory is also excluded.
-- 🛡️ **Accessibility Tool Authorization (`isAccessibilityTool="true"`)**:
-  - In Android 14+ (API 34), RASP security engines in banking apps flag accessibility services that inspect windows unless declared as an official assistive tool.
-  - VozLocal explicitly configures `android:isAccessibilityTool="true"` in `accessibility_service_config.xml` for assistive voice dictation and motor access, complying with Android framework safety classifications.
-- 🏦 **Built-in Sensitive Apps Protection**:
-  - VozLocal includes a dedicated sensitive-app exclusion denylist in **Settings → Floating assistant**.
-  - Banking apps, password managers, authenticators, and payment apps are automatically kept safe: the floating assistant never appears, never observes events, and never attempts text insertion in protected applications.
-- 🪟 **Hardened accessibility scope.** The service listens only for focus and window-state changes to position the floating microphone button alongside the keyboard. It does not retrieve interactive-window lists, does not filter keys, does not request gestures or screenshots, and never targets password or sensitive nodes.
-- 📋 **No clipboard fallback.** If direct text insertion fails, VozLocal saves the local transcript in history but never copies it to the system clipboard on behalf of the overlay.
-- 🔒 **No dangerous background permissions.** No `FOREGROUND_SERVICE_MICROPHONE` or extraneous background permissions are declared.
-- 🪵 **No raw transcripts in logs.** `WhisperEngine` only logs raw transcription text under `BuildConfig.DEBUG` — release builds log nothing user-identifiable.
+The floating accessibility overlay provides fluid, non-intrusive dictation alongside any Android keyboard:
+
+- **Tap to start / stop** — Tap the microphone to immediately begin dictation with instant tactile haptic feedback. A second tap stops recording and inserts your transcription into the active text field.
+- **Drag anywhere on screen to reposition** — Freely drag the floating button to any location on your screen with real-time responsive touch tracking.
+- **Automatic edge-docking** — When released, a smooth spring deceleration animation snaps the button flush against the left or right screen bezel (whichever is closest), ensuring underlying reading material and keyboard layouts stay unobscured while respecting display cutouts and navigation bars.
+- **Persistent positioning** — Remembers your customized placement across app restarts and system reboots via `FloatingButtonDockPolicy` and device-local preferences.
+
+---
+
+## 🗣️ Spoken Punctuation Commands Cheat Sheet
+
+VozLocal features phrase-isolated spoken punctuation replacement. When **Spoken punctuation commands** is enabled in Settings, vocalized punctuation commands are converted into natural punctuation marks and line breaks. Because the replacement rules isolate punctuation commands, ordinary phrases (such as *"el paciente entró en coma"* or *"the word period is a noun"*) are preserved without unwanted substitution.
+
+### 🇪🇸 Spanish Commands
+
+| Spoken Command | Output Symbol | Behavior / Meaning |
+|---|:---:|---|
+| `punto` / `punto final` / `punto y seguido` / `punto y aparte` | `.` | Period followed by a space and automatic sentence capitalization |
+| `coma` | `,` | Comma followed by a space |
+| `punto y coma` | `;` | Semicolon followed by a space |
+| `dos puntos` | `:` | Colon followed by a space |
+| `puntos suspensivos` | `...` | Ellipsis |
+| `abrir interrogación` / `abrir signo de interrogación` | `¿` | Inverted Spanish question mark attaching to following text |
+| `cerrar interrogación` / `cerrar signo de interrogación` / `signo de interrogación` | `?` | Closing question mark with trailing space |
+| `abrir exclamación` / `abrir signo de admiración` | `¡` | Inverted Spanish exclamation mark attaching to following text |
+| `cerrar exclamación` / `cerrar signo de admiración` / `signo de exclamación` | `!` | Closing exclamation point with trailing space |
+| `abrir comillas` | `"` | Opening quotation mark |
+| `cerrar comillas` | `"` | Closing quotation mark |
+| `abrir paréntesis` | `(` | Opening parenthesis attaching to following word |
+| `cerrar paréntesis` | `)` | Closing parenthesis |
+| `nueva línea` | `\n` | Single line break |
+| `nuevo párrafo` | `\n\n` | Double line break starting a new paragraph |
+| `guión` | `-` | Dash / hyphen |
+
+### 🇬🇧 English Commands
+
+| Spoken Command | Output Symbol | Behavior / Meaning |
+|---|:---:|---|
+| `period` / `full stop` | `.` | Period followed by space and capitalizes next word |
+| `comma` | `,` | Comma followed by space |
+| `semicolon` | `;` | Semicolon followed by space |
+| `colon` | `:` | Colon followed by space |
+| `ellipsis` / `dot dot dot` | `...` | Ellipsis |
+| `question mark` | `?` | Question mark with trailing space |
+| `exclamation mark` / `exclamation point` | `!` | Exclamation point with trailing space |
+| `open quote` / `open quotation mark` | `"` | Opening quotation mark |
+| `close quote` / `close quotation mark` | `"` | Closing quotation mark |
+| `open parenthesis` / `open paren` | `(` | Opening parenthesis |
+| `close parenthesis` / `close paren` | `)` | Closing parenthesis |
+| `new line` | `\n` | Single line break |
+| `new paragraph` | `\n\n` | Double line break starting a new paragraph |
+| `hyphen` / `dash` | `-` | Dash / hyphen |
+
+---
+
+## 🔒 Privacy, Security & Google Play Compliance
+
+VozLocal is architected from inception for complete local sovereignty, zero cloud tracking, and strict adherence to Google Play Store policies:
+
+### 1. 100% On-Device Offline Guarantee
+- **Zero telemetry or external analytics**: No Firebase, telemetry trackers, crash-loggers, or third-party SDKs are embedded.
+- **Air-gapped voice transcription**: All Whisper speech recognition models run purely on-device using local CPU inference (`whisper.cpp`). No audio recordings, audio samples, or generated transcripts are ever transmitted to remote servers.
+- **Air-gapped operation**: Turn on Airplane Mode after downloading a speech model and VozLocal will operate indefinitely at 100% functionality. Network access is utilized exclusively for user-initiated model weight downloads.
+
+### 2. Google Play Accessibility Tool Compliance (`isAccessibilityTool="true"`)
+- **Official Assistive Purpose**: In Android 14+ (API 34), RASP security engines in sensitive applications flag generic accessibility services. VozLocal explicitly declares `android:isAccessibilityTool="true"` in its `accessibility_service_config.xml` to signify compliance with Google Play's Accessibility API policies.
+- **Accessibility Beneficiaries**: VozLocal serves as an assistive voice-typing alternative for individuals with motor disabilities, repetitive strain injuries (RSI), tremors, visual impairments, or situational typing constraints.
+- **Strict Scope of Operation**:
+  - The accessibility service only observes focus and window transitions (`TYPE_VIEW_FOCUSED`, `TYPE_WINDOW_STATE_CHANGED`) to position the floating microphone alongside the active keyboard.
+  - It does **not** read screen contents or text from other applications, does not log keystrokes, does not capture screenshots, and does not inspect window node hierarchies.
+  - Text insertion occurs solely via Android's `ACTION_SET_TEXT` API when the user explicitly triggers dictation.
+
+### 3. Sensitive & Banking Application Protection
+- **Automatic Denylist Shielding**: VozLocal incorporates a dedicated sensitive application exclusion manager in **Settings → Floating assistant**.
+- **Password & Financial Safety**: The floating button is automatically hidden and all text operations are rejected when interacting with banking applications, cryptocurrency wallets, password managers, or secure password/PIN input fields.
+- **Private Local Storage**: Transcripts and custom dictionaries reside exclusively in the device's private Room database (`vozlocal_database`), explicitly excluded from cloud backups and device migration (`backup_rules.xml`).
+
+### 4. Android Permission Justifications
+
+| Permission | Justification & Usage Scope |
+|---|---|
+| `android.permission.RECORD_AUDIO` | **Dictation capture**: Used exclusively while an active speech recording session is initiated by the user. The microphone is never accessed in the background or when dictation is stopped. Audio is processed directly in-memory into 16 kHz PCM frames without leaving device RAM. |
+| `android.permission.BIND_ACCESSIBILITY_SERVICE` | **Assistive overlay & text entry**: Used solely to detect when an editable text view is focused so the floating microphone button can be presented, and to insert the generated transcription directly into the active field via `ACTION_SET_TEXT`. |
+| `android.permission.SYSTEM_ALERT_WINDOW` | **Floating overlay presentation**: Required to display the floating microphone button and wave aura over permitted apps alongside the soft keyboard. |
+| `android.permission.INTERNET` | **Model downloads only**: Utilized exclusively for user-directed downloads of quantized Whisper model weights from Hugging Face. Never invoked during recording or transcription. |
 
 ---
 

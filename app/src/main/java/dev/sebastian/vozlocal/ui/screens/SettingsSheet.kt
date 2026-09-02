@@ -1,5 +1,8 @@
 package dev.sebastian.vozlocal.ui.screens
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +21,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -25,7 +30,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
+import dev.sebastian.vozlocal.ui.formatShortDateTime
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 import java.util.Locale
@@ -63,8 +70,12 @@ fun SettingsSheet(
     val useStreamingDictation by viewModel.useStreamingDictation.collectAsStateWithLifecycle()
     val deniedPackages by viewModel.deniedPackages.collectAsStateWithLifecycle()
     val launchableApps by viewModel.launchableApps.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val history by viewModel.transcriptionHistory.collectAsStateWithLifecycle()
     var showSensitiveAppsDialog by remember { mutableStateOf(false) }
     var sensitiveAppsQuery by remember { mutableStateOf("") }
+    var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
 
     if (showSensitiveAppsDialog) {
         val normalizedQuery = sensitiveAppsQuery.trim()
@@ -116,6 +127,93 @@ fun SettingsSheet(
             },
             confirmButton = {
                 TextButton(onClick = { showSensitiveAppsDialog = false }) { Text("Done") }
+            }
+        )
+    }
+
+    if (showPrivacyPolicyDialog) {
+        AlertDialog(
+            onDismissRequest = { showPrivacyPolicyDialog = false },
+            containerColor = SurfaceCard,
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Security,
+                    contentDescription = null,
+                    tint = PrimaryColor,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Privacy Policy & Offline Guarantee",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    PrivacyGuaranteeItem(
+                        icon = Icons.Default.WifiOff,
+                        title = "100% Offline",
+                        description = "All Whisper speech-to-text models run purely on-device with zero internet connectivity required. Model weights are downloaded once and stored locally."
+                    )
+
+                    PrivacyGuaranteeItem(
+                        icon = Icons.Default.Shield,
+                        title = "Zero Data Collection",
+                        description = "No audio recordings, voice samples, or transcriptions are ever collected, logged to remote servers, or shared with third parties. No analytics or tracking SDKs are bundled."
+                    )
+
+                    PrivacyGuaranteeItem(
+                        icon = Icons.Default.AccessibilityNew,
+                        title = "Accessibility Tool",
+                        description = "Officially declared as an assistive accessibility tool (isAccessibilityTool=\"true\"). It only inserts text when the user explicitly triggers dictation and never inspects sensitive/password fields or denylisted banking apps."
+                    )
+
+                    PrivacyGuaranteeItem(
+                        icon = Icons.Default.Mic,
+                        title = "Audio Record Permission",
+                        description = "Used exclusively during active dictation sessions. The microphone is never accessed in the background or when dictation is stopped."
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            val url = "https://github.com/lander16/voz-local"
+                            try {
+                                uriHandler.openUri(url)
+                            } catch (e: Exception) {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.OpenInBrowser,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Online Documentation (GitHub)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPrivacyPolicyDialog = false }) {
+                    Text("Close", fontWeight = FontWeight.Bold, color = PrimaryColor)
+                }
             }
         )
     }
@@ -613,6 +711,42 @@ fun SettingsSheet(
                         }
                     }
                 }
+
+                // Export Transcription History
+                OutlinedButton(
+                    onClick = {
+                        if (history.isEmpty()) {
+                            Toast.makeText(context, "No transcription history to export", Toast.LENGTH_SHORT).show()
+                        } else {
+                            val exportText = buildTranscriptionHistoryExport(history)
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "VozLocal Transcription History")
+                                putExtra(Intent.EXTRA_TEXT, exportText)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Export Transcription History"))
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, GlassBorder)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = null,
+                        tint = PrimaryColor,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (history.isEmpty()) "Export transcription history" else "Export transcription history (${history.size})",
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        fontSize = 14.sp
+                    )
+                }
             }
 
             HorizontalDivider(color = GlassBorder)
@@ -828,23 +962,120 @@ fun SettingsSheet(
 
             HorizontalDivider(color = GlassBorder)
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, GlassBorder)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(text = "Privacy & trust", fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor, letterSpacing = 1.sp)
-                    Text(text = "Everything here is stored locally. Network access is only used for model downloads.", fontSize = 13.sp, color = TextSecondary, lineHeight = 18.sp)
-                    listOf(
-                        "Accessibility scope is kept narrow",
-                        "Models and history stay in app-private storage",
-                        "Release builds don’t log raw transcripts"
-                    ).forEach { line ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
-                            Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(100.dp)).background(PrimaryColor).padding(top = 5.dp))
-                            Text(text = line, fontSize = 12.sp, color = TextSecondary, lineHeight = 16.sp)
+            // Section 7: Privacy & Security
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Privacy & security",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = PrimaryColor,
+                    letterSpacing = 1.sp
+                )
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, GlassBorder)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(PrimaryColor.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Security,
+                                    contentDescription = null,
+                                    tint = PrimaryColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column {
+                                Text(
+                                    text = "Privacy & Offline Guarantee",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Text(
+                                    text = "100% on-device speech-to-text with zero tracking",
+                                    fontSize = 12.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "Everything is processed and stored locally. Network access is strictly restricted to user-initiated model downloads.",
+                            fontSize = 13.sp,
+                            color = TextSecondary,
+                            lineHeight = 18.sp
+                        )
+
+                        listOf(
+                            "Accessibility scope is kept narrow",
+                            "Models and history stay in app-private storage",
+                            "Release builds don't log raw transcripts"
+                        ).forEach { line ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                                Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(100.dp)).background(PrimaryColor).padding(top = 5.dp))
+                                Text(text = line, fontSize = 12.sp, color = TextSecondary, lineHeight = 16.sp)
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { showPrivacyPolicyDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 44.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Policy,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Privacy Policy", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    val url = "https://github.com/lander16/voz-local"
+                                    try {
+                                        uriHandler.openUri(url)
+                                    } catch (e: Exception) {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 44.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.OpenInBrowser,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Online Docs", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -918,3 +1149,54 @@ private fun cleanupOptionRow(
         }
     }
 }
+
+@Composable
+private fun PrivacyGuaranteeItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    description: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(PrimaryColor.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(imageVector = icon, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(18.dp))
+        }
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Text(text = description, fontSize = 12.sp, color = TextSecondary, lineHeight = 16.sp)
+        }
+    }
+}
+
+private fun buildTranscriptionHistoryExport(history: List<TranscriptionHistory>): String {
+    val sb = StringBuilder()
+    sb.append("# VozLocal Transcription History\n\n")
+    sb.append("Exported on ${formatShortDateTime(System.currentTimeMillis())}\n\n")
+    sb.append("Total items: ${history.size}\n\n")
+    sb.append("---\n\n")
+    for (item in history) {
+        val date = formatShortDateTime(item.timestamp)
+        val typeLabel = if (item.type == "shared_file") "Shared File" else "Live Dictation"
+        sb.append("## $date · $typeLabel\n\n")
+        if (!item.fileName.isNullOrBlank()) {
+            sb.append("- **File:** ${item.fileName}\n")
+        }
+        sb.append("- **Model:** ${item.modelUsed}\n")
+        if (item.durationSec > 0) {
+            sb.append("- **Duration:** ${item.durationSec}s\n")
+        }
+        sb.append("\n${item.text.trim()}\n\n")
+        sb.append("---\n\n")
+    }
+    return sb.toString()
+}
+
