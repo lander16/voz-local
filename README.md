@@ -72,9 +72,9 @@ VozLocal System Architecture (v2)
 ┌─────────▼──────────────────────────▼──────────────────────────────▼─────────┐
 │                   WhisperEngine (com.whispercpp.whisper.WhisperContext)      │
 │                  - Single-thread executor (JNI constraint)                   │
-│                  - WhisperLib.fullTranscribeWithLang() — language hint skips │
-│                    ~200-500ms auto-detect overhead                            │
-│                  - adaptive thread count with optional JVM override           │
+│                  - WhisperLib.fullTranscribeWithParams() — language hint,    │
+│                    dynamic audio_ctx, temperature fallback, and noTimestamps │
+│                  - adaptive thread count with Tensor G3 & 8+ core optimization│
 │                  - Cleaner-based backstop cleanup (no finalize()/runBlocking)│
 └──────────────────────────────────┬──────────────────────────────────────────┘
                                    │
@@ -126,13 +126,13 @@ A `SharedPreferences.OnSharedPreferenceChangeListener` is registered in the serv
 | **Language** | Kotlin 2.2.10 & C++ (JNI, vendored whisper.cpp) |
 | **UI Framework** | Jetpack Compose (Material 3, BOM 2024.09.00) |
 | **Architecture** | MVVM, Kotlin Coroutines, `StateFlow`, process-scoped singletons |
-| **STT Engine** | `whisper.cpp` (q8_0 / q5_0 GGML quantized) |
+| **STT Engine** | `whisper.cpp` (q8_0 / q5_1 GGML quantized with ARMv8.2-A / ARMv9-A `+dotprod` and `+i8mm` hardware acceleration, dynamic `audio_ctx`) |
 | **Text Cleanup** | Local rule-based Kotlin engine (`QwenEngine`) — Minimal / Balanced / Aggressive modes, pure Kotlin, no model file |
 | **Persistence** | Room 2.7.0 (version 2, with stub `MIGRATION_1_2`, no destructive fallback) |
 | **Audio Capture** | `AudioRecord` API (16 kHz mono PCM, `VOICE_RECOGNITION` source) |
 | **Audio Decoding** | `MediaCodec` + `MediaExtractor`; drains output EOS, handles decoder PCM format changes, downmixes channels, and resamples to 16 kHz |
 | **Networking** | OkHttp 4.x (model downloads only; offline thereafter) |
-| **Global Overlay** | Android `AccessibilityService` + `WindowManager` (display-cutout aware) |
+| **Global Overlay** | Android `AccessibilityService` + `WindowManager` (edge docking, position persistence, haptic feedback, display-cutout aware) |
 | **Build** | AGP 9.3.1, R8 minify + resource shrink **enabled** for release |
 
 ---
@@ -187,7 +187,7 @@ For accuracy-first use, benchmark `large-v3-turbo q5_0` against `small q8_0` on 
 ### Installation & Build
 
 ```bash
-git clone https://github.com/your-username/voz-local.git
+git clone https://github.com/lander16/voz-local.git
 cd voz-local
 cp .env.example .env          # optional, only if you override build config
 ./gradlew assembleDebug
@@ -234,7 +234,8 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 - **Language** — the same set as in the Dictate tab.
 - **Post-processing** — Smart pause correction, auto-capitalization, dictionary, local cleanup mode (Minimal / Balanced / Aggressive), spoken punctuation commands, and optional VAD. The VAD model downloads only when you explicitly request it. These settings are persisted to SharedPreferences.
 - **Overlay** — show the floating button only on text fields and select sensitive apps where it must never appear.
-- **History** — opt-out of saving transcripts, or cap history at 5 / 10 / 20 / 50 / unlimited.
+- **History & Data Management** — opt-out of saving transcripts, cap history limit, or one-tap export your entire transcription history to Markdown/Text via the Android sharesheet.
+- **Privacy & Security** — view the in-app "Privacy Policy & Offline Guarantee" modal dialog confirming zero cloud telemetry and local model execution.
 - **Done** — closes the sheet (settings are saved instantly on toggle).
 
 ---
