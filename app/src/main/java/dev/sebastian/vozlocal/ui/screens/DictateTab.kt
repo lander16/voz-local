@@ -328,6 +328,7 @@ fun DictateTab(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .defaultMinSize(minHeight = 154.dp)
                         .padding(18.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -370,7 +371,6 @@ fun DictateTab(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f, fill = false)
                             .heightIn(min = 72.dp)
                     ) {
                         if (liveText.isNotBlank()) {
