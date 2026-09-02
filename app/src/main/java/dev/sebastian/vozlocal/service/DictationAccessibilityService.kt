@@ -54,6 +54,8 @@ class DictationAccessibilityService : AccessibilityService() {
     private var recordingTarget: AccessibilityTarget? = null
     private var startTimestamp: Long = 0
     private var timerJob: Job? = null
+    internal var lastWarmedModelId: String? = null
+    private var warmupJob: Job? = null
 
     // Process-wide singleton recorder (has an internal Mutex); shared with the main app.
     private val audioRecorder get() = (applicationContext as VozLocalApp).audioRecorder
@@ -230,6 +232,15 @@ class DictationAccessibilityService : AccessibilityService() {
         repository = (applicationContext as VozLocalApp).repository
         val prefs = getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
         prefs.registerOnSharedPreferenceChangeListener(prefListener)
+        serviceScope.launch {
+            repository.allModels.collect { models ->
+                val active = models.find { it.isSelected && it.isDownloaded }
+                    ?: models.firstOrNull { it.isDownloaded }
+                if (active?.id != lastWarmedModelId) {
+                    lastWarmedModelId = null
+                }
+            }
+        }
     }
 
     override fun onServiceConnected() {
@@ -754,6 +765,37 @@ class DictationAccessibilityService : AccessibilityService() {
         val target = nodeTarget(source)
         currentTarget = target?.takeIf { AccessibilityTargetPolicy.canTarget(it, deniedPackages()) }
         updateFloatingViewVisibility()
+
+        if (currentTarget != null && !isRecording) {
+            warmupModelIfNeeded()
+        }
+    }
+
+    internal fun warmupModelIfNeeded() {
+        if (isRecording) return
+        if (warmupJob?.isActive == true) return
+        if (lastWarmedModelId != null && repository.modelLoaded.value) return
+
+        warmupJob = serviceScope.launch(Dispatchers.Default) {
+            try {
+                val models = repository.allModels.first()
+                val selected = models.find { it.isSelected && it.isDownloaded }
+                    ?: models.firstOrNull { it.isDownloaded }
+                val modelId = selected?.id ?: return@launch
+
+                if (lastWarmedModelId == modelId && repository.modelLoaded.value) {
+                    return@launch
+                }
+
+                val loaded = repository.preloadModel(modelId)
+                if (loaded) {
+                    lastWarmedModelId = modelId
+                    Log.d(TAG, "Input-focus model warmup succeeded for model: $modelId")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to warm up Whisper model on input focus", e)
+            }
+        }
     }
 
     private fun stopAndDiscardForSensitiveApp() {
@@ -782,6 +824,9 @@ class DictationAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         snapAnimator?.cancel()
         snapAnimator = null
+        warmupJob?.cancel()
+        warmupJob = null
+        lastWarmedModelId = null
         if (ownsRecorderSession) {
             audioRecorder.stopRecording()
             ownsRecorderSession = false

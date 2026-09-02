@@ -20,49 +20,73 @@ object WhisperCpuConfig {
     fun threadCountFor(params: WhisperParams): Int {
         configuredThreadCount()?.let { return it }
         val base = preferredThreadCount
+        return threadCountFor(params, base, maxThreadCap())
+    }
+
+    internal fun threadCountFor(
+        params: WhisperParams,
+        base: Int,
+        maxCap: Int = maxThreadCap()
+    ): Int {
         val modelHint = params.modelIdHint
         return when {
-            modelHint?.contains("large", ignoreCase = true) == true -> (base + 1).coerceAtMost(maxThreadCap())
-            modelHint?.contains("medium", ignoreCase = true) == true -> (base + 1).coerceAtMost(maxThreadCap())
-            modelHint?.contains("tiny", ignoreCase = true) == true -> base.coerceAtMost(2)
-            modelHint?.contains("base", ignoreCase = true) == true -> base.coerceAtMost(3)
+            modelHint?.contains("large", ignoreCase = true) == true -> (base + 1).coerceAtMost(maxCap)
+            modelHint?.contains("medium", ignoreCase = true) == true -> (base + 1).coerceAtMost(maxCap)
+            modelHint?.contains("base", ignoreCase = true) == true -> minOf(base, 4)
+            modelHint?.contains("tiny", ignoreCase = true) == true -> minOf(base, 3)
             else -> base
         }
     }
 
-    private fun configuredThreadCount(): Int? = System.getProperty(THREAD_PROPERTY)
+    internal fun configuredThreadCount(): Int? = System.getProperty(THREAD_PROPERTY)
         ?.toIntOrNull()
         ?.takeIf { it > 0 }
         ?.coerceAtMost(Runtime.getRuntime().availableProcessors().coerceAtLeast(1))
 
-    private fun adaptiveThreadCount(): Int {
-        val available = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-        val highPerf = CpuInfo.getHighPerfCpuCount().takeIf { it > 0 } ?: available
+    internal fun adaptiveThreadCount(
+        available: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1),
+        highPerf: Int? = null
+    ): Int {
+        val highPerfCount = highPerf?.takeIf { it > 0 } ?: available
         val reserved = if (available >= 8) 2 else 1
-        val usable = minOf(highPerf, (available - reserved).coerceAtLeast(1))
+        val usable = minOf(highPerfCount, (available - reserved).coerceAtLeast(1))
         val cap = if (available >= 6) 4 else 2
         return usable.coerceIn(1, cap)
     }
 
-    private fun maxThreadCap(): Int = if (Runtime.getRuntime().availableProcessors() >= 8) 5 else 4
+    internal fun maxThreadCap(
+        available: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+    ): Int = if (available >= 8) 5 else 4
+
+    private fun adaptiveThreadCount(): Int {
+        val available = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
+        val highPerf = CpuInfo.getHighPerfCpuCount().takeIf { it > 0 } ?: available
+        return adaptiveThreadCount(available, highPerf)
+    }
+}
+
+private fun logDebug(msg: String, e: Throwable? = null) {
+    runCatching {
+        if (e != null) Log.d(LOG_TAG, msg, e) else Log.d(LOG_TAG, msg)
+    }
 }
 
 private class CpuInfo(private val lines: List<String>) {
     private fun getHighPerfCpuCount(): Int = try {
         getHighPerfCpuCountByFrequencies()
-    } catch (e: Exception) {
-        Log.d(LOG_TAG, "Couldn't read CPU frequencies", e)
+    } catch (e: Throwable) {
+        logDebug("Couldn't read CPU frequencies", e)
         getHighPerfCpuCountByVariant()
     }
 
     private fun getHighPerfCpuCountByFrequencies(): Int =
         getCpuValues(property = "processor") { getMaxCpuFrequency(it.toInt()) }
-            .also { Log.d(LOG_TAG, "Binned cpu frequencies (frequency, count): ${it.binnedValues()}") }
+            .also { logDebug("Binned cpu frequencies (frequency, count): ${it.binnedValues()}") }
             .countDroppingMin()
 
     private fun getHighPerfCpuCountByVariant(): Int =
         getCpuValues(property = "CPU variant") { it.substringAfter("0x").toInt(radix = 16) }
-            .also { Log.d(LOG_TAG, "Binned cpu variants (variant, count): ${it.binnedValues()}") }
+            .also { logDebug("Binned cpu variants (variant, count): ${it.binnedValues()}") }
             .countKeepingMin()
 
     private fun List<Int>.binnedValues() = groupingBy { it }.eachCount()
@@ -88,8 +112,8 @@ private class CpuInfo(private val lines: List<String>) {
     companion object {
         fun getHighPerfCpuCount(): Int = try {
             readCpuInfo().getHighPerfCpuCount()
-        } catch (e: Exception) {
-            Log.d(LOG_TAG, "Couldn't read CPU info", e)
+        } catch (e: Throwable) {
+            logDebug("Couldn't read CPU info", e)
             // Our best guess -- just return the # of CPUs minus 4.
             (Runtime.getRuntime().availableProcessors() - 4).coerceAtLeast(0)
         }
