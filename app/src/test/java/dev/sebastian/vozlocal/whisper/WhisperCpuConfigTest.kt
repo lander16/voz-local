@@ -17,9 +17,13 @@ class WhisperCpuConfigTest {
 
     @Test
     fun adaptiveThreadCount_scales_with_cpu_cores() {
-        // 8-core modern mobile SoC (e.g. Snapdragon 8 Gen 2/3, Dimensity, Tensor)
+        // 9-core Google Tensor G3 (Pixel 8 Pro: 1x X3, 4x A715, 4x A510)
+        assertEquals(5, WhisperCpuConfig.adaptiveThreadCount(available = 9, highPerf = 5))
+        assertEquals(6, WhisperCpuConfig.maxThreadCap(available = 9))
+
+        // 8-core modern mobile SoC (e.g. Snapdragon 8 Gen 2/3, Dimensity, Tensor G1/G2)
         assertEquals(4, WhisperCpuConfig.adaptiveThreadCount(available = 8, highPerf = 4))
-        assertEquals(4, WhisperCpuConfig.adaptiveThreadCount(available = 8, highPerf = 6))
+        assertEquals(5, WhisperCpuConfig.adaptiveThreadCount(available = 8, highPerf = 6))
         assertEquals(5, WhisperCpuConfig.maxThreadCap(available = 8))
 
         // 6-core midrange SoC
@@ -37,15 +41,43 @@ class WhisperCpuConfigTest {
     }
 
     @Test
+    fun threadAllocation_on_9_core_tensor_g3_allocates_expected_threads() {
+        val base = 5
+        val maxCap = 6
+
+        // Base and Small models allow up to 5 threads when maxCap >= 5
+        val baseParams = WhisperParams(modelIdHint = "whisper_base")
+        val smallParams = WhisperParams(modelIdHint = "whisper_small")
+        assertEquals(5, WhisperCpuConfig.threadCountFor(baseParams, base = base, maxCap = maxCap))
+        assertEquals(5, WhisperCpuConfig.threadCountFor(smallParams, base = base, maxCap = maxCap))
+
+        // Tiny models allow up to 3 threads
+        val tinyParams = WhisperParams(modelIdHint = "whisper_tiny")
+        assertEquals(3, WhisperCpuConfig.threadCountFor(tinyParams, base = base, maxCap = maxCap))
+
+        // Medium and Large models use (base + 1).coerceAtMost(maxCap) -> 6 threads
+        val mediumParams = WhisperParams(modelIdHint = "whisper_medium")
+        val largeParams = WhisperParams(modelIdHint = "whisper_large_v3_turbo")
+        assertEquals(6, WhisperCpuConfig.threadCountFor(mediumParams, base = base, maxCap = maxCap))
+        assertEquals(6, WhisperCpuConfig.threadCountFor(largeParams, base = base, maxCap = maxCap))
+
+        // Unspecified / default hint falls back to base threads
+        val defaultParams = WhisperParams(modelIdHint = null)
+        assertEquals(5, WhisperCpuConfig.threadCountFor(defaultParams, base = base, maxCap = maxCap))
+    }
+
+    @Test
     fun threadAllocation_on_8_core_soc_allocates_expected_threads() {
         val base = 4
         val maxCap = 5
 
-        // Base models allow up to 4 threads (expanded from previous cap of 3)
+        // Base & Small models allow up to 4 threads (capped by base = 4)
         val baseParams1 = WhisperParams(modelIdHint = "whisper_base")
         val baseParams2 = WhisperParams(modelIdHint = "base")
+        val smallParams = WhisperParams(modelIdHint = "whisper_small")
         assertEquals(4, WhisperCpuConfig.threadCountFor(baseParams1, base = base, maxCap = maxCap))
         assertEquals(4, WhisperCpuConfig.threadCountFor(baseParams2, base = base, maxCap = maxCap))
+        assertEquals(4, WhisperCpuConfig.threadCountFor(smallParams, base = base, maxCap = maxCap))
 
         // Tiny models allow up to 3 threads (expanded from previous cap of 2)
         val tinyParams1 = WhisperParams(modelIdHint = "whisper_tiny")
@@ -69,9 +101,11 @@ class WhisperCpuConfigTest {
         val base = 2
         val maxCap = 4
 
-        // Base models capped at base (2 <= 4)
+        // Base and Small models capped at base (2 <= 4)
         val baseParams = WhisperParams(modelIdHint = "whisper_base")
+        val smallParams = WhisperParams(modelIdHint = "whisper_small")
         assertEquals(2, WhisperCpuConfig.threadCountFor(baseParams, base = base, maxCap = maxCap))
+        assertEquals(2, WhisperCpuConfig.threadCountFor(smallParams, base = base, maxCap = maxCap))
 
         // Tiny models capped at base (2 <= 3)
         val tinyParams = WhisperParams(modelIdHint = "whisper_tiny")
@@ -90,7 +124,9 @@ class WhisperCpuConfigTest {
         val maxCap = 4
 
         val baseParams = WhisperParams(modelIdHint = "whisper_base")
+        val smallParams = WhisperParams(modelIdHint = "whisper_small")
         assertEquals(4, WhisperCpuConfig.threadCountFor(baseParams, base = base, maxCap = maxCap))
+        assertEquals(4, WhisperCpuConfig.threadCountFor(smallParams, base = base, maxCap = maxCap))
 
         val tinyParams = WhisperParams(modelIdHint = "whisper_tiny")
         assertEquals(3, WhisperCpuConfig.threadCountFor(tinyParams, base = base, maxCap = maxCap))

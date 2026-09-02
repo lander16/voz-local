@@ -29,10 +29,12 @@ object WhisperCpuConfig {
         maxCap: Int = maxThreadCap()
     ): Int {
         val modelHint = params.modelIdHint
+        val baseOrSmallCap = if (maxCap >= 5) 5 else 4
         return when {
             modelHint?.contains("large", ignoreCase = true) == true -> (base + 1).coerceAtMost(maxCap)
             modelHint?.contains("medium", ignoreCase = true) == true -> (base + 1).coerceAtMost(maxCap)
-            modelHint?.contains("base", ignoreCase = true) == true -> minOf(base, 4)
+            modelHint?.contains("small", ignoreCase = true) == true -> minOf(base, baseOrSmallCap)
+            modelHint?.contains("base", ignoreCase = true) == true -> minOf(base, baseOrSmallCap)
             modelHint?.contains("tiny", ignoreCase = true) == true -> minOf(base, 3)
             else -> base
         }
@@ -50,13 +52,21 @@ object WhisperCpuConfig {
         val highPerfCount = highPerf?.takeIf { it > 0 } ?: available
         val reserved = if (available >= 8) 2 else 1
         val usable = minOf(highPerfCount, (available - reserved).coerceAtLeast(1))
-        val cap = if (available >= 6) 4 else 2
+        val cap = when {
+            available >= 8 || highPerfCount >= 5 -> 5
+            available >= 6 -> 4
+            else -> 2
+        }
         return usable.coerceIn(1, cap)
     }
 
     internal fun maxThreadCap(
         available: Int = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
-    ): Int = if (available >= 8) 5 else 4
+    ): Int = when {
+        available >= 9 -> 6
+        available >= 8 -> 5
+        else -> 4
+    }
 
     private fun adaptiveThreadCount(): Int {
         val available = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)

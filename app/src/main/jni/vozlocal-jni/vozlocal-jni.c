@@ -78,7 +78,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
         jboolean single_segment, jboolean print_timestamps,
         jfloat no_speech_thold, jfloat logprob_thold, jfloat entropy_thold,
         jstring vad_model_path, jint beam_size, jboolean no_timestamps,
-        jfloat temperature_inc, jboolean no_context) {
+        jfloat temperature_inc, jboolean no_context, jint audio_ctx) {
     UNUSED(thiz);
 
     struct whisper_context *context = (struct whisper_context *) context_ptr;
@@ -163,16 +163,19 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
     }
     params.n_threads = num_threads;
     params.no_context = no_context;
+    params.audio_ctx = (audio_ctx > 0 && audio_ctx <= 1500) ? audio_ctx : 0;
     params.offset_ms = 0;
 
     LOGI("whisper_full: strategy=%s, language=%s, threads=%d, samples=%d, "
          "single_segment=%d, print_timestamps=%d, no_timestamps=%d, no_speech_thold=%.2f, "
-         "logprob_thold=%.2f, entropy_thold=%.2f, vad=%d, beam_size=%d, temperature_inc=%.2f",
+         "logprob_thold=%.2f, entropy_thold=%.2f, vad=%d, beam_size=%d, temperature_inc=%.2f, "
+         "audio_ctx=%d",
          (strategy == WHISPER_SAMPLING_BEAM_SEARCH) ? "beam" : "greedy",
          params.language, num_threads, audio_data_length,
          (int) single_segment, (int) print_timestamps, (int) no_timestamps,
          no_speech_thold, logprob_thold, entropy_thold,
-         (int) params.vad, beam_size, params.temperature_inc);
+         (int) params.vad, beam_size, params.temperature_inc,
+         params.audio_ctx);
 
     if (whisper_full(context, params, audio_data_arr, audio_data_length) != 0) {
         LOGE("whisper_full failed");

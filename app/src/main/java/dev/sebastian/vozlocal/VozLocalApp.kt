@@ -29,12 +29,12 @@ class VozLocalApp : Application() {
         super.onCreate()
         repository = DictationRepository(this)
         applicationScope.launch {
-            repository.initializeModels()
+            runCatching { repository.initializeModels() }
         }
         // Model downloads are always user-initiated. Preloading only reads a model
         // already stored locally and never opens a network connection.
         applicationScope.launch {
-            repository.preloadModel()
+            runCatching { repository.preloadModel() }
         }
     }
 }

@@ -2,6 +2,7 @@ package com.whispercpp.whisper
 
 import android.content.res.AssetManager
 import android.os.Build
+import android.os.Process
 import android.util.Log
 import dev.sebastian.vozlocal.whisper.WhisperParams
 import kotlinx.coroutines.*
@@ -27,6 +28,9 @@ class WhisperContext private constructor(private var ptr: Long) {
         params: WhisperParams
     ): String = withContext(scope.coroutineContext) {
         require(ptr != 0L)
+        runCatching {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY)
+        }
         val numThreads = WhisperCpuConfig.threadCountFor(params)
         Log.d(LOG_TAG, "Selecting $numThreads threads, language=${params.language}")
 
@@ -45,7 +49,8 @@ class WhisperContext private constructor(private var ptr: Long) {
             params.beamSize,
             params.noTimestamps,
             params.temperatureInc,
-            params.noContext
+            params.noContext,
+            params.audioCtx
         )
 
         val textCount = WhisperLib.getTextSegmentCount(ptr)
@@ -176,7 +181,8 @@ private class WhisperLib {
             beamSize: Int,
             noTimestamps: Boolean,
             temperatureInc: Float,
-            noContext: Boolean
+            noContext: Boolean,
+            audioCtx: Int
         )
         external fun getTextSegmentCount(contextPtr: Long): Int
         external fun getTextSegment(contextPtr: Long, index: Int): String

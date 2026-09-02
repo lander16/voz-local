@@ -18,6 +18,7 @@ package dev.sebastian.vozlocal.whisper
  * @param noTimestamps true asks whisper.cpp to skip timestamp token work.
  * @param temperatureInc increment used when decoding needs a higher-temperature fallback.
  * @param noContext whether each Whisper window is decoded independently.
+ * @param audioCtx overwrite the audio context size (0 = use default).
  */
 data class WhisperParams(
     val language: String = "es",
@@ -33,13 +34,22 @@ data class WhisperParams(
     val temperatureInc: Float = 0.2f,
     val noContext: Boolean = false,
     val modelIdHint: String? = null,
+    val audioCtx: Int = 0,
 )
 
 internal fun WhisperParams.forLiveAudio(sampleCount: Int): WhisperParams {
+    val durationSec = sampleCount.toFloat() / 16000f
+    val dynamicAudioCtx = if (durationSec in 0.5f..28f) {
+        val frames = ((durationSec + 0.75f) * 50).toInt()
+        frames.coerceIn(256, 1500)
+    } else 0
+
     return copy(
+        audioCtx = dynamicAudioCtx,
         singleSegment = false,
         printTimestamps = false,
-        noTimestamps = false,
+        noTimestamps = true,
+        temperatureInc = 0.0f,
         noContext = false
     )
 }
