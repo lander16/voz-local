@@ -17,7 +17,7 @@ class WhisperParamsTest {
         val params = WhisperParams()
         assertEquals("es", params.language)
         assertNull(params.initialPrompt)
-        assertTrue(params.singleSegment)
+        assertFalse(params.singleSegment)
         assertFalse(params.printTimestamps)
         assertEquals(0.6f, params.noSpeechThold, 0.0001f)
         assertEquals(-1.0f, params.logprobThold, 0.0001f)
@@ -25,7 +25,8 @@ class WhisperParamsTest {
         assertNull(params.vadModelPath)
         assertEquals(0, params.beamSize)
         assertEquals(0.2f, params.temperatureInc, 0.0001f)
-        assertTrue(params.noContext)
+        assertFalse(params.noContext)
+        assertFalse(params.noTimestamps)
     }
 
     @Test
@@ -41,21 +42,12 @@ class WhisperParamsTest {
     }
 
     @Test
-    fun live_audio_up_to_25_seconds_uses_low_latency_single_window_mode() {
+    fun live_audio_decodes_full_utterance_without_premature_truncation() {
         val params = WhisperParams(
-            singleSegment = false,
+            singleSegment = true,
             printTimestamps = true,
-            noTimestamps = false,
-        ).forLiveAudio(LIVE_SINGLE_WINDOW_MAX_SAMPLES)
-
-        assertTrue(params.singleSegment)
-        assertFalse(params.printTimestamps)
-        assertTrue(params.noTimestamps)
-    }
-
-    @Test
-    fun live_audio_over_25_seconds_enables_multi_window_timestamp_decoding() {
-        val params = WhisperParams().forLiveAudio(LIVE_SINGLE_WINDOW_MAX_SAMPLES + 1)
+            noTimestamps = true,
+        ).forLiveAudio(16_000 * 5)
 
         assertFalse(params.singleSegment)
         assertFalse(params.printTimestamps)

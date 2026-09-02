@@ -167,7 +167,7 @@ class AudioRecorder {
             synchronized(floatBuffer) {
                 val samples = floatBuffer.toFloatArray()
                 floatBuffer.reset()
-                return AudioSilenceTrimmer.trim(samples)
+                return samples
             }
         }
     }

@@ -1,5 +1,6 @@
 package dev.sebastian.vozlocal.ui.screens
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -11,7 +12,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,8 +26,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -58,11 +60,15 @@ fun DictateTab(
 ) {
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
+    val haptic = LocalHapticFeedback.current
+
     val isRecording by viewModel.isRecording.collectAsStateWithLifecycle()
     val recordDurationSec by viewModel.recordDurationSec.collectAsStateWithLifecycle()
     val liveWaveform by viewModel.liveWaveform.collectAsStateWithLifecycle()
     val liveText by viewModel.currentLiveTranscription.collectAsStateWithLifecycle()
     val selectedModel by viewModel.selectedModel.collectAsStateWithLifecycle()
+    val models by viewModel.modelsList.collectAsStateWithLifecycle()
+    val hasDownloadedModel = selectedModel?.isDownloaded == true || models.any { it.isDownloaded }
     val isModelLoading by viewModel.isModelLoading.collectAsStateWithLifecycle()
     val vadDownloadUiState by viewModel.vadDownloadUiState.collectAsStateWithLifecycle()
     var confirmVadDelete by remember { mutableStateOf(false) }
@@ -71,146 +77,46 @@ fun DictateTab(
     val smartPunctuation by viewModel.smartPunctuation.collectAsStateWithLifecycle()
     val autoCapitalization by viewModel.autoCapitalization.collectAsStateWithLifecycle()
     val applyDictionary by viewModel.applyDictionary.collectAsStateWithLifecycle()
+    val cleanupMode by viewModel.cleanupMode.collectAsStateWithLifecycle()
+    val currentLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
+
+    var showAdvancedDetails by remember { mutableStateOf(false) }
+    val isAccessibilityEnabled = isAccessibilityServiceEnabled(
+        context,
+        dev.sebastian.vozlocal.service.DictationAccessibilityService::class.java
+    )
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item { Spacer(modifier = Modifier.height(6.dp)) }
+        item { Spacer(modifier = Modifier.height(2.dp)) }
 
-        // Floating Assistant Onboarding Banner / Active Status Pill
-        item {
-            if (showFloatingAssistantCard) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("accessibility_card"),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                    shape = RoundedCornerShape(20.dp),
-                    border = BorderStroke(1.dp, Brush.linearGradient(listOf(PrimaryColor.copy(alpha = 0.4f), Color.Transparent)))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(8.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFF10B981))
-                                )
-                                Text(
-                                    text = "Global Floating Dictation",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 15.sp,
-                                    color = TextPrimary
-                                )
-                            }
-                            Text(
-                                text = "Dictate directly into WhatsApp, Slack, Chrome, or Notes with our system floating overlay.",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = TextSecondary,
-                                lineHeight = 18.sp
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(12.dp))
-
-                        Button(
-                            onClick = onOpenAccessibilitySettings,
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .pressScale()
-                        ) {
-                            Text(
-                                text = "Enable Assistant",
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 12.sp,
-                                color = Color.White
-                            )
-                        }
-                    }
-                }
-            } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                    shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, GlassBorder)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFF10B981))
-                        )
-                        Text(
-                            text = "Floating assistant active",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = TextPrimary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(
-                            onClick = onOpenAccessibilitySettings,
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "Open accessibility settings",
-                                tint = TextSecondary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Active Engine Status Bar
+        // 1. Top Quick Control Row: Model Pill & Language Pill
         item {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(SurfaceDark)
-                    .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(14.dp))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.surface)
+                    .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(16.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                // Model indicator
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f, fill = false)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(PrimaryColor.copy(alpha = 0.15f)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -218,348 +124,347 @@ fun DictateTab(
                             imageVector = Icons.Default.GraphicEq,
                             contentDescription = null,
                             tint = PrimaryColor,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
+                    val isModelDownloaded = selectedModel?.isDownloaded == true
                     Column {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = selectedModel?.name ?: "Whisper Base",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1
+                            )
+                            if (!isModelDownloaded) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(100.dp))
+                                        .background(Color(0xFFEF4444).copy(alpha = 0.15f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "Not Downloaded",
+                                        color = Color(0xFFEF4444),
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
+                            }
+                        }
                         Text(
-                            text = "Active Whisper model",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = TextMuted,
-                            letterSpacing = 1.2.sp
-                        )
-                        Text(
-                            text = selectedModel?.name ?: "No model selected",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = TextPrimary
+                            text = if (isModelDownloaded) "${selectedModel?.sizeMb?.toInt() ?: 78} MB • Ready Offline"
+                                   else "${selectedModel?.sizeMb?.toInt() ?: 78} MB • Download required",
+                            fontSize = 10.sp,
+                            color = if (isModelDownloaded) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFEF4444)
                         )
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .background(SurfaceCard, RoundedCornerShape(100.dp))
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(100.dp))
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                // VAD indicator + Language pill
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "${selectedModel?.sizeMb?.toInt() ?: 0} MB • 100% Offline",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = TextSecondary
-                    )
+                    if (vadDownloadUiState.isReady) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(100.dp))
+                                .background(Color(0xFF10B981).copy(alpha = 0.15f))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "VAD",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF10B981)
+                            )
+                        }
+                    }
+
+                    // Language Quick Switcher
+                    Surface(
+                        onClick = onOpenSettings,
+                        shape = RoundedCornerShape(100.dp),
+                        color = PrimaryColor.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "🌐 ${currentLanguage.uppercase()}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = PrimaryColor
+                            )
+                        }
+                    }
                 }
             }
         }
 
-        // Silero VAD status / download card
-        item {
-            val sizeText = vadDownloadUiState.sizeBytes?.let(::formatVadSize)
-            if (confirmVadDelete) {
-                AlertDialog(
-                    onDismissRequest = { confirmVadDelete = false },
-                    title = { Text("Delete VAD model?") },
-                    text = { Text("This removes the small Silero VAD file from local storage. You can download it again later.") },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            viewModel.deleteVadModel()
-                            confirmVadDelete = false
-                        }) { Text("Delete", color = TertiaryColor) }
-                    },
-                    dismissButton = { TextButton(onClick = { confirmVadDelete = false }) { Text("Cancel") } }
-                )
+        // 1b. Prominent Model Download Call-to-Action if no model is downloaded yet
+        if (!hasDownloadedModel) {
+            item {
+                val targetModelId = selectedModel?.id ?: "whisper_base"
+                val downloadProgress by viewModel.downloadProgressFor(targetModelId).collectAsStateWithLifecycle()
+                val downloadStatus by viewModel.downloadStatusFor(targetModelId).collectAsStateWithLifecycle()
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.5f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = null,
+                                tint = PrimaryColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Speech Model Download Required",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                        Text(
+                            text = "To dictate offline, download '${selectedModel?.name ?: "Whisper Base"}' (${selectedModel?.sizeMb?.toInt() ?: 78} MB). It runs 100% locally on your phone.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
+                        )
+                        if (downloadStatus != null && (downloadStatus?.progress ?: 0f) < 1f) {
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                LinearProgressIndicator(
+                                    progress = { downloadProgress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = PrimaryColor,
+                                    trackColor = MaterialTheme.colorScheme.surface
+                                )
+                                Text(
+                                    text = "${downloadStatus?.statusLabel ?: "Downloading..."} • ${(downloadProgress * 100).toInt()}%",
+                                    fontSize = 11.sp,
+                                    color = PrimaryColor,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        } else {
+                            Button(
+                                onClick = { viewModel.downloadModel(targetModelId) },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = Color.Black
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Download ${selectedModel?.name ?: "Whisper Base"} (78 MB)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.sp,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
+                }
             }
+        }
+
+        // 2. Center Stage: Live Transcription Card
+        item {
             Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, if (vadDownloadUiState.isReady) Color(0xFF10B981).copy(alpha = 0.35f) else GlassBorder)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 190.dp),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(
+                    1.dp,
+                    if (isRecording) TertiaryColor.copy(alpha = 0.7f) else MaterialTheme.colorScheme.outlineVariant
+                )
             ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Header Status Row
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(PrimaryColor.copy(alpha = 0.15f)),
-                                contentAlignment = Alignment.Center
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isRecording) TertiaryColor else Color(0xFF10B981))
+                            )
+                            Text(
+                                text = if (isRecording) "Listening..." else "Dictation Ready",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isRecording) TertiaryColor else Color(0xFF10B981)
+                            )
+                        }
+
+                        val wordsCount = if (liveText.isBlank()) 0 else liveText.trim().split(WORD_SPLIT_REGEX).size
+                        Text(
+                            text = "$wordsCount words • ${liveText.length} chars",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Transcript Output Area
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .heightIn(min = 72.dp)
+                    ) {
+                        if (liveText.isNotBlank()) {
+                            Text(
+                                text = liveText,
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Medium,
+                                lineHeight = 24.sp,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        } else {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.GraphicEq,
                                     contentDescription = null,
-                                    tint = PrimaryColor,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Column {
-                                Text(
-                                    text = "Silero VAD model",
-                                    fontWeight = FontWeight.ExtraBold,
-                                    fontSize = 14.sp,
-                                    color = TextPrimary
+                                    tint = PrimaryColor.copy(alpha = 0.35f),
+                                    modifier = Modifier.size(36.dp)
                                 )
                                 Text(
-                                    text = "Small (~2 MB) silence handling model for longer dictations and shared audio",
-                                    fontSize = 12.sp,
-                                    color = TextSecondary,
-                                    lineHeight = 16.sp
+                                    text = if (isRecording) "Speak now..." else "Tap the microphone below to start dictating",
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontWeight = FontWeight.Medium
                                 )
-                            }
-                        }
-
-                        StatusPill(
-                            text = when {
-                                vadDownloadUiState.isReady -> "Ready"
-                                vadDownloadUiState.isDownloading -> "Downloading"
-                                vadDownloadUiState.isError -> "Needs retry"
-                                else -> "Not downloaded"
-                            },
-                            active = vadDownloadUiState.isReady || vadDownloadUiState.isDownloading
-                        )
-                    }
-
-                    when {
-                        vadDownloadUiState.isDownloading -> {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(
-                                        text = vadDownloadUiState.statusLabel,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = PrimaryColor
-                                    )
-                                    Text(
-                                        text = "${(vadDownloadUiState.progress * 100).toInt()}%",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = PrimaryColor
-                                    )
-                                }
-                                LinearProgressIndicator(
-                                    progress = { vadDownloadUiState.progress.coerceIn(0f, 1f) },
-                                    modifier = Modifier.fillMaxWidth().height(6.dp),
-                                    color = PrimaryColor,
-                                    trackColor = SurfaceCard
-                                )
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                    Text(
-                                        text = sizeText?.let { "${formatVadSize((vadDownloadUiState.progress * (vadDownloadUiState.sizeBytes ?: 0L)).toLong())} / $it" } ?: "Downloading…",
-                                        fontSize = 11.sp,
-                                        color = TextSecondary
-                                    )
-                                }
-                            }
-                        }
-
-                        vadDownloadUiState.isReady -> {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    Text(text = "Ready to improve silence handling", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                    Text(text = "Used automatically when VAD is enabled in settings.", fontSize = 12.sp, color = TextSecondary)
-                                }
-                                OutlinedButton(
-                                    onClick = { confirmVadDelete = true },
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TertiaryColor),
-                                    border = BorderStroke(1.dp, TertiaryColor.copy(alpha = 0.4f)),
-                                    modifier = Modifier.heightIn(min = 48.dp)
-                                ) {
-                                    Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Delete")
-                                }
-                            }
-                        }
-
-                        else -> {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text(
-                                    text = vadDownloadUiState.statusMessage,
-                                    fontSize = 12.sp,
-                                    color = TextSecondary,
-                                    lineHeight = 16.sp
-                                )
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(
-                                        onClick = { viewModel.downloadVadModel() },
-                                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
-                                        shape = RoundedCornerShape(10.dp),
-                                        modifier = Modifier.heightIn(min = 48.dp)
-                                    ) {
-                                        Icon(imageVector = Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Download VAD", color = Color.White, fontWeight = FontWeight.Bold)
-                                    }
-                                    if (vadDownloadUiState.isError) {
-                                        OutlinedButton(
-                                            onClick = { viewModel.retryVadDownload() },
-                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = PrimaryColor),
-                                            border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.4f)),
-                                            modifier = Modifier.heightIn(min = 48.dp)
-                                        ) {
-                                            Icon(imageVector = Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text("Retry")
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
-                }
-            }
-        }
 
-        // Live Transcription Output Canvas
-        item {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(190.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(SurfaceDark)
-                    .border(
-                        BorderStroke(
-                            1.dp,
-                            if (isRecording) TertiaryColor.copy(alpha = 0.6f) else GlassBorder
-                        ),
-                        RoundedCornerShape(20.dp)
-                    )
-                    .padding(16.dp)
-            ) {
-                if (liveText.isNotEmpty() || isRecording) {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.SpaceBetween
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Bottom Action Bar: Copy, Share, Clear
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Header Stats Row
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(7.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isRecording) TertiaryColor else Color(0xFF10B981))
-                                )
-                                Text(
-                                    text = if (isRecording) "Live transcription feed" else "Dictation ready",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 1.sp,
-                                    color = if (isRecording) TertiaryColor else Color(0xFF10B981)
-                                )
-                            }
-
-                            val wordsCount = if (liveText.isBlank()) 0 else liveText.trim().split(WORD_SPLIT_REGEX).size
-                            Text(
-                                text = "$wordsCount words • ${liveText.length} chars",
-                                fontSize = 11.sp,
-                                color = TextMuted,
-                                fontWeight = FontWeight.SemiBold
-                            )
-
+                        if (liveText.isNotBlank()) {
+                            // Copy button
                             IconButton(
                                 onClick = {
-                                    if (liveText.isNotBlank()) {
-                                        try {
-                                            clipboardManager.setText(AnnotatedString(liveText))
-                                            Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
-                                        } catch (e: Exception) {
-                                            e.printStackTrace()
-                                        }
-                                    }
+                                    clipboardManager.setText(AnnotatedString(liveText))
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
                                 },
-                                enabled = liveText.isNotBlank(),
-                                modifier = Modifier.size(48.dp)
+                                modifier = Modifier.size(38.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Copy to clipboard",
-                                    tint = if (liveText.isBlank()) TextMuted else PrimaryColor,
+                                    contentDescription = "Copy text",
+                                    tint = PrimaryColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            // Share button
+                            IconButton(
+                                onClick = {
+                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, liveText)
+                                    }
+                                    context.startActivity(Intent.createChooser(shareIntent, "Share Transcription"))
+                                },
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Share text",
+                                    tint = SecondaryColor,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+
+                            // Clear button
+                            IconButton(
+                                onClick = {
+                                    viewModel.clearLiveTranscription()
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                },
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Clear text",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
-
-                        // Output Text
-                        if (liveText.isNotBlank() && !isRecording) {
-                            Text(
-                                text = "Loaded draft from history",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = SecondaryColor,
-                                letterSpacing = 1.sp
-                            )
-                        }
-                        Text(
-                            text = liveText.ifEmpty { "Listening..." },
-                            fontSize = 15.sp,
-                            color = if (liveText.isEmpty()) TextMuted else TextPrimary,
-                            fontWeight = FontWeight.Medium,
-                            lineHeight = 22.sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f)
-                                .padding(vertical = 8.dp)
-                        )
-
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.GraphicEq,
-                            contentDescription = null,
-                            tint = PrimaryColor.copy(alpha = 0.4f),
-                            modifier = Modifier.size(44.dp)
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Text(
-                            text = "Tap the mic to start dictating on-device",
-                            fontSize = 14.sp,
-                            color = TextPrimary,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = "Speech is transcribed 100% on-device.",
-                            fontSize = 12.sp,
-                            color = TextMuted
-                        )
                     }
                 }
             }
         }
 
-        // Dynamic Waveform Audio Visualizer
+        // 3. Audio Waveform Display
         item {
             if (isRecording && liveWaveform.isNotEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceDark)
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .height(46.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(MaterialTheme.colorScheme.surface)
+                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(14.dp))
                         .padding(horizontal = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -574,18 +479,16 @@ fun DictateTab(
                                 color = TertiaryColor,
                                 start = Offset(x, centerY - barHeight / 2),
                                 end = Offset(x, centerY + barHeight / 2),
-                                strokeWidth = 4.dp.toPx(),
+                                strokeWidth = 3.5.dp.toPx(),
                                 cap = StrokeCap.Round
                             )
                         }
                     }
                 }
-            } else {
-                Spacer(modifier = Modifier.height(2.dp))
             }
         }
 
-        // Hero Pulsing Mic Button
+        // 4. Hero Pulsing Mic Button & Live Duration
         item {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -609,20 +512,20 @@ fun DictateTab(
                 Box(
                     contentAlignment = Alignment.Center
                 ) {
-                    // Pulsing Outer Aura Ring
+                    // Pulsing Outer Glow Ring
                     if (isRecording) {
                         Box(
                             modifier = Modifier
-                                .size(126.dp)
+                                .size(130.dp)
                                 .clip(CircleShape)
-                                .background(TertiaryColor.copy(alpha = 0.2f * pulseScale))
+                                .background(TertiaryColor.copy(alpha = 0.22f * pulseScale))
                         )
                     }
 
-                    // Main Button Core
+                    // Main Microphone Button Core
                     Box(
                         modifier = Modifier
-                            .size(100.dp)
+                            .size(96.dp)
                             .shadow(
                                 elevation = 16.dp,
                                 shape = CircleShape,
@@ -630,12 +533,16 @@ fun DictateTab(
                                 spotColor = if (isRecording) TertiaryColor else PrimaryColor
                             )
                             .clip(CircleShape)
+                            .pressScale()
                             .semantics {
                                 role = Role.Button
                                 stateDescription = if (isRecording) "Recording" else "Ready"
                                 contentDescription = if (isRecording) "Stop recording" else "Start recording"
                             }
-                            .clickable(enabled = !isModelLoading) { viewModel.toggleRecording() }
+                            .clickable(enabled = !isModelLoading) {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.toggleRecording()
+                            }
                             .background(
                                 Brush.linearGradient(
                                     colors = if (isRecording) {
@@ -651,7 +558,7 @@ fun DictateTab(
                             imageVector = if (isRecording) Icons.Default.Stop else Icons.Default.Mic,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(46.dp)
+                            modifier = Modifier.size(44.dp)
                         )
                     }
                 }
@@ -664,202 +571,221 @@ fun DictateTab(
                             String.format(Locale.US, "Recording %02d:%02d", min, sec)
                         }
                         isModelLoading -> "Loading model..."
+                        !hasDownloadedModel -> "Download model to dictate"
                         else -> "Tap to dictate"
                     },
                     fontWeight = FontWeight.ExtraBold,
-                    fontSize = 12.sp,
-                    letterSpacing = 1.8.sp,
-                    color = if (isRecording) TertiaryColor else PrimaryColor,
+                    fontSize = 13.sp,
+                    letterSpacing = 1.5.sp,
+                    color = when {
+                        isRecording -> TertiaryColor
+                        !hasDownloadedModel -> Color(0xFFEF4444)
+                        else -> PrimaryColor
+                    },
                     style = Typography.labelSmall.withTabularNumbers(),
                     modifier = Modifier.semantics {
                         liveRegion = LiveRegionMode.Polite
-                        val min = recordDurationSec / 60
-                        val sec = recordDurationSec % 60
-                        contentDescription = if (isRecording) {
-                            "Recording in progress: $min minutes $sec seconds"
-                        } else if (isModelLoading) {
-                            "Loading model"
-                        } else {
-                            "Start dictating"
-                        }
                     }
                 )
             }
         }
 
-        // Post-Processing Filters Summary Card
+        // 5. Post-Processing Quick Filter Chips
         item {
-            val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
-            val cleanupMode by viewModel.cleanupMode.collectAsStateWithLifecycle()
-            val modelsList by viewModel.modelsList.collectAsStateWithLifecycle()
-            val qwenModel = modelsList.find { it.id == "qwen2.5_0.5b" }
-            val isQwenDownloaded = qwenModel?.isDownloaded == true
-            val isQwenDownloading = qwenModel?.isDownloading == true
-            val qwenDownloadProgress by viewModel.downloadProgressFor("qwen2.5_0.5b").collectAsStateWithLifecycle()
-
-            Card(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
-                shape = RoundedCornerShape(20.dp),
-                border = BorderStroke(1.dp, GlassBorder)
+                horizontalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Local post-processing filters",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = TextPrimary
-                        )
-                        Button(
-                            onClick = onOpenSettings,
-                            colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor.copy(alpha = 0.2f), contentColor = PrimaryColor),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier.heightIn(min = 48.dp)
-                        ) {
-                            Text(text = "Customize", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                FilterStatusChip(
+                    label = "Smart Pause",
+                    active = smartPunctuation,
+                    activeColor = PrimaryColor,
+                    onClick = { viewModel.setSmartPunctuation(!smartPunctuation) }
+                )
+                FilterStatusChip(
+                    label = "Auto-Cap",
+                    active = autoCapitalization,
+                    activeColor = SecondaryColor,
+                    onClick = { viewModel.setAutoCapitalization(!autoCapitalization) }
+                )
+                FilterStatusChip(
+                    label = "Dictionary",
+                    active = applyDictionary,
+                    activeColor = AccentViolet,
+                    onClick = { viewModel.setApplyDictionary(!applyDictionary) }
+                )
+                FilterStatusChip(
+                    label = "Cleanup: ${cleanupMode.displayLabel()}",
+                    active = cleanupMode != CleanupMode.MINIMAL,
+                    activeColor = Color(0xFF10B981),
+                    onClick = {
+                        val next = when (cleanupMode) {
+                            CleanupMode.MINIMAL -> CleanupMode.BALANCED
+                            CleanupMode.BALANCED -> CleanupMode.AGGRESSIVE
+                            CleanupMode.AGGRESSIVE -> CleanupMode.MINIMAL
                         }
+                        viewModel.setCleanupMode(next)
                     }
+                )
+            }
+        }
 
-                    // Active filter chips
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterStatusChip(
-                            label = "Smart Pause",
-                            active = smartPunctuation,
-                            activeColor = PrimaryColor
-                        )
-                        FilterStatusChip(
-                            label = "Auto-Cap",
-                            active = autoCapitalization,
-                            activeColor = SecondaryColor
-                        )
-                        FilterStatusChip(
-                            label = "Dictionary",
-                            active = applyDictionary,
-                            activeColor = AccentViolet
-                        )
-                        FilterStatusChip(
-                            label = "Smart Overlay",
-                            active = showOnlyOnInput,
-                            activeColor = PrimaryColor
-                        )
-                    }
+        // 6. Secondary / Advanced Details Toggle
+        item {
+            TextButton(
+                onClick = { showAdvancedDetails = !showAdvancedDetails },
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text(
+                    text = if (showAdvancedDetails) "Hide Assistant & VAD info ▴" else "Show Assistant & VAD info ▾",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
 
-                    HorizontalDivider(color = GlassBorder)
-
-                    // Local cleanup summary row
+        // 7. Collapsible Advanced Cards (Assistant + Silero VAD)
+        if (showAdvancedDetails) {
+            // Floating Microphone Button Card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .padding(vertical = 4.dp),
+                            .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Psychology, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(20.dp))
-                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                Text(text = "Local text cleanup", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text(text = "Rule-based cleanup for fillers, pauses, and punctuation.", fontSize = 11.sp, color = TextSecondary)
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Global Floating Microphone",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(100.dp))
+                                        .background(
+                                            if (isAccessibilityEnabled) Color(0xFF10B981).copy(alpha = 0.15f)
+                                            else PrimaryColor.copy(alpha = 0.15f)
+                                        )
+                                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = if (isAccessibilityEnabled) "Active" else "Setup Needed",
+                                        color = if (isAccessibilityEnabled) Color(0xFF10B981) else PrimaryColor,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
                             }
+                            Text(
+                                text = "Shows a floating microphone button alongside your traditional keyboard in WhatsApp, Slack, Notes, or Chrome.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 16.sp
+                            )
                         }
-                        StatusPill(
-                            text = cleanupMode.displayLabel(),
-                            active = cleanupMode != CleanupMode.MINIMAL
-                        )
-                    }
-                }
-            }
-        }
 
-        // Language Selection
-        item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(SurfaceDark)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text(
-                    text = "Recognition Language",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = TextPrimary
-                )
-                Text(
-                    text = "Setting a specific language avoids the ~300ms auto-detect overhead.",
-                    fontSize = 11.sp,
-                    color = TextSecondary
-                )
-                val currentLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
-                val languageOptions = MainViewModel.LANGUAGE_OPTIONS
+                        Spacer(modifier = Modifier.width(10.dp))
 
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 4.dp)
-                ) {
-                    items(languageOptions, key = { it.first }) { (code, label) ->
-                        val isSelected = currentLanguage == code
-                        Surface(
-                            onClick = { viewModel.setLanguage(code) },
-                            shape = RoundedCornerShape(12.dp),
-                            color = if (isSelected) PrimaryColor.copy(alpha = 0.2f) else BackgroundDark,
-                            border = if (isSelected) BorderStroke(1.5.dp, PrimaryColor) else BorderStroke(1.dp, SurfaceLightDark),
-                            tonalElevation = 0.dp
+                        Button(
+                            onClick = onOpenAccessibilitySettings,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isAccessibilityEnabled) SecondaryColor else PrimaryColor
+                            ),
+                            shape = RoundedCornerShape(10.dp)
                         ) {
                             Text(
-                                text = label,
-                                fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) PrimaryColor else TextSecondary,
-                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 14.dp)
+                                text = if (isAccessibilityEnabled) "Settings" else "Enable",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
             }
+
+            // Silero VAD Card
+            item {
+                if (confirmVadDelete) {
+                    AlertDialog(
+                        onDismissRequest = { confirmVadDelete = false },
+                        title = { Text("Delete VAD model?") },
+                        text = { Text("This removes the small Silero VAD file from local storage. You can download it again later.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                viewModel.deleteVadModel()
+                                confirmVadDelete = false
+                            }) { Text("Delete", color = TertiaryColor) }
+                        },
+                        dismissButton = { TextButton(onClick = { confirmVadDelete = false }) { Text("Cancel") } }
+                    )
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = "Silero VAD Silence Skipping",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (vadDownloadUiState.isReady) "Installed (~0.9 MB). Silence is skipped." else "Skips empty speech frames for faster transcription.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        if (vadDownloadUiState.isReady) {
+                            OutlinedButton(
+                                onClick = { confirmVadDelete = true },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TertiaryColor),
+                                border = BorderStroke(1.dp, TertiaryColor.copy(alpha = 0.4f))
+                            ) {
+                                Text("Delete", fontSize = 11.sp)
+                            }
+                        } else {
+                            Button(
+                                onClick = { viewModel.downloadVadModel() },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Download", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
-        item { Spacer(modifier = Modifier.height(20.dp)) }
+        item { Spacer(modifier = Modifier.height(24.dp)) }
     }
-}
-
-@Composable
-private fun StatusPill(text: String, active: Boolean) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(100.dp))
-            .background(if (active) PrimaryColor.copy(alpha = 0.15f) else SurfaceCard)
-            .border(BorderStroke(1.dp, if (active) PrimaryColor.copy(alpha = 0.35f) else GlassBorder), RoundedCornerShape(100.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp)
-    ) {
-        Text(text = text, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = if (active) PrimaryColor else TextSecondary)
-    }
-}
-
-private fun formatVadSize(bytes: Long): String {
-    val mb = bytes / 1024f / 1024f
-    return String.format(Locale.US, "%.1f MB", mb)
 }
 
 private fun CleanupMode.displayLabel(): String = when (this) {
@@ -872,23 +798,24 @@ private fun CleanupMode.displayLabel(): String = when (this) {
 private fun FilterStatusChip(
     label: String,
     active: Boolean,
-    activeColor: Color
+    activeColor: Color,
+    onClick: () -> Unit = {}
 ) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(100.dp))
-            .background(if (active) activeColor.copy(alpha = 0.15f) else SurfaceCard)
-            .border(
-                BorderStroke(1.dp, if (active) activeColor.copy(alpha = 0.4f) else GlassBorder),
-                RoundedCornerShape(100.dp)
-            )
-            .padding(horizontal = 10.dp, vertical = 5.dp)
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(100.dp),
+        color = if (active) activeColor.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            if (active) activeColor.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Text(
             text = "$label ${if (active) "ON" else "OFF"}",
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            color = if (active) activeColor else TextSecondary
+            color = if (active) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
         )
     }
 }

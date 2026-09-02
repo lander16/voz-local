@@ -22,32 +22,24 @@ package dev.sebastian.vozlocal.whisper
 data class WhisperParams(
     val language: String = "es",
     val initialPrompt: String? = null,
-    val singleSegment: Boolean = true,
+    val singleSegment: Boolean = false,
     val printTimestamps: Boolean = false,
     val noSpeechThold: Float = 0.6f,
     val logprobThold: Float = -1.0f,
     val entropyThold: Float = 2.4f,
     val vadModelPath: String? = null,
     val beamSize: Int = 0, // 0 = greedy (default); >1 = beam search
-    val noTimestamps: Boolean = true,
+    val noTimestamps: Boolean = false,
     val temperatureInc: Float = 0.2f,
-    val noContext: Boolean = true,
+    val noContext: Boolean = false,
     val modelIdHint: String? = null,
 )
 
-/**
- * Keep the low-latency, timestamp-free path comfortably below Whisper's
- * 30-second audio window. Longer recordings need timestamp tokens so
- * whisper.cpp can advance through subsequent windows instead of ending after
- * the first one.
- */
-internal const val LIVE_SINGLE_WINDOW_MAX_SAMPLES = 25 * 16_000
-
 internal fun WhisperParams.forLiveAudio(sampleCount: Int): WhisperParams {
-    val needsMultipleWindows = sampleCount > LIVE_SINGLE_WINDOW_MAX_SAMPLES
     return copy(
-        singleSegment = !needsMultipleWindows,
+        singleSegment = false,
         printTimestamps = false,
-        noTimestamps = !needsMultipleWindows,
+        noTimestamps = false,
+        noContext = false
     )
 }

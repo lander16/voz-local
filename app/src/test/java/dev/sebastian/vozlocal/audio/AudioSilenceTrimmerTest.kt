@@ -38,4 +38,19 @@ class AudioSilenceTrimmerTest {
 
         assertEquals(samples.size, AudioSilenceTrimmer.trim(samples).size)
     }
+
+    @Test
+    fun trim_preservesTrailingSpeechWhenRecordingStopsRightAfterSpeech() {
+        val samples = FloatArray(SAMPLE_RATE * 3)
+        val speechStart = (SAMPLE_RATE * 0.8).toInt()
+        val speechEnd = (SAMPLE_RATE * 2.8).toInt()
+        for (i in speechStart until speechEnd) {
+            samples[i] = if (i % 2 == 0) 0.04f else -0.04f
+        }
+
+        val trimmed = AudioSilenceTrimmer.trim(samples)
+        val remainingSpeechSamples = trimmed.count { kotlin.math.abs(it) > 0.03f }
+        val originalSpeechSamples = samples.count { kotlin.math.abs(it) > 0.03f }
+        assertEquals("all speech samples must be retained", originalSpeechSamples, remainingSpeechSamples)
+    }
 }

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.util.Log
 import dev.sebastian.vozlocal.audio.AudioDecoder
+import dev.sebastian.vozlocal.audio.AudioSilenceTrimmer
 import dev.sebastian.vozlocal.data.local.AppDatabase
 import dev.sebastian.vozlocal.data.model.DictationModel
 import dev.sebastian.vozlocal.data.model.DictationStat
@@ -93,11 +94,13 @@ class DictationRepository(private val context: Context) {
 
     val allModels: Flow<List<DictationModel>> = modelDao.getAllModels().map { list ->
         list.sortedBy { model -> when (model.id) {
-            "whisper_tiny" -> 1
-            "whisper_base" -> 2
-            "whisper_small" -> 3
-            "whisper_medium" -> 4
-            "whisper_large_v3_turbo" -> 5
+            "whisper_base" -> 1
+            "whisper_tiny" -> 2
+            "whisper_base_en" -> 3
+            "whisper_small" -> 4
+            "whisper_small_q5_1" -> 5
+            "whisper_large_v3_turbo" -> 6
+            "whisper_medium" -> 7
             else -> 10
         } }
     }
@@ -388,23 +391,33 @@ class DictationRepository(private val context: Context) {
         try {
             val defaultModels = listOf(
                 DictationModel(
-                    id = "whisper_tiny",
-                    name = "Whisper Tiny (Multi-Language)",
-                    sizeMb = 42f,  // q8_0 quantized
-                    accuracySpanish = 72,
-                    accuracyEnglish = 79,
-                    speedMultiplier = 8.5f,
-                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_tiny"),
-                    isSelected = true
-                ),
-                DictationModel(
                     id = "whisper_base",
-                    name = "Whisper Base (Standard)",
+                    name = "Whisper Base (Recommended)",
                     sizeMb = 78f,  // q8_0 quantized
                     accuracySpanish = 83,
                     accuracyEnglish = 89,
                     speedMultiplier = 5.0f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_base"),
+                    isSelected = true
+                ),
+                DictationModel(
+                    id = "whisper_tiny",
+                    name = "Whisper Tiny (Ultra Fast)",
+                    sizeMb = 42f,  // q8_0 quantized
+                    accuracySpanish = 72,
+                    accuracyEnglish = 79,
+                    speedMultiplier = 8.5f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_tiny"),
+                    isSelected = false
+                ),
+                DictationModel(
+                    id = "whisper_base_en",
+                    name = "Whisper Base English (High Speed .en)",
+                    sizeMb = 78f,  // q8_0 quantized
+                    accuracySpanish = 0,
+                    accuracyEnglish = 93,
+                    speedMultiplier = 5.5f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_base_en"),
                     isSelected = false
                 ),
                 DictationModel(
@@ -418,13 +431,13 @@ class DictationRepository(private val context: Context) {
                     isSelected = false
                 ),
                 DictationModel(
-                    id = "whisper_medium",
-                    name = "Whisper Medium (Ultra Quality)",
-                    sizeMb = 823f,  // q8_0 quantized
-                    accuracySpanish = 97,
-                    accuracyEnglish = 99,
-                    speedMultiplier = 1.0f,
-                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_medium"),
+                    id = "whisper_small_q5_1",
+                    name = "Whisper Small q5_1 (Mobile Sweet Spot)",
+                    sizeMb = 175f,  // q5_1 quantized
+                    accuracySpanish = 91,
+                    accuracyEnglish = 94,
+                    speedMultiplier = 3.2f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_small_q5_1"),
                     isSelected = false
                 ),
                 DictationModel(
@@ -435,6 +448,16 @@ class DictationRepository(private val context: Context) {
                     accuracyEnglish = 99,
                     speedMultiplier = 3.5f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_large_v3_turbo"),
+                    isSelected = false
+                ),
+                DictationModel(
+                    id = "whisper_medium",
+                    name = "Whisper Medium (Legacy Heavy)",
+                    sizeMb = 823f,  // q8_0 quantized
+                    accuracySpanish = 97,
+                    accuracyEnglish = 99,
+                    speedMultiplier = 1.0f,
+                    isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_medium"),
                     isSelected = false
                 )
             )
@@ -473,6 +496,13 @@ class DictationRepository(private val context: Context) {
                             downloadProgress = if (downloaded) 1.0f else 0.0f
                         ))
                     }
+                }
+
+                // Ensure a downloaded model is selected if one is available and current selection is not downloaded
+                val finalList = allModels.first()
+                val activeSelected = finalList.find { it.isSelected }
+                if (activeSelected == null || !activeSelected.isDownloaded) {
+                    finalList.find { it.isDownloaded }?.let { modelDao.selectModel(it.id) }
                 }
             }
         } catch (e: Exception) {
@@ -519,8 +549,12 @@ class DictationRepository(private val context: Context) {
                         isDownloaded = true,
                         downloadProgress = 1.0f
                     ))
+                    val currentSelected = allModels.first().find { it.isSelected }
+                    if (currentSelected == null || !currentSelected.isDownloaded) {
+                        modelDao.selectModel(modelId)
+                    }
                     onProgress(1.0f)
-                    allModels.first().find { it.id == modelId && it.isSelected }?.let { preloadModel(modelId) }
+                    preloadModel(modelId)
                 } else {
                     modelDao.updateModel(model.copy(
                         isDownloading = false,
@@ -565,6 +599,10 @@ class DictationRepository(private val context: Context) {
     suspend fun transcribeAudio(samples: FloatArray, modelId: String): String = withContext(Dispatchers.Default) {
         if (samples.isEmpty()) return@withContext ""
 
+        // Trim leading and trailing silence to avoid processing dead audio frames
+        val trimmed = AudioSilenceTrimmer.trim(samples)
+        val activeSamples = if (trimmed.isNotEmpty()) trimmed else samples
+
         // Ensure Whisper engine is loaded with target model
         val loaded = whisperEngine.loadModel(modelId)
         _modelLoaded.value = loaded
@@ -574,12 +612,12 @@ class DictationRepository(private val context: Context) {
         }
 
         whisperEngine.transcribe(
-            samples,
+            activeSamples,
             language = getLanguage(),
             params = currentWhisperParams()
-                .forLiveAudio(samples.size)
+                .forLiveAudio(activeSamples.size)
                 .copy(
-                    vadModelPath = vadPathFor(samples.size, sharedFile = false),
+                    vadModelPath = vadPathFor(activeSamples.size, sharedFile = false),
                     modelIdHint = modelId
                 )
         )
@@ -595,14 +633,17 @@ class DictationRepository(private val context: Context) {
             onProgress(0.12f, "Loading local Whisper model...")
             whisperEngine.loadModel(modelId)
         }
-        val samples = audioDecoder.decodeToPcm16k(uri) { prog ->
+        val decodedSamples = audioDecoder.decodeToPcm16k(uri) { prog ->
             onProgress(0.10f + prog * 0.45f, "Decoding audio file...")
         }
 
-        if (samples.isEmpty()) {
+        if (decodedSamples.isEmpty()) {
             loadJob.cancel()
             return@withContext "Error: Failed to decode audio file."
         }
+
+        val trimmedSamples = AudioSilenceTrimmer.trim(decodedSamples)
+        val samples = if (trimmedSamples.isNotEmpty()) trimmedSamples else decodedSamples
 
         onProgress(0.58f, "Preparing local Whisper model...")
         val loaded = loadJob.await()
@@ -646,9 +687,7 @@ class DictationRepository(private val context: Context) {
 
     private fun vadPathFor(sampleCount: Int, sharedFile: Boolean): String? {
         if (!getUseVad()) return null
-        val path = _vadModelPath.value ?: return null
-        val durationSec = sampleCount / 16000f
-        return path.takeIf { sharedFile || durationSec >= 12f }
+        return _vadModelPath.value
     }
 
     // History Operations

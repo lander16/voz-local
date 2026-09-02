@@ -60,8 +60,13 @@ class MainViewModel(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val selectedModel: StateFlow<DictationModel?> = repository.allModels
-        .map { list -> list.find { it.isSelected } }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        .map { list ->
+            list.find { it.isSelected && it.isDownloaded }
+                ?: list.firstOrNull { it.isDownloaded }
+                ?: list.find { it.isSelected }
+                ?: list.firstOrNull()
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val transcriptionHistory: StateFlow<List<TranscriptionHistory>> = repository.pagedHistory()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -442,15 +447,27 @@ class MainViewModel(
         }
     }
 
+    private fun getActiveDownloadedModel(): DictationModel? {
+        val selected = selectedModel.value
+        if (selected != null && selected.isDownloaded) return selected
+        val list = modelsList.value
+        return list.find { it.isSelected && it.isDownloaded }
+            ?: list.firstOrNull { it.isDownloaded }
+    }
+
     private fun startRecording() {
+        val model = getActiveDownloadedModel()
+        if (model == null) {
+            _currentLiveTranscription.value = "⚠️ Speech model not downloaded yet. Please download a model from the Models tab to start dictating."
+            return
+        }
+
         _isRecording.value = true
         _recordDurationSec.value = 0
         _currentLiveTranscription.value = "Recording mic audio (PCM 16kHz)..."
         resetWaveform()
 
-        selectedModel.value?.takeIf { it.isDownloaded }?.let { model ->
-            viewModelScope.launch(Dispatchers.IO) { repository.preloadModel(model.id) }
-        }
+        viewModelScope.launch(Dispatchers.IO) { repository.preloadModel(model.id) }
 
         // Start duration timer
         timerJob = viewModelScope.launch {
@@ -474,7 +491,7 @@ class MainViewModel(
             }
             ownsRecorderSession = true
             if (useStreamingDictation.value) {
-                selectedModel.value?.takeIf { it.isDownloaded }?.let(::startStreamingPreview)
+                startStreamingPreview(model)
             }
         } catch (e: SecurityException) {
             timerJob?.cancel()
@@ -497,15 +514,10 @@ class MainViewModel(
         val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
         ownsRecorderSession = false
         val finalDuration = _recordDurationSec.value
-        val model = selectedModel.value
+        val model = getActiveDownloadedModel()
 
         if (model == null) {
-            _currentLiveTranscription.value = "Please select a model in the Models tab."
-            return
-        }
-
-        if (!model.isDownloaded) {
-            _currentLiveTranscription.value = "Please download ${model.name} in the Models tab first."
+            _currentLiveTranscription.value = "Please download a speech model in the Models tab first."
             return
         }
 
@@ -676,6 +688,10 @@ class MainViewModel(
 
     fun loadHistoryDraft(text: String) {
         _currentLiveTranscription.value = text
+    }
+
+    fun clearLiveTranscription() {
+        _currentLiveTranscription.value = ""
     }
 
     private fun formatFileSize(bytes: Long): String {

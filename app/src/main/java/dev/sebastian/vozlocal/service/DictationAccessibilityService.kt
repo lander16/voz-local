@@ -604,16 +604,21 @@ class DictationAccessibilityService : AccessibilityService() {
             return false
         }
         if (targetNode != null) {
-            val existingText = targetNode.text?.toString().orEmpty()
-            val selectionStart = targetNode.textSelectionStart
-            val selectionEnd = targetNode.textSelectionEnd
-            val insertionStart = minOf(selectionStart, selectionEnd)
-            val insertionEnd = maxOf(selectionStart, selectionEnd)
-            val newText = if (insertionStart >= 0 && insertionEnd >= insertionStart && insertionEnd <= existingText.length) {
-                existingText.replaceRange(insertionStart, insertionEnd, text)
-            } else {
-                existingText + text
-            }
+            val rawText = targetNode.text?.toString().orEmpty()
+            val isHintShowing = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && targetNode.isShowingHintText
+            val isPlaceholder = AccessibilityTargetPolicy.isPlaceholderText(
+                text = rawText,
+                hintText = targetNode.hintText?.toString(),
+                contentDescription = targetNode.contentDescription?.toString(),
+                isShowingHintText = isHintShowing
+            )
+            val newText = AccessibilityTargetPolicy.computeInsertionText(
+                rawText = rawText,
+                textToInsert = text,
+                selectionStart = targetNode.textSelectionStart,
+                selectionEnd = targetNode.textSelectionEnd,
+                isPlaceholder = isPlaceholder
+            )
             val arguments = Bundle()
             arguments.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, newText)
             val success = targetNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
