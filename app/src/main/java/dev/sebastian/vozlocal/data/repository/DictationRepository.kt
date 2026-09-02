@@ -262,17 +262,6 @@ class DictationRepository(private val context: Context) {
         prefs.edit { putBoolean("spoken_punctuation_commands", value) }
     }
 
-    /**
-     * Enables the experimental rolling-window dictation path. It stays opt-in
-     * while its latency and boundary handling are validated on real devices.
-     */
-    fun getUseStreamingDictation(): Boolean =
-        prefs.getBoolean("use_streaming_dictation", false)
-
-    fun saveUseStreamingDictation(value: Boolean) {
-        prefs.edit { putBoolean("use_streaming_dictation", value) }
-    }
-
     suspend fun shutdown() {
         whisperEngine.release()
         _modelLoaded.value = false

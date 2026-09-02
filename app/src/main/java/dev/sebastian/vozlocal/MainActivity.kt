@@ -13,6 +13,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sebastian.vozlocal.ui.screens.MainScreen
 import dev.sebastian.vozlocal.ui.theme.MyApplicationTheme
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
@@ -29,7 +31,7 @@ class MainActivity : ComponentActivity() {
         if (isGranted) {
             Toast.makeText(this, "Microphone access granted.", Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, "Microphone access denied. Voice dictation will be unavailable.", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Microphone permission is required to transcribe audio.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -50,7 +52,8 @@ class MainActivity : ComponentActivity() {
         checkAndRequestAudioPermission()
 
         setContent {
-            MyApplicationTheme {
+            val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+            MyApplicationTheme(themeMode = themeMode) {
                 MainScreen(viewModel = viewModel)
             }
         }

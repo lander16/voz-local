@@ -133,19 +133,19 @@ fun StatsTab(viewModel: MainViewModel) {
                             ),
                             RoundedCornerShape(16.dp)
                         ),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(text = "Today's words", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                        Text(text = "Today's words", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(text = todayWords.toString(), fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = PrimaryColor)
                         Text(
                             text = String.format(Locale.US, "%.1f min duration", todayDurationMin),
                             fontSize = 11.sp,
-                            color = TextSecondary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -161,14 +161,14 @@ fun StatsTab(viewModel: MainViewModel) {
                             ),
                             RoundedCornerShape(16.dp)
                         ),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(14.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(text = "Verbal speed", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextSecondary)
+                        Text(text = "Verbal speed", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Row(
                             verticalAlignment = Alignment.Bottom,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -179,7 +179,7 @@ fun StatsTab(viewModel: MainViewModel) {
                         Text(
                             text = if (todayAvgWpm > 0f) String.format(Locale.US, "%.0f WPM today", todayAvgWpm) else "No dictations today",
                             fontSize = 11.sp,
-                            color = TextSecondary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -190,7 +190,7 @@ fun StatsTab(viewModel: MainViewModel) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
@@ -284,7 +284,7 @@ fun StatsTab(viewModel: MainViewModel) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
@@ -295,7 +295,7 @@ fun StatsTab(viewModel: MainViewModel) {
                         text = "Lifetime Milestones",
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp,
-                        color = TextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
                     Row(

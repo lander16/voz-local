@@ -16,7 +16,6 @@ import dev.sebastian.vozlocal.data.repository.SensitiveApp
 import dev.sebastian.vozlocal.data.repository.VadDownloadStatus
 import dev.sebastian.vozlocal.polish.QwenEngine
 import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
-import dev.sebastian.vozlocal.whisper.StreamingTranscriptReconciler
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.ArrayList
@@ -94,7 +93,6 @@ class MainViewModel(
 
     private val _currentLiveTranscription = MutableStateFlow("")
     val currentLiveTranscription: StateFlow<String> = _currentLiveTranscription.asStateFlow()
-    private var streamingJob: Job? = null
 
     // Shared File Transcription State
     private val _sharedAudioUri = MutableStateFlow<Uri?>(null)
@@ -152,7 +150,6 @@ class MainViewModel(
     val initialPrompt = MutableStateFlow(repository.getInitialPrompt() ?: "")
     val useVad = MutableStateFlow(repository.getUseVad())
     val spokenPunctuationCommands = MutableStateFlow(repository.getSpokenPunctuationCommands())
-    val useStreamingDictation = MutableStateFlow(repository.getUseStreamingDictation())
     val deniedPackages = MutableStateFlow(repository.getDeniedPackages())
     private val _launchableApps = MutableStateFlow<List<SensitiveApp>>(emptyList())
     val launchableApps: StateFlow<List<SensitiveApp>> = _launchableApps.asStateFlow()
@@ -197,9 +194,6 @@ class MainViewModel(
 
     companion object {
         private val REGEX_WORD_SPLIT = Regex("\\s+")
-        private const val STREAMING_WINDOW_SAMPLES = 8 * 16_000
-        private const val STREAMING_MIN_SAMPLES = 3 * 16_000
-        private const val STREAMING_INTERVAL_MS = 2_500L
 
         // Supported whisper.cpp language codes for the selector
         val LANGUAGE_OPTIONS = listOf(
@@ -281,11 +275,6 @@ class MainViewModel(
     fun setSpokenPunctuationCommands(value: Boolean) {
         repository.saveSpokenPunctuationCommands(value)
         spokenPunctuationCommands.value = value
-    }
-
-    fun setUseStreamingDictation(value: Boolean) {
-        repository.saveUseStreamingDictation(value)
-        useStreamingDictation.value = value
     }
 
     fun loadLaunchableApps() {
@@ -447,58 +436,58 @@ class MainViewModel(
         }
     }
 
-    private fun getActiveDownloadedModel(): DictationModel? {
+    private suspend fun getActiveDownloadedModel(): DictationModel? {
         val selected = selectedModel.value
         if (selected != null && selected.isDownloaded) return selected
-        val list = modelsList.value
+        val list = repository.allModels.first()
         return list.find { it.isSelected && it.isDownloaded }
             ?: list.firstOrNull { it.isDownloaded }
     }
 
     private fun startRecording() {
-        val model = getActiveDownloadedModel()
-        if (model == null) {
-            _currentLiveTranscription.value = "⚠️ Speech model not downloaded yet. Please download a model from the Models tab to start dictating."
-            return
-        }
-
-        _isRecording.value = true
-        _recordDurationSec.value = 0
-        _currentLiveTranscription.value = "Recording mic audio (PCM 16kHz)..."
-        resetWaveform()
-
-        viewModelScope.launch(Dispatchers.IO) { repository.preloadModel(model.id) }
-
-        // Start duration timer
-        timerJob = viewModelScope.launch {
-            while (isActive) {
-                delay(1.seconds)
-                _recordDurationSec.value += 1
+        viewModelScope.launch {
+            val model = getActiveDownloadedModel()
+            if (model == null) {
+                _currentLiveTranscription.value = "⚠️ Speech model not downloaded yet. Please download a model from the Models tab to start dictating."
+                return@launch
             }
-        }
 
-        try {
-            val started = audioRecorder.startRecording(viewModelScope) { amplitude ->
-                pushWaveform(amplitude)
+            _isRecording.value = true
+            _recordDurationSec.value = 0
+            _currentLiveTranscription.value = "Listening (speak now)..."
+            resetWaveform()
+
+            launch(Dispatchers.IO) { repository.preloadModel(model.id) }
+
+            // Start duration timer
+            timerJob?.cancel()
+            timerJob = launch {
+                while (isActive && _isRecording.value) {
+                    delay(1.seconds)
+                    _recordDurationSec.value += 1
+                }
             }
-            if (!started) {
+
+            try {
+                val started = audioRecorder.startRecording(viewModelScope) { amplitude ->
+                    pushWaveform(amplitude)
+                }
+                if (!started) {
+                    timerJob?.cancel()
+                    timerJob = null
+                    _isRecording.value = false
+                    _currentLiveTranscription.value = "Microphone is unavailable or already in use."
+                    _liveWaveform.value = emptyList()
+                    return@launch
+                }
+                ownsRecorderSession = true
+            } catch (e: SecurityException) {
                 timerJob?.cancel()
                 timerJob = null
                 _isRecording.value = false
-                _currentLiveTranscription.value = "Microphone is already in use."
+                _currentLiveTranscription.value = e.message ?: "Microphone permission not granted."
                 _liveWaveform.value = emptyList()
-                return
             }
-            ownsRecorderSession = true
-            if (useStreamingDictation.value) {
-                startStreamingPreview(model)
-            }
-        } catch (e: SecurityException) {
-            timerJob?.cancel()
-            timerJob = null
-            _isRecording.value = false
-            _currentLiveTranscription.value = e.message ?: "Microphone permission not granted."
-            _liveWaveform.value = emptyList()
         }
     }
 
@@ -506,32 +495,31 @@ class MainViewModel(
         if (!_isRecording.value) return
 
         timerJob?.cancel()
+        timerJob = null
         _isRecording.value = false
 
-        val activeStreamingJob = streamingJob
-        streamingJob = null
-        activeStreamingJob?.cancel()
         val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
         ownsRecorderSession = false
         val finalDuration = _recordDurationSec.value
-        val model = getActiveDownloadedModel()
-
-        if (model == null) {
-            _currentLiveTranscription.value = "Please download a speech model in the Models tab first."
-            return
-        }
 
         if (samples.isEmpty()) {
             _currentLiveTranscription.value = "No mic audio captured."
+            _liveWaveform.value = emptyList()
             return
         }
 
         _currentLiveTranscription.value = "Running local Whisper model inference..."
 
         viewModelScope.launch(Dispatchers.Default) {
-            // Do not race the authoritative final pass with an in-flight preview
-            // inference against the same non-thread-safe Whisper context.
-            activeStreamingJob?.join()
+            val model = getActiveDownloadedModel()
+            if (model == null) {
+                withContext(Dispatchers.Main) {
+                    _currentLiveTranscription.value = "Please download a speech model in the Models tab first."
+                    _liveWaveform.value = emptyList()
+                }
+                return@launch
+            }
+
             val rawOutput = repository.transcribeAudio(samples, model.id)
 
             if (rawOutput.isEmpty()) {
@@ -575,28 +563,6 @@ class MainViewModel(
             withContext(Dispatchers.Main) {
                 _currentLiveTranscription.value = processedText
                 _liveWaveform.value = emptyList()
-            }
-        }
-    }
-
-    /**
-     * Experimental in-app preview: every pass transcribes an overlapping rolling
-     * window. The reconciler commits only text preceding a confirmed overlap; the
-     * final full-recording pass above remains authoritative for history/copying.
-     */
-    private fun startStreamingPreview(model: DictationModel) {
-        streamingJob?.cancel()
-        streamingJob = viewModelScope.launch(Dispatchers.Default) {
-            val reconciler = StreamingTranscriptReconciler()
-            while (isActive && _isRecording.value) {
-                delay(STREAMING_INTERVAL_MS)
-                val window = audioRecorder.snapshotRecording(STREAMING_WINDOW_SAMPLES)
-                if (window.size < STREAMING_MIN_SAMPLES) continue
-
-                val preview = repository.transcribeAudio(window, model.id)
-                if (preview.isNotBlank() && isActive && _isRecording.value) {
-                    _currentLiveTranscription.value = reconciler.accept(preview).text
-                }
             }
         }
     }
@@ -726,8 +692,6 @@ class MainViewModel(
     }
 
     override fun onCleared() {
-        streamingJob?.cancel()
-        streamingJob = null
         if (ownsRecorderSession) {
             audioRecorder.stopRecording()
             ownsRecorderSession = false

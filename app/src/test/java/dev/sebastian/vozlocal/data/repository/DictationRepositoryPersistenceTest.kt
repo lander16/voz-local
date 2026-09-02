@@ -95,14 +95,6 @@ class DictationRepositoryPersistenceTest {
     }
 
     @Test
-    fun streamingDictation_defaultsToFalseAndRoundTrips() {
-        val repo = newRepository()
-        assertFalse(repo.getUseStreamingDictation())
-        repo.saveUseStreamingDictation(true)
-        assertTrue(repo.getUseStreamingDictation())
-    }
-
-    @Test
     fun deniedPackages_roundTripAsIndependentSet() {
         val repo = newRepository()
         repo.saveDeniedPackages(setOf("com.example.bank", "com.example.passwords"))

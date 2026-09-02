@@ -174,8 +174,8 @@ fun MainScreen(
                 drawerState = drawerState,
                 drawerContent = {
                 ModalDrawerSheet(
-                    drawerContainerColor = SurfaceDark,
-                    drawerContentColor = TextPrimary,
+                    drawerContainerColor = MaterialTheme.colorScheme.surface,
+                    drawerContentColor = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.width(300.dp)
                 ) {
                     Column(
@@ -188,17 +188,17 @@ fun MainScreen(
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
                         ) {
                             Box(
                                 modifier = Modifier
                                     .size(44.dp)
                                     .clip(RoundedCornerShape(12.dp))
-                                    .background(Brush.linearGradient(listOf(PrimaryColor, SecondaryColor))),
+                                    .background(PrimaryColor),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Hearing,
+                                    imageVector = Icons.Default.KeyboardVoice,
                                     contentDescription = null,
                                     tint = Color.White,
                                     modifier = Modifier.size(26.dp)
@@ -209,17 +209,17 @@ fun MainScreen(
                                     text = "VozLocal AI",
                                     fontWeight = FontWeight.ExtraBold,
                                     fontSize = 20.sp,
-                                    color = TextPrimary
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = "On-Device Dictation Studio",
                                     fontSize = 12.sp,
-                                    color = TextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
 
-                        HorizontalDivider(color = GlassBorder)
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                         // Drawer Navigation Items - Secondary Tools & Analytics
                         Column(
@@ -230,7 +230,7 @@ fun MainScreen(
                                 text = "Tools & Analytics",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = TextMuted,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 letterSpacing = 1.sp,
                                 modifier = Modifier.padding(start = 12.dp, bottom = 4.dp)
                             )
@@ -243,7 +243,7 @@ fun MainScreen(
                             drawerItems.forEach { (tab, label, icon) ->
                                 val selected = activeTab == tab
                                 NavigationDrawerItem(
-                                    icon = { Icon(imageVector = icon, contentDescription = null, tint = if (selected) Color.White else TextSecondary) },
+                                    icon = { Icon(imageVector = icon, contentDescription = null, tint = if (selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant) },
                                     label = { Text(text = label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, fontSize = 14.sp) },
                                     selected = selected,
                                     onClick = {
@@ -254,7 +254,7 @@ fun MainScreen(
                                         selectedContainerColor = PrimaryColor,
                                         selectedTextColor = Color.White,
                                         unselectedContainerColor = Color.Transparent,
-                                        unselectedTextColor = TextSecondary
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     ),
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier.heightIn(min = 48.dp)
@@ -262,11 +262,11 @@ fun MainScreen(
                             }
                         }
 
-                        HorizontalDivider(color = GlassBorder)
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                         // App Preferences Action
                         NavigationDrawerItem(
-                            icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = TextPrimary) },
+                            icon = { Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface) },
                             label = { Text(text = "App Settings & Preferences", fontWeight = FontWeight.Bold, fontSize = 14.sp) },
                             selected = false,
                             onClick = {
@@ -274,8 +274,8 @@ fun MainScreen(
                                 showSettingsSheet = true
                             },
                             colors = NavigationDrawerItemDefaults.colors(
-                                unselectedContainerColor = SurfaceCard,
-                                unselectedTextColor = TextPrimary
+                                unselectedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurface
                             ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.heightIn(min = 48.dp)
@@ -297,7 +297,7 @@ fun MainScreen(
                                     Icon(
                                         imageVector = Icons.Default.Menu,
                                         contentDescription = "Open Drawer Menu",
-                                        tint = TextPrimary
+                                        tint = MaterialTheme.colorScheme.onBackground
                                     )
                                 }
                             } else {
@@ -317,7 +317,7 @@ fun MainScreen(
                                 text = titleText,
                                 fontWeight = FontWeight.ExtraBold,
                                 fontSize = 19.sp,
-                                color = TextPrimary
+                                color = MaterialTheme.colorScheme.onBackground
                             )
                         },
                         actions = {
@@ -330,7 +330,7 @@ fun MainScreen(
                                 Icon(
                                     imageVector = Icons.Default.Settings,
                                     contentDescription = "Open App Settings",
-                                    tint = TextPrimary
+                                    tint = MaterialTheme.colorScheme.onBackground
                                 )
                             }
                         },
@@ -382,7 +382,7 @@ fun MainScreen(
                     if (isWideLayout) {
                         Row(modifier = Modifier.fillMaxSize()) {
                             NavigationRail(
-                                containerColor = BackgroundDark,
+                                containerColor = MaterialTheme.colorScheme.surface,
                                 modifier = Modifier.padding(start = 8.dp, top = 8.dp, bottom = 8.dp)
                             ) {
                                 listOf(
@@ -402,8 +402,8 @@ fun MainScreen(
                                             selectedIconColor = Color.White,
                                             selectedTextColor = PrimaryColor,
                                             indicatorColor = PrimaryColor.copy(alpha = 0.35f),
-                                            unselectedIconColor = TextSecondary,
-                                            unselectedTextColor = TextSecondary
+                                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     )
                                 }
@@ -540,7 +540,7 @@ private fun SetupRetryBanner(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 12.dp),
-        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
         shape = RoundedCornerShape(16.dp),
         border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.4f))
     ) {
@@ -574,12 +574,12 @@ private fun SetupRetryBanner(
                     text = "Finish setup to dictate anywhere",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "Microphone and accessibility permissions are needed for the floating assistant.",
                     fontSize = 12.sp,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp
                 )
             }
@@ -587,7 +587,7 @@ private fun SetupRetryBanner(
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 TextButton(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary),
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant),
                     modifier = Modifier.heightIn(min = 48.dp)
                 ) {
                     Text(text = "Dismiss", fontWeight = FontWeight.Bold, fontSize = 12.sp)
@@ -598,7 +598,7 @@ private fun SetupRetryBanner(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.heightIn(min = 48.dp)
                 ) {
-                    Text(text = "Grant", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Black)
+                    Text(text = "Grant", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
                 }
             }
         }

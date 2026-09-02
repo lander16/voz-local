@@ -88,7 +88,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable { filePickerLauncher.launch("audio/*") },
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(20.dp),
                     border = BorderStroke(1.5.dp, PrimaryColor.copy(alpha = 0.4f))
                 ) {
@@ -118,13 +118,13 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                             text = "Select Local Audio File",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
 
                         Text(
                             text = "Tap to pick any .wav, .mp3, .m4a, or .ogg file from storage, or share a voice note directly from another app.",
                             fontSize = 13.sp,
-                            color = TextSecondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center
                         )
 
@@ -148,7 +148,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
             } else {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     shape = RoundedCornerShape(16.dp)
                 ) {
                     Row(
@@ -215,7 +215,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp)
             ) {
                 Column(
@@ -373,9 +373,9 @@ fun SharedAudioTab(viewModel: MainViewModel) {
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, GlassBorder)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),

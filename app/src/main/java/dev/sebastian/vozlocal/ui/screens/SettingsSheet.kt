@@ -67,7 +67,6 @@ fun SettingsSheet(
     val isVadModelReady by viewModel.isVadModelReady.collectAsStateWithLifecycle()
     val useVad by viewModel.useVad.collectAsStateWithLifecycle()
     val spokenPunctuationCommands by viewModel.spokenPunctuationCommands.collectAsStateWithLifecycle()
-    val useStreamingDictation by viewModel.useStreamingDictation.collectAsStateWithLifecycle()
     val deniedPackages by viewModel.deniedPackages.collectAsStateWithLifecycle()
     val launchableApps by viewModel.launchableApps.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -77,164 +76,165 @@ fun SettingsSheet(
     var sensitiveAppsQuery by remember { mutableStateOf("") }
     var showPrivacyPolicyDialog by remember { mutableStateOf(false) }
 
-    if (showSensitiveAppsDialog) {
-        val normalizedQuery = sensitiveAppsQuery.trim()
-        val filteredApps = launchableApps.filter { app ->
-            normalizedQuery.isBlank() || app.label.contains(normalizedQuery, ignoreCase = true) ||
-                app.packageName.contains(normalizedQuery, ignoreCase = true)
-        }
-        AlertDialog(
-            onDismissRequest = { showSensitiveAppsDialog = false },
-            containerColor = SurfaceCard,
-            title = { Text("Sensitive apps", color = TextPrimary, fontWeight = FontWeight.ExtraBold) },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        "VozLocal hides its floating mic and rejects all text actions in selected apps. Add banks, password managers, authenticators, and payment apps.",
-                        color = TextSecondary,
-                        fontSize = 13.sp
-                    )
-                    OutlinedTextField(
-                        value = sensitiveAppsQuery,
-                        onValueChange = { sensitiveAppsQuery = it },
-                        singleLine = true,
-                        label = { Text("Search installed apps") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Column(
-                        modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())
-                    ) {
-                        filteredApps.forEach { app ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 48.dp)
-                                    .clickable { viewModel.setPackageDenied(app.packageName, app.packageName !in deniedPackages) },
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = app.packageName in deniedPackages,
-                                    onCheckedChange = { checked -> viewModel.setPackageDenied(app.packageName, checked) }
-                                )
-                                Column(modifier = Modifier.padding(start = 8.dp)) {
-                                    Text(app.label, color = TextPrimary, fontSize = 14.sp)
-                                    Text(app.packageName, color = TextSecondary, fontSize = 11.sp)
+    MyApplicationTheme(themeMode = themeMode) {
+        if (showSensitiveAppsDialog) {
+            val normalizedQuery = sensitiveAppsQuery.trim()
+            val filteredApps = launchableApps.filter { app ->
+                normalizedQuery.isBlank() || app.label.contains(normalizedQuery, ignoreCase = true) ||
+                    app.packageName.contains(normalizedQuery, ignoreCase = true)
+            }
+            AlertDialog(
+                onDismissRequest = { showSensitiveAppsDialog = false },
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                title = { Text("Sensitive apps", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.ExtraBold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            "VozLocal hides its floating mic and rejects all text actions in selected apps. Add banks, password managers, authenticators, and payment apps.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 13.sp
+                        )
+                        OutlinedTextField(
+                            value = sensitiveAppsQuery,
+                            onValueChange = { sensitiveAppsQuery = it },
+                            singleLine = true,
+                            label = { Text("Search installed apps") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Column(
+                            modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())
+                        ) {
+                            filteredApps.forEach { app ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .clickable { viewModel.setPackageDenied(app.packageName, app.packageName !in deniedPackages) },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = app.packageName in deniedPackages,
+                                        onCheckedChange = { checked -> viewModel.setPackageDenied(app.packageName, checked) }
+                                    )
+                                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                                        Text(app.label, color = MaterialTheme.colorScheme.onSurface, fontSize = 14.sp)
+                                        Text(app.packageName, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                                    }
                                 }
                             }
                         }
                     }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showSensitiveAppsDialog = false }) { Text("Done") }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showSensitiveAppsDialog = false }) { Text("Done") }
-            }
-        )
-    }
-
-    if (showPrivacyPolicyDialog) {
-        AlertDialog(
-            onDismissRequest = { showPrivacyPolicyDialog = false },
-            containerColor = SurfaceCard,
-            icon = {
-                Icon(
-                    imageVector = Icons.Default.Security,
-                    contentDescription = null,
-                    tint = PrimaryColor,
-                    modifier = Modifier.size(28.dp)
-                )
-            },
-            title = {
-                Text(
-                    text = "Privacy Policy & Offline Guarantee",
-                    color = TextPrimary,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontSize = 18.sp
-                )
-            },
-            text = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    PrivacyGuaranteeItem(
-                        icon = Icons.Default.WifiOff,
-                        title = "100% Offline",
-                        description = "All Whisper speech-to-text models run purely on-device with zero internet connectivity required. Model weights are downloaded once and stored locally."
-                    )
-
-                    PrivacyGuaranteeItem(
-                        icon = Icons.Default.Shield,
-                        title = "Zero Data Collection",
-                        description = "No audio recordings, voice samples, or transcriptions are ever collected, logged to remote servers, or shared with third parties. No analytics or tracking SDKs are bundled."
-                    )
-
-                    PrivacyGuaranteeItem(
-                        icon = Icons.Default.AccessibilityNew,
-                        title = "Accessibility Tool",
-                        description = "Officially declared as an assistive accessibility tool (isAccessibilityTool=\"true\"). It only inserts text when the user explicitly triggers dictation and never inspects sensitive/password fields or denylisted banking apps."
-                    )
-
-                    PrivacyGuaranteeItem(
-                        icon = Icons.Default.Mic,
-                        title = "Audio Record Permission",
-                        description = "Used exclusively during active dictation sessions. The microphone is never accessed in the background or when dictation is stopped."
-                    )
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    OutlinedButton(
-                        onClick = {
-                            val url = "https://github.com/lander16/voz-local"
-                            try {
-                                uriHandler.openUri(url)
-                            } catch (e: Exception) {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                }
-                                context.startActivity(intent)
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.OpenInBrowser,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Online Documentation (GitHub)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showPrivacyPolicyDialog = false }) {
-                    Text("Close", fontWeight = FontWeight.Bold, color = PrimaryColor)
-                }
-            }
-        )
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = SurfaceDark,
-        contentColor = TextPrimary,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .padding(vertical = 12.dp)
-                    .width(40.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(GlassBorder)
             )
         }
-    ) {
+
+        if (showPrivacyPolicyDialog) {
+            AlertDialog(
+                onDismissRequest = { showPrivacyPolicyDialog = false },
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Default.Security,
+                        contentDescription = null,
+                        tint = PrimaryColor,
+                        modifier = Modifier.size(28.dp)
+                    )
+                },
+                title = {
+                    Text(
+                        text = "Privacy Policy & Offline Guarantee",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        PrivacyGuaranteeItem(
+                            icon = Icons.Default.WifiOff,
+                            title = "100% Offline",
+                            description = "All Whisper speech-to-text models run purely on-device with zero internet connectivity required. Model weights are downloaded once and stored locally."
+                        )
+
+                        PrivacyGuaranteeItem(
+                            icon = Icons.Default.Shield,
+                            title = "Zero Data Collection",
+                            description = "No audio recordings, voice samples, or transcriptions are ever collected, logged to remote servers, or shared with third parties. No analytics or tracking SDKs are bundled."
+                        )
+
+                        PrivacyGuaranteeItem(
+                            icon = Icons.Default.AccessibilityNew,
+                            title = "Accessibility Tool",
+                            description = "Officially declared as an assistive accessibility tool (isAccessibilityTool=\"true\"). It only inserts text when the user explicitly triggers dictation and never inspects sensitive/password fields or denylisted banking apps."
+                        )
+
+                        PrivacyGuaranteeItem(
+                            icon = Icons.Default.Mic,
+                            title = "Audio Record Permission",
+                            description = "Used exclusively during active dictation sessions. The microphone is never accessed in the background or when dictation is stopped."
+                        )
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        OutlinedButton(
+                            onClick = {
+                                val url = "https://github.com/lander16/voz-local"
+                                try {
+                                    uriHandler.openUri(url)
+                                } catch (e: Exception) {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.OpenInBrowser,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Online Documentation (GitHub)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showPrivacyPolicyDialog = false }) {
+                        Text("Close", fontWeight = FontWeight.Bold, color = PrimaryColor)
+                    }
+                }
+            )
+        }
+
+        ModalBottomSheet(
+            onDismissRequest = onDismiss,
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            dragHandle = {
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .width(40.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(100.dp))
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
+            }
+        ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -273,12 +273,12 @@ fun SettingsSheet(
                             text = "VozLocal Preferences",
                             fontWeight = FontWeight.ExtraBold,
                             fontSize = 20.sp,
-                            color = TextPrimary
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
                             text = "Local privacy, model, and dictation controls",
                             fontSize = 12.sp,
-                            color = TextSecondary
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -290,17 +290,17 @@ fun SettingsSheet(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Close Settings",
-                        tint = TextSecondary
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
             }
 
-            HorizontalDivider(color = GlassBorder)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                 shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, PrimaryColor.copy(alpha = 0.35f))
             ) {
@@ -319,11 +319,11 @@ fun SettingsSheet(
                         Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(18.dp))
                     }
                     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(text = "Local-only by design", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Local-only by design", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text(
                             text = "No telemetry, no cloud dictation. Model downloads are the only network use.",
                             fontSize = 12.sp,
-                            color = TextSecondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 16.sp
                         )
                     }
@@ -343,7 +343,7 @@ fun SettingsSheet(
                 Text(
                     text = "Choose light, dark, or follow your phone.",
                     fontSize = 13.sp,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 18.sp
                 )
 
@@ -364,9 +364,9 @@ fun SettingsSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (selected) PrimaryColor else SurfaceCard)
+                                .background(if (selected) PrimaryColor else MaterialTheme.colorScheme.surfaceContainer)
                                 .border(
-                                    BorderStroke(1.dp, if (selected) PrimaryColor else GlassBorder),
+                                    BorderStroke(1.dp, if (selected) PrimaryColor else MaterialTheme.colorScheme.outlineVariant),
                                     RoundedCornerShape(12.dp)
                                 )
                                 .clickable { viewModel.setThemeMode(value) },
@@ -374,7 +374,7 @@ fun SettingsSheet(
                         ) {
                             Text(
                                 text = label,
-                                color = if (selected) Color.White else TextPrimary,
+                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
                                 fontSize = 13.sp,
                                 fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
                             )
@@ -383,7 +383,7 @@ fun SettingsSheet(
                 }
             }
 
-            HorizontalDivider(color = GlassBorder)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Section 2: Audio & Transcription Language
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -398,7 +398,7 @@ fun SettingsSheet(
                 Text(
                     text = "Pick a language to skip Whisper auto-detect and start faster.",
                     fontSize = 13.sp,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 18.sp
                 )
 
@@ -411,9 +411,9 @@ fun SettingsSheet(
                                 .fillMaxWidth()
                                 .heightIn(min = 48.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) PrimaryColor.copy(alpha = 0.2f) else SurfaceCard)
+                                .background(if (isSelected) PrimaryColor.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceContainer)
                                 .border(
-                                    BorderStroke(1.dp, if (isSelected) PrimaryColor else GlassBorder),
+                                    BorderStroke(1.dp, if (isSelected) PrimaryColor else MaterialTheme.colorScheme.outlineVariant),
                                     RoundedCornerShape(12.dp)
                                 )
                                 .clickable { viewModel.setLanguage(code) }
@@ -425,7 +425,7 @@ fun SettingsSheet(
                                 text = label,
                                 fontSize = 15.sp,
                                 fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Medium,
-                                color = if (isSelected) Color.White else TextPrimary
+                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
                             )
                             if (isSelected) {
                                 Icon(
@@ -440,7 +440,7 @@ fun SettingsSheet(
                 }
             }
 
-            HorizontalDivider(color = GlassBorder)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Section 3: Post-Processing & Cleanup
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -458,8 +458,8 @@ fun SettingsSheet(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(12.dp))
                         .toggleable(
                             value = smartPunctuation,
                             role = Role.Switch,
@@ -470,8 +470,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Smart punctuation", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Turns pauses into punctuation", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Smart punctuation", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "Turns pauses into punctuation", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = smartPunctuation,
@@ -486,8 +486,8 @@ fun SettingsSheet(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(12.dp))
                         .toggleable(
                             value = autoCapitalization,
                             role = Role.Switch,
@@ -498,8 +498,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Auto-capitalize", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Starts sentences with uppercase", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Auto-capitalize", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "Starts sentences with uppercase", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = autoCapitalization,
@@ -514,8 +514,8 @@ fun SettingsSheet(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(12.dp))
                         .toggleable(
                             value = applyDictionary,
                             role = Role.Switch,
@@ -526,8 +526,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Custom dictionary", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Replaces words you’ve added", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Custom dictionary", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "Replaces words you’ve added", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = applyDictionary,
@@ -539,7 +539,7 @@ fun SettingsSheet(
                 Text(
                     text = "Local cleanup is rule-based, not AI/LLM.",
                     fontSize = 12.sp,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp
                 )
 
@@ -566,7 +566,7 @@ fun SettingsSheet(
 
             }
 
-            HorizontalDivider(color = GlassBorder)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
 
             // Section 4: System Overlay Assistant
@@ -584,8 +584,8 @@ fun SettingsSheet(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(12.dp))
                         .toggleable(
                             value = showOnlyOnInput,
                             role = Role.Switch,
@@ -596,8 +596,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Only show on text fields", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Hides the mic when no input is focused", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Only show on text fields", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "Hides the mic when no input is focused", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = showOnlyOnInput,
@@ -621,12 +621,12 @@ fun SettingsSheet(
                 Text(
                     "Selected apps never receive the floating mic or text insertion. Banks can still warn whenever an accessibility service is enabled system-wide.",
                     fontSize = 12.sp,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp
                 )
             }
 
-            HorizontalDivider(color = GlassBorder)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Section 5: History Retention Limits
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -644,8 +644,8 @@ fun SettingsSheet(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(12.dp))
                         .semantics(mergeDescendants = true) {}
                         .toggleable(
                             value = saveHistory,
@@ -657,8 +657,8 @@ fun SettingsSheet(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Save transcripts locally", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Turn off to keep transcripts out of the database", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Save transcripts locally", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "Turn off to keep transcripts out of the database", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = saveHistory,
@@ -671,7 +671,7 @@ fun SettingsSheet(
                 Text(
                     text = "Limit how many local transcripts are kept on device.",
                     fontSize = 13.sp,
-                    color = if (saveHistory) TextSecondary else TextSecondary.copy(alpha = 0.4f)
+                    color = if (saveHistory) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
                 )
 
                 Row(
@@ -694,9 +694,9 @@ fun SettingsSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                                 .clip(RoundedCornerShape(12.dp))
-                                .background(if (isSelected) PrimaryColor else SurfaceCard)
+                                .background(if (isSelected) PrimaryColor else MaterialTheme.colorScheme.surfaceContainer)
                                 .border(
-                                    BorderStroke(1.dp, if (isSelected) PrimaryColor else GlassBorder),
+                                    BorderStroke(1.dp, if (isSelected) PrimaryColor else MaterialTheme.colorScheme.outlineVariant),
                                     RoundedCornerShape(12.dp)
                                 )
                                 .clickable { viewModel.setHistoryLimit(valLimit) },
@@ -704,7 +704,7 @@ fun SettingsSheet(
                         ) {
                             Text(
                                 text = label,
-                                color = if (isSelected) Color.White else TextPrimary,
+                                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -731,7 +731,7 @@ fun SettingsSheet(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp),
                     shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, GlassBorder)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Share,
@@ -743,13 +743,13 @@ fun SettingsSheet(
                     Text(
                         text = if (history.isEmpty()) "Export transcription history" else "Export transcription history (${history.size})",
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontSize = 14.sp
                     )
                 }
             }
 
-            HorizontalDivider(color = GlassBorder)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Section 6: AI Engine
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -764,7 +764,7 @@ fun SettingsSheet(
                 Text(
                     text = "Tune whisper.cpp for your voice and hardware.",
                     fontSize = 13.sp,
-                    color = TextSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 18.sp
                 )
 
@@ -774,7 +774,7 @@ fun SettingsSheet(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(text = "No-speech threshold", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "No-speech threshold", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text(
                             text = String.format(Locale.US, "%.2f", noSpeechThold),
                             fontSize = 13.sp,
@@ -796,7 +796,7 @@ fun SettingsSheet(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(text = "Log-probability threshold", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Log-probability threshold", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text(
                             text = String.format(Locale.US, "%.2f", logprobThold),
                             fontSize = 13.sp,
@@ -818,7 +818,7 @@ fun SettingsSheet(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text(text = "Entropy threshold", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Text(text = "Entropy threshold", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                         Text(
                             text = String.format(Locale.US, "%.2f", entropyThold),
                             fontSize = 13.sp,
@@ -836,7 +836,7 @@ fun SettingsSheet(
 
                 // Initial prompt
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(text = "Initial prompt", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(text = "Initial prompt", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     OutlinedTextField(
                         value = initialPrompt,
                         onValueChange = { viewModel.setInitialPrompt(it) },
@@ -844,20 +844,20 @@ fun SettingsSheet(
                             Text(
                                 text = dev.sebastian.vozlocal.whisper.SPANISH_PROMPT,
                                 fontSize = 13.sp,
-                                color = TextSecondary.copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             )
                         },
                         supportingText = {
-                            Text("Optional. Primes Whisper with this text before transcription.", fontSize = 12.sp, color = TextSecondary)
+                            Text("Optional. Primes Whisper with this text before transcription.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         },
                         minLines = 4,
                         maxLines = 6,
-                        textStyle = TextStyle(fontSize = 14.sp, color = TextPrimary),
+                        textStyle = TextStyle(fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = PrimaryColor,
-                            unfocusedBorderColor = GlassBorder,
-                            focusedContainerColor = SurfaceCard,
-                            unfocusedContainerColor = SurfaceCard,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
                             cursorColor = PrimaryColor
                         ),
                         modifier = Modifier.fillMaxWidth()
@@ -870,21 +870,21 @@ fun SettingsSheet(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(12.dp))
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Silero VAD model", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Voice-activity detection removes silence before inference", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Silero VAD model", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "Voice-activity detection removes silence before inference", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(
                         text = if (isVadModelReady) "Ready" else "Not downloaded",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = if (isVadModelReady) Color(0xFF10B981) else TextSecondary
+                        color = if (isVadModelReady) Color(0xFF10B981) else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -893,42 +893,15 @@ fun SettingsSheet(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
-                        .border(BorderStroke(1.dp, GlassBorder), RoundedCornerShape(12.dp))
-                        .toggleable(
-                            value = useStreamingDictation,
-                            role = Role.Switch,
-                            onValueChange = { viewModel.setUseStreamingDictation(it) }
-                        )
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Streaming dictation (experimental)", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Shows text while you speak; may revise the latest words.", fontSize = 13.sp, color = TextSecondary)
-                    }
-                    Switch(
-                        checked = useStreamingDictation,
-                        onCheckedChange = null,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
-                    )
-                }
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
                         .toggleable(value = useVad, role = Role.Switch, onValueChange = { viewModel.setUseVad(it) })
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Use VAD when ready", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Default on for faster dictation; disable if it clips speech", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Use VAD when ready", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "Default on for faster dictation; disable if it clips speech", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = useVad,
@@ -942,15 +915,15 @@ fun SettingsSheet(
                         .fillMaxWidth()
                         .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(SurfaceCard)
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
                         .toggleable(value = spokenPunctuationCommands, role = Role.Switch, onValueChange = { viewModel.setSpokenPunctuationCommands(it) })
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Spoken punctuation commands", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                        Text(text = "Opt-in replacement of words like comma/coma/punto", fontSize = 13.sp, color = TextSecondary)
+                        Text(text = "Spoken punctuation commands", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "Opt-in replacement of words like comma/coma/punto", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = spokenPunctuationCommands,
@@ -960,7 +933,7 @@ fun SettingsSheet(
                 }
             }
 
-            HorizontalDivider(color = GlassBorder)
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             // Section 7: Privacy & Security
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -974,9 +947,9 @@ fun SettingsSheet(
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
                     shape = RoundedCornerShape(16.dp),
-                    border = BorderStroke(1.dp, GlassBorder)
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Row(
@@ -1002,12 +975,12 @@ fun SettingsSheet(
                                     text = "Privacy & Offline Guarantee",
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
                                     text = "100% on-device speech-to-text with zero tracking",
                                     fontSize = 12.sp,
-                                    color = TextSecondary
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -1015,7 +988,7 @@ fun SettingsSheet(
                         Text(
                             text = "Everything is processed and stored locally. Network access is strictly restricted to user-initiated model downloads.",
                             fontSize = 13.sp,
-                            color = TextSecondary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 18.sp
                         )
 
@@ -1026,7 +999,7 @@ fun SettingsSheet(
                         ).forEach { line ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                                 Box(modifier = Modifier.size(6.dp).clip(RoundedCornerShape(100.dp)).background(PrimaryColor).padding(top = 5.dp))
-                                Text(text = line, fontSize = 12.sp, color = TextSecondary, lineHeight = 16.sp)
+                                Text(text = line, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
                             }
                         }
 
@@ -1094,6 +1067,7 @@ fun SettingsSheet(
             }
         }
     }
+    }
 }
 
 @Composable
@@ -1108,8 +1082,8 @@ private fun cleanupOptionRow(
             .fillMaxWidth()
             .heightIn(min = 56.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) PrimaryColor.copy(alpha = 0.16f) else SurfaceCard)
-            .border(BorderStroke(1.dp, if (selected) PrimaryColor else GlassBorder), RoundedCornerShape(12.dp))
+            .background(if (selected) PrimaryColor.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surfaceContainer)
+            .border(BorderStroke(1.dp, if (selected) PrimaryColor else MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -1120,12 +1094,12 @@ private fun cleanupOptionRow(
                 text = title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (selected) PrimaryColor else TextPrimary
+                color = if (selected) PrimaryColor else MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = description,
                 fontSize = 12.sp,
-                color = TextSecondary,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 16.sp
             )
         }
@@ -1135,7 +1109,7 @@ private fun cleanupOptionRow(
                 .size(18.dp)
                 .clip(RoundedCornerShape(100.dp))
                 .background(if (selected) PrimaryColor else Color.Transparent)
-                .border(BorderStroke(1.5.dp, if (selected) PrimaryColor else GlassBorder), RoundedCornerShape(100.dp)),
+                .border(BorderStroke(1.5.dp, if (selected) PrimaryColor else MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(100.dp)),
             contentAlignment = Alignment.Center
         ) {
             if (selected) {
@@ -1171,8 +1145,8 @@ private fun PrivacyGuaranteeItem(
             Icon(imageVector = icon, contentDescription = null, tint = PrimaryColor, modifier = Modifier.size(18.dp))
         }
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-            Text(text = description, fontSize = 12.sp, color = TextSecondary, lineHeight = 16.sp)
+            Text(text = title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+            Text(text = description, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, lineHeight = 16.sp)
         }
     }
 }

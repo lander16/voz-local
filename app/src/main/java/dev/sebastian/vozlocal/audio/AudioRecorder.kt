@@ -94,19 +94,37 @@ class AudioRecorder {
                 4096
             )
 
-            audioRecord = AudioRecord(
+            val sources = intArrayOf(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                minBufferSize
+                MediaRecorder.AudioSource.MIC
             )
+            var initializedRecord: AudioRecord? = null
+            for (source in sources) {
+                try {
+                    val candidate = AudioRecord(
+                        source,
+                        SAMPLE_RATE,
+                        AudioFormat.CHANNEL_IN_MONO,
+                        AudioFormat.ENCODING_PCM_16BIT,
+                        minBufferSize
+                    )
+                    if (candidate.state == AudioRecord.STATE_INITIALIZED) {
+                        initializedRecord = candidate
+                        break
+                    } else {
+                        candidate.release()
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "AudioSource $source failed: ${e.message}")
+                }
+            }
 
-            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord initialization failed!")
+            if (initializedRecord == null) {
+                Log.e(TAG, "AudioRecord initialization failed across all audio sources!")
                 audioRecord = null
                 return false
             }
+            audioRecord = initializedRecord
 
             synchronized(floatBuffer) {
                 floatBuffer.reset()

@@ -1,7 +1,12 @@
 package dev.sebastian.vozlocal.ui.screens
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
@@ -85,6 +90,16 @@ fun DictateTab(
         context,
         dev.sebastian.vozlocal.service.DictationAccessibilityService::class.java
     )
+
+    val micPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            viewModel.toggleRecording()
+        } else {
+            Toast.makeText(context, "Microphone permission is required to dictate", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -541,7 +556,15 @@ fun DictateTab(
                             }
                             .clickable(enabled = !isModelLoading) {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                viewModel.toggleRecording()
+                                val hasPermission = ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (hasPermission) {
+                                    viewModel.toggleRecording()
+                                } else {
+                                    micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                }
                             }
                             .background(
                                 Brush.linearGradient(
