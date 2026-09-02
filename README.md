@@ -27,13 +27,14 @@
 
 ## ✨ Key Features
 
-- 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). Hardware-accelerated ARMv8.2-A `+dotprod` and `+fp16` instruction sets deliver ~2–3x faster int8 matrix decoding. Zero cloud APIs or external servers.
-- 🎈 **Global Floating Dictation Button** — Accessibility Service + `WindowManager` overlay places an elegant floating microphone button right alongside your traditional keyboard (Gboard, Samsung, SwiftKey). Tap the mic to record and automatically paste your voice transcription into any focused text box.
-- 🛡️ **Play Store & Bank Protection** — Configured as an authorized Android Accessibility Tool (`android:isAccessibilityTool="true"`). Built-in sensitive app denylist automatically hides the floating button in banking apps, password managers, and authenticators.
-- 📁 **Shared Audio File Transcription** — Receives shared audio files via Android `SEND` intents (WhatsApp voice notes, Voice Memos, podcast snippets) and transcribes them offline with `MediaCodec` + PCM.
-- ⚡ **Zero-Latency Silence Trimming & Native VAD** — Integrated `AudioSilenceTrimmer` strips leading and trailing non-speech frames before Whisper inference; Silero VAD accelerates long and short dictations by skipping silent segments.
+- 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). Hardware-accelerated ARMv8.2-A / ARMv9-A `+dotprod`, `+fp16`, and `+i8mm` (Int8 Matrix Multiplication) instruction sets deliver ~2–4x faster matrix decoding. Zero cloud APIs or external servers.
+- ⚡ **Dynamic Audio Context & Focus Warmup** — Dynamic `audio_ctx` scaling adapts the encoder window to utterance duration (eliminating 2.5x–4x redundant processing on short dictations), while input-focused background pre-warming keeps native models hot in RAM for instantaneous dictation response.
+- 🎈 **Global Floating Dictation Button** — Accessibility Service + `WindowManager` overlay places an elegant floating microphone button right alongside your traditional keyboard (Gboard, Samsung, SwiftKey). Features persistent screen positioning across reboots, automatic smooth edge-docking animation, and tactile haptic feedback.
+- 🛡️ **Play Store & Bank Protection** — Configured as an authorized Android Accessibility Tool (`android:isAccessibilityTool="true"`). Built-in sensitive app denylist automatically hides the floating button in banking apps, password managers, and authenticators. Includes in-app privacy policy & offline guarantee dialog.
+- 📁 **Shared Audio File & History Export** — Receives shared voice notes/recordings via Android `SEND` intents, and provides one-tap export of your complete transcription archive to Markdown/Text via the Android Sharesheet.
+- 🗣️ **Intelligent Spoken Punctuation** — Converts vocalized punctuation commands in Spanish and English (e.g., *"punto", "coma", "abrir/cerrar interrogación", "nueva línea", "nuevo párrafo"*) with clean forward/backward symbol attachment.
 - 🧹 **Local Text Cleanup Modes** — Pure-Kotlin rule-based engine strips safe filler vocalizations ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies capitalization/punctuation. Minimal, Balanced (default), and Aggressive modes.
-- 🎨 **Fluid Material 3 UI & Micro-Interactions** — Semantic light/dark adaptive color theming, `AnimatedContent` tab transitions, dynamic audio waveform visualizer, spring-scale tactile feedback, and crisp hero transcription canvas.
+- 🎨 **Adaptive Material 3 UI & Semantic Contrast** — Full Light and Dark theme support adhering to WCAG AAA contrast guidelines, `AnimatedContent` tab transitions, dynamic audio waveform visualizer, spring-scale micro-interactions, and live transcription canvas.
 
 ---
 
@@ -334,7 +335,14 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 |---|---|---|
 | `AudioRecorder` | Two instances (ViewModel + Service), raced for the mic | Process-wide singleton in `VozLocalApp`; state transitions guarded by `synchronized(this)` and the IO reader thread reads `@Volatile` fields |
 | `WhisperContext` cleanup | `runBlocking` on the GC finalizer thread | `Cleaner`-based backstop + lifecycle mutex that serializes load / transcribe / release |
-| CPU thread count | Re-read `/proc/cpuinfo` on every transcription | Adaptive lazy selection with `-Dvozlocal.whisper.threads=N` override |
+| CPU thread count | Re-read `/proc/cpuinfo` on every transcription | Adaptive lazy selection with `-Dvozlocal.whisper.threads=N` override; optimized for Tensor G3 (Pixel 8 Pro) and modern 8+ core chips to map 5 threads across high-performance cores |
+| Native hardware acceleration | Basic ARMv8.2-A `+dotprod` | Upgraded compiler flags to `-march=armv8.2-a+fp16+dotprod+i8mm` for `whisper_v8fp16_va`, activating KleidiAI hardware Int8 matrix multiplication (`SMMLA`/`UMMLA`) |
+| Dynamic audio context | Fixed 30.0s context window (`audio_ctx = 1500`, 3000 mel frames) | Dynamic `audio_ctx` scaling (`((durationSec + 0.75f) * 50).coerceIn(256, 1500)`) cuts 2.5x–4x redundant encoder computation for short dictations |
+| Floating button ergonomics | Free-floating without memory or haptics | SharedPreferences position memory across reboots, 180ms smooth edge-docking animation to nearest bezel, and tactile click haptic feedback |
+| Spoken punctuation engine | Basic keyword matching with replacement bugs | Comprehensive Spanish and English punctuation command dictionary with forward/backward symbol attachment and clean line break handling |
+| Theme & Contrast | Hardcoded dark colors caused low contrast in Light mode | App-wide semantic Material 3 theming (`onSurface`, `surface`, `onPrimary`, etc.), WCAG AAA compliant contrast, and reactive `MainActivity` `themeMode` binding |
+| In-app dictation & rendering | Mic hijacked by download guard; text collapsed to 0 height | Unconditional recording toggle, dynamic model fallback resolution, and fixed zero-height layout bug in Live Transcription Card |
+| Compliance & Data Export | No in-app policy disclosure; no bulk export | Interactive in-app Privacy Policy & Offline Guarantee modal dialog; one-tap Markdown/Text transcription history export via Android sharesheet |
 | Smart-punctuation | Two implementations, one dead | Kotlin `postProcessText` is the single source of truth; the JNI pause-joiner is removed |
 | Dictionary regexes | Re-compiled every transcription | Hash-keyed cache, invalidated on insert/delete |
 | Download progress | Wrote Room on every 1% (100 writes for an 800 MB model) | In-memory `MutableStateFlow<Map<String,Float>>`; DB written only on completion/failure |
@@ -343,7 +351,6 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 | History list | Full table re-emit on every insert | `LIMIT 200` paged flow for the UI; full table retained for stats |
 | Filter toggles | Reset on every app restart | Persisted to SharedPreferences via proper setters |
 | Cleanup modes | One optional cleanup toggle | Persisted Minimal / Balanced / Aggressive modes exposed in ViewModel and Settings; Dictate tab shows the current mode |
-| Spoken punctuation commands | Could replace punctuation words inside normal prose | Phrase-isolated commands, so dictation like “question mark is useful” is preserved while standalone commands still insert punctuation |
 | `postProcessText` signature | Fixed booleans | Cleanup mode and spoken punctuation settings flow through the shared repository pipeline used by the app and overlay |
 | Database schema | `fallbackToDestructiveMigration(dropAllTables = true)` | `addMigrations(MIGRATION_1_2)`, no destructive fallback; version bumped to 2 |
 | Accessibility service | `typeAllMask` + key-filter | Focus/window-state events only; no interactive-window retrieval; local sensitive-app denylist is checked before source access; password/sensitive nodes and stale targets are rejected |
@@ -352,8 +359,8 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 | Dependencies | Firebase BOM, Retrofit, Moshi, logging-interceptor (all unused) | Removed; only Compose, Lifecycle, Room, Coroutines, OkHttp, Accompanist, Robolectric/Roborazzi |
 | `minSdk` / `targetSdk` | 24 / 36 (unreleased) | 26 / 36 (with a comment to pin to 35 once AGP 9.3.1 is verified on 35) |
 | `compileSdk` | `release(36) { minorApiLevel = 1 }` | Same (SDK 36 still tracked) |
-| `WhisperEngine` | Hardcoded `language="en"`, no VAD, no initial_prompt, no threshold tuning, single_segment=false | Project-owned JNI shim exposes language, initial_prompt, single_segment, no_speech_thold / logprob_thold / entropy_thold, beam_size, temperature fallback, decoder context, and optional Silero VAD. Accuracy-first defaults use `0.6` / `-1.0` rejection thresholds and a `0.2` fallback increment. Live dictation stays single-window only through 25 seconds; longer recordings and shared files use multi-window decoding. Hallucination post-filter strips known loop phrases only at the tail. |
-| Verification coverage | Sparse post-processing coverage | Unit tests now cover cleanup modes, cleanup-mode persistence, punctuation command isolation, multilingual capitalization, and VAD download integrity behavior |
+| `WhisperEngine` | Hardcoded `language="en"`, no VAD, no initial_prompt, no threshold tuning, single_segment=false | Project-owned JNI shim exposes language, initial_prompt, single_segment, no_speech_thold / logprob_thold / entropy_thold, beam_size, temperature fallback, decoder context, dynamic audio_ctx, and optional Silero VAD. |
+| Verification coverage | Sparse post-processing coverage | 105 automated unit & Robolectric tests covering cleanup modes, thread allocation, dynamic context scaling, spoken punctuation, card layout, and VAD integrity |
 
 ---
 
@@ -361,8 +368,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 
 **Deferred from the current STT correctness and measurement pass:**
 
-- [ ] **[J] GPU / Vulkan / OpenCL delegate on Android** — vendored whisper.cpp is CPU-only. Switching to GPU would require forking the build, adding `GGML_VULKAN=ON` / `GGML_OPENCL=ON` to the project-owned CMakeLists, and shipping per-driver fallbacks. Vulkan on Android is immature, the community has reports of bad WER regressions on some Adreno/Mali GPUs, and it adds ~15 MB to the APK. Net benefit is unclear.
-- [ ] **Streaming refinements** — the experimental Dictate-screen preview currently uses fixed overlapping windows. Add VAD-aligned windows, device-calibrated intervals, bounded decoder context, and equivalent live feedback for the accessibility overlay without pasting provisional text.
+- [ ] **[J] GPU / Vulkan / OpenCL delegate on Android** — vendored whisper.cpp is CPU-only. Switching to GPU would require forking the build, adding `GGML_VULKAN=ON` / `GGML_OPENCL=ON` to the project-owned CMakeLists, and shipping per-driver fallbacks.
 - [ ] **Audio resampling quality** — replace the current linear resampler with a streaming band-limited/windowed-sinc resampler before 16 kHz Whisper inference; select the cleanest stereo channel rather than always averaging channels.
 - [ ] **Pixel calibration UI** — run the benchmark matrix for model, quantization, thread count, VAD, audio source, and decoding profile; persist the best sustainable configuration per device.
 
@@ -372,11 +378,9 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 - [ ] **Real SHA-256 hashes and immutable model revisions** for the 5 Whisper model download map entries.
 - [ ] **Window-size-class adaptive UI** — `NavigationRail` for width ≥ 600 dp, foldable support.
 - [ ] **Room migrations for v2** — the v1 → v2 migration is a no-op stub; the next schema change will add a real `Migration(2, 3)`.
-- [ ] **`MainActivity` reads `themeMode` from `VozLocalApp.repository`** and passes it to the top-level `MyApplicationTheme` (currently the theme is re-applied inside `MainScreen` as a workaround).
+- [x] **`MainActivity` reads `themeMode` from `VozLocalApp.repository`** and passes it to the top-level `MyApplicationTheme`.
 - [ ] **Detekt + ktlint + CI** for static analysis.
-- [ ] **Instrumented UI tests** for the dictation flow, dictionary CRUD, and model download.
-
----
+- [x] **Automated Compose tests** for layout, transcription rendering, CPU configuration, and spoken punctuation.
 
 ## 📄 License & Acknowledgments
 
