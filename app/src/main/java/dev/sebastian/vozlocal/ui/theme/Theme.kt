@@ -17,28 +17,36 @@ private val DarkColorScheme = darkColorScheme(
     tertiary = TertiaryColor,
     background = BackgroundDark,
     surface = SurfaceDark,
-    onPrimary = Color(0xFF020617), // very dark slate
-    onSecondary = Color(0xFF0F172A),
+    surfaceContainer = SurfaceCard,
+    surfaceContainerHigh = SurfaceLightDark,
+    onPrimary = Color.White,
+    onSecondary = Color.White,
     onTertiary = Color.White,
     onBackground = TextPrimary,
     onSurface = TextPrimary,
     surfaceVariant = SurfaceLightDark,
-    onSurfaceVariant = TextSecondary
+    onSurfaceVariant = TextSecondary,
+    outline = GlassBorder,
+    outlineVariant = GlassBorder.copy(alpha = 0.5f)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = PrimaryColor,
-    secondary = SecondaryColor,
-    tertiary = TertiaryColor,
-    background = Color(0xFFF8FAFC), // beautiful slate-light
-    surface = Color.White,
-    onPrimary = Color(0xFF0F172A), // dark slate contrast over sky blue
+    primary = Color(0xFF6366F1),
+    secondary = Color(0xFF0284C7),
+    tertiary = Color(0xFFDC2626),
+    background = Color(0xFFF8FAFC),
+    surface = Color(0xFFFFFFFF),
+    surfaceContainer = Color(0xFFF1F5F9),
+    surfaceContainerHigh = Color(0xFFE2E8F0),
+    onPrimary = Color.White,
     onSecondary = Color.White,
     onTertiary = Color.White,
     onBackground = Color(0xFF0F172A),
     onSurface = Color(0xFF0F172A),
-    surfaceVariant = Color(0xFFF1F5F9),
-    onSurfaceVariant = Color(0xFF475569)
+    surfaceVariant = Color(0xFFE2E8F0),
+    onSurfaceVariant = Color(0xFF475569),
+    outline = Color(0xFFCBD5E1),
+    outlineVariant = Color(0xFFE2E8F0)
 )
 
 

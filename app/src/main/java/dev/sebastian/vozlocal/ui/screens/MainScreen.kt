@@ -2,6 +2,7 @@ package dev.sebastian.vozlocal.ui.screens
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -129,7 +130,9 @@ fun MainScreen(
         }
     }
 
-    val isSetupComplete = hasMicPermission && hasAccessibilityEnabled
+    val models by viewModel.modelsList.collectAsStateWithLifecycle()
+    val hasDownloadedModel = models.any { it.isDownloaded }
+    val isSetupComplete = hasMicPermission && hasAccessibilityEnabled && hasDownloadedModel
     val showSetupWizard = !isSetupComplete && !bypassSetup
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -332,15 +335,15 @@ fun MainScreen(
                             }
                         },
                         colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = BackgroundDark,
-                            titleContentColor = TextPrimary
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.onBackground
                         )
                     )
                 },
                 bottomBar = {
                     if (!isWideLayout) {
                         NavigationBar(
-                            containerColor = SurfaceDark,
+                            containerColor = MaterialTheme.colorScheme.surface,
                             tonalElevation = 8.dp,
                             windowInsets = WindowInsets.navigationBars
                         ) {
@@ -361,15 +364,15 @@ fun MainScreen(
                                         selectedIconColor = Color.White,
                                         selectedTextColor = PrimaryColor,
                                         indicatorColor = PrimaryColor.copy(alpha = 0.35f),
-                                        unselectedIconColor = TextSecondary,
-                                        unselectedTextColor = TextSecondary
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 )
                             }
                         }
                     }
                 },
-                containerColor = BackgroundDark
+                containerColor = MaterialTheme.colorScheme.background
             ) { innerPadding ->
                 Column(
                     modifier = Modifier
@@ -502,21 +505,29 @@ private fun MainTabContent(
         )
     }
 
-    when (activeTab) {
-        Tab.DICTATE -> DictateTab(
-            viewModel = viewModel,
-            showFloatingAssistantCard = showFloatingAssistantCard,
-            onOpenAccessibilitySettings = onOpenAccessibilitySettings,
-            onOpenSettings = onOpenSettings
-        )
-        Tab.MODELS -> ModelsTab(viewModel)
-        Tab.STATS -> StatsTab(viewModel)
-        Tab.DICTIONARY -> DictionaryTab(viewModel)
-        Tab.HISTORY -> HistoryTab(
-            viewModel = viewModel,
-            onReuse = onReuseHistory
-        )
-        Tab.SHARED -> SharedAudioTab(viewModel)
+    AnimatedContent(
+        targetState = activeTab,
+        transitionSpec = {
+            fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(140))
+        },
+        label = "tab_content_anim"
+    ) { targetTab ->
+        when (targetTab) {
+            Tab.DICTATE -> DictateTab(
+                viewModel = viewModel,
+                showFloatingAssistantCard = showFloatingAssistantCard,
+                onOpenAccessibilitySettings = onOpenAccessibilitySettings,
+                onOpenSettings = onOpenSettings
+            )
+            Tab.MODELS -> ModelsTab(viewModel)
+            Tab.STATS -> StatsTab(viewModel)
+            Tab.DICTIONARY -> DictionaryTab(viewModel)
+            Tab.HISTORY -> HistoryTab(
+                viewModel = viewModel,
+                onReuse = onReuseHistory
+            )
+            Tab.SHARED -> SharedAudioTab(viewModel)
+        }
     }
 }
 

@@ -16,6 +16,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
@@ -81,7 +83,7 @@ fun SetupWizardScreen(
         )
         
         Text(
-            text = "VozLocal provides on-device, fully offline speech-to-text with post-processing. Let's finish the setup to start dictating globally!",
+            text = "100% on-device, private speech-to-text dictation. Set up the floating button to dictate alongside your keyboard in any app!",
             fontSize = 13.sp,
             color = TextSecondary,
             textAlign = TextAlign.Center,
@@ -89,7 +91,16 @@ fun SetupWizardScreen(
             modifier = Modifier.padding(horizontal = 12.dp)
         )
 
-        val completionProgress = (if (hasMicPermission) 0.5f else 0f) + (if (hasAccessibilityEnabled) 0.5f else 0f)
+        val models by viewModel.modelsList.collectAsStateWithLifecycle()
+        val hasDownloadedModel = models.any { it.isDownloaded }
+        val recommendedModel = models.find { it.id == "whisper_base" } ?: models.firstOrNull()
+        val targetModelId = recommendedModel?.id ?: "whisper_base"
+        val downloadProgress by viewModel.downloadProgressFor(targetModelId).collectAsStateWithLifecycle()
+        val downloadStatus by viewModel.downloadStatusFor(targetModelId).collectAsStateWithLifecycle()
+
+        val completionProgress = (if (hasMicPermission) 0.33f else 0f) +
+                                 (if (hasAccessibilityEnabled) 0.33f else 0f) +
+                                 (if (hasDownloadedModel) 0.34f else 0f)
 
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -109,7 +120,7 @@ fun SetupWizardScreen(
                     trackColor = SurfaceCard
                 )
                 Text(
-                    text = "Only the mic and accessibility permission are needed. Transcription stays on your device.",
+                    text = "Grant mic, enable the floating button, and download a model to dictate 100% offline.",
                     fontSize = 12.sp,
                     color = TextSecondary,
                     lineHeight = 16.sp
@@ -122,26 +133,186 @@ fun SetupWizardScreen(
         // Step 1: Microphone Permission
         SetupStepCard(
             title = "1. Microphone Permission",
-            description = "Allows recording voice for processing with Whisper local models.",
+            description = "Required to record audio for on-device Whisper transcription.",
             isGranted = hasMicPermission,
-            buttonText = "Grant Microphone Permission",
+            buttonText = "Grant Permission",
             onAction = onRequestMicPermission,
-            testTag = "setup_step_mic"
+            testTag = "setup_step_mic",
+            isRequired = true
         )
         
-        // Step 2: Accessibility Service
+        // Step 2: Floating Dictation Button (Accessibility Service)
         SetupStepCard(
-            title = "2. Accessibility Service",
-            description = "Enables detecting input fields globally to draw the floating dictation button and paste typed text.",
+            title = "2. Floating Microphone Button",
+            description = "Enables the floating microphone button alongside your traditional keyboard in WhatsApp, Slack, Notes, or Chrome.",
             isGranted = hasAccessibilityEnabled,
-            buttonText = "Enable Accessibility Service",
+            buttonText = "Enable Floating Button",
             onAction = onEnableAccessibility,
-            testTag = "setup_step_accessibility"
+            testTag = "setup_step_accessibility",
+            isRequired = true
         )
+        
+        // Step 3: Offline Speech Model
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("setup_step_model"),
+            colors = CardDefaults.cardColors(containerColor = SurfaceDark),
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, if (hasDownloadedModel) Color(0xFF10B981).copy(alpha = 0.5f) else GlassBorder)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "3. Offline Speech Model",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = TextPrimary
+                    )
+
+                    if (hasDownloadedModel) {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF10B981).copy(alpha = 0.15f), RoundedCornerShape(100.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFF10B981),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "Ready",
+                                    color = Color(0xFF10B981),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    } else if (downloadStatus != null && (downloadStatus?.progress ?: 0f) < 1f) {
+                        Box(
+                            modifier = Modifier
+                                .background(PrimaryColor.copy(alpha = 0.15f), RoundedCornerShape(100.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Downloading ${(downloadProgress * 100).toInt()}%",
+                                color = PrimaryColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFEF4444).copy(alpha = 0.15f), RoundedCornerShape(100.dp))
+                                .padding(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "Required",
+                                color = Color(0xFFEF4444),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Text(
+                    text = if (hasDownloadedModel)
+                        "Model '${recommendedModel?.name ?: "Whisper Base"}' (${recommendedModel?.sizeMb?.toInt() ?: 78} MB) is downloaded locally. Ready to transcribe without an internet connection."
+                    else
+                        "VozLocal transcribes audio 100% on-device with zero cloud servers. Download the recommended model (Whisper Base, 78 MB) to enable speech recognition.",
+                    fontSize = 12.sp,
+                    color = TextSecondary,
+                    lineHeight = 16.sp
+                )
+
+                if (!hasDownloadedModel) {
+                    if (downloadStatus != null && (downloadStatus?.progress ?: 0f) < 1f) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            LinearProgressIndicator(
+                                progress = { downloadProgress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(RoundedCornerShape(4.dp)),
+                                color = PrimaryColor,
+                                trackColor = SurfaceCard
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = downloadStatus?.statusLabel ?: "Downloading...",
+                                    fontSize = 11.sp,
+                                    color = PrimaryColor,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "${String.format(java.util.Locale.US, "%.1f", downloadStatus?.downloadedMb ?: 0f)} / ${recommendedModel?.sizeMb?.toInt() ?: 78} MB",
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = { viewModel.downloadModel("whisper_tiny") }
+                            ) {
+                                Text(
+                                    text = "Or Tiny (42 MB)",
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
+
+                            Button(
+                                onClick = { viewModel.downloadModel(targetModelId) },
+                                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp),
+                                    tint = Color.Black
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Download Model (78 MB)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 11.sp,
+                                    color = Color.Black
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        if (hasMicPermission && hasAccessibilityEnabled) {
+        if (hasMicPermission) {
             // Configuration Card
             Card(
                 modifier = Modifier
@@ -231,9 +402,15 @@ fun SetupWizardScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            val isReadyToStart = hasMicPermission && hasDownloadedModel
+
             Button(
                 onClick = onDone,
-                colors = ButtonDefaults.buttonColors(containerColor = PrimaryColor),
+                enabled = isReadyToStart,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = PrimaryColor,
+                    disabledContainerColor = SurfaceCard
+                ),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -245,15 +422,36 @@ fun SetupWizardScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, tint = Color.Black)
-                    Text("Start Using VozLocal", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 14.sp)
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = if (isReadyToStart) Color.Black else TextSecondary
+                    )
+                    Text(
+                        text = if (isReadyToStart) "Start Using VozLocal" else "Download a Model Above to Continue",
+                        fontWeight = FontWeight.Bold,
+                        color = if (isReadyToStart) Color.Black else TextSecondary,
+                        fontSize = 14.sp
+                    )
                 }
+            }
+
+            TextButton(
+                onClick = onSkip,
+                colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("setup_skip_button")
+            ) {
+                Text("Skip Setup & Explore App (Download Later)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
         } else {
             TextButton(
                 onClick = onSkip,
                 colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary),
-                modifier = Modifier.testTag("setup_skip_button")
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("setup_skip_button")
             ) {
                 Text("Skip Setup & Explore App", fontWeight = FontWeight.Bold, fontSize = 12.sp)
             }
@@ -270,7 +468,8 @@ fun SetupStepCard(
     isGranted: Boolean,
     buttonText: String,
     onAction: () -> Unit,
-    testTag: String
+    testTag: String,
+    isRequired: Boolean = true
 ) {
     Card(
         modifier = Modifier
@@ -335,12 +534,15 @@ fun SetupStepCard(
                 } else {
                     Box(
                         modifier = Modifier
-                            .background(Color(0xFFEF4444).copy(alpha = 0.15f), RoundedCornerShape(100.dp))
+                            .background(
+                                (if (isRequired) Color(0xFFEF4444) else PrimaryColor).copy(alpha = 0.15f),
+                                RoundedCornerShape(100.dp)
+                            )
                             .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "Required",
-                            color = Color(0xFFEF4444),
+                            text = if (isRequired) "Required" else "Recommended",
+                            color = if (isRequired) Color(0xFFEF4444) else PrimaryColor,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 0.5.sp

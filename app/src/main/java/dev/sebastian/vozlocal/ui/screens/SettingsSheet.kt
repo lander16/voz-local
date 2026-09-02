@@ -10,10 +10,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -472,6 +469,7 @@ fun SettingsSheet(
             }
 
             HorizontalDivider(color = GlassBorder)
+
 
             // Section 4: System Overlay Assistant
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
