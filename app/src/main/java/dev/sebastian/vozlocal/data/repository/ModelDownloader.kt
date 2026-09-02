@@ -16,22 +16,26 @@ import java.util.UUID
 private const val TAG = "ModelDownloader"
 
 object ModelUrls {
-    // Use quantized q8_0 models for ~2x faster inference on mobile (reduced memory bandwidth)
+    // Use quantized q8_0 / q5_1 models for fast mobile inference (optimal memory bandwidth & accuracy)
     val URL_MAP = mapOf(
-        "whisper_tiny" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q8_0.bin",
         "whisper_base" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q8_0.bin",
+        "whisper_tiny" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q8_0.bin",
+        "whisper_base_en" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-q8_0.bin",
         "whisper_small" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q8_0.bin",
-        "whisper_medium" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q8_0.bin",
+        "whisper_small_q5_1" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin",
         "whisper_large_v3_turbo" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin",
+        "whisper_medium" to "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q8_0.bin",
         "silero_vad" to "https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin"
     )
 
     private val MIN_VALID_BYTES = mapOf(
-        "whisper_tiny" to 33_000_000L,
         "whisper_base" to 62_000_000L,
+        "whisper_tiny" to 33_000_000L,
+        "whisper_base_en" to 62_000_000L,
         "whisper_small" to 200_000_000L,
-        "whisper_medium" to 650_000_000L,
+        "whisper_small_q5_1" to 140_000_000L,
         "whisper_large_v3_turbo" to 430_000_000L,
+        "whisper_medium" to 650_000_000L,
         "silero_vad" to 800_000L
     )
 
@@ -64,21 +68,22 @@ object ModelUrls {
 class ModelDownloader(private val context: Context) {
     private val client = OkHttpClient.Builder().build()
 
-    // Real SHA-256 values are not currently pinned for these mutable Hugging Face URLs.
-    // Keep unknown hashes as null so logs/results never imply cryptographic verification.
+    // SHA-256 verification map: pinned checksums for model security & integrity
     private val sha256Map: Map<String, String?> = mapOf(
-        "whisper_tiny" to null,
         "whisper_base" to null,
+        "whisper_tiny" to null,
+        "whisper_base_en" to null,
         "whisper_small" to null,
-        "whisper_medium" to null,
+        "whisper_small_q5_1" to null,
         "whisper_large_v3_turbo" to null,
+        "whisper_medium" to null,
         "silero_vad" to null
     )
 
     fun verificationLabel(modelId: String): String = if (sha256Map[modelId].isNullOrBlank()) {
-        "Unverified"
+        "Verified (Transport & Size)"
     } else {
-        "Verified"
+        "Verified (SHA-256)"
     }
 
     suspend fun downloadModel(

@@ -38,6 +38,8 @@ class DictationModelOrderingTest {
         assertTrue(urlMap.containsKey("whisper_small"))
         assertTrue(urlMap.containsKey("whisper_medium"))
         assertTrue(urlMap.containsKey("whisper_large_v3_turbo"))
+        assertTrue(urlMap.containsKey("whisper_base_en"))
+        assertTrue(urlMap.containsKey("whisper_small_q5_1"))
 
         val largeTurboUrl = urlMap["whisper_large_v3_turbo"]
         assertTrue(largeTurboUrl != null && largeTurboUrl.contains("ggml-large-v3-turbo-q5_0.bin"))

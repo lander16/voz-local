@@ -49,12 +49,12 @@ fun ModelsTab(viewModel: MainViewModel) {
                     text = "Local Speech Models",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = TextPrimary
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
                     text = "Download and activate GGUF/bin Whisper models directly onto your internal storage. Runs 100% offline.",
                     fontSize = 13.sp,
-                    color = TextSecondary
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -119,7 +119,7 @@ fun ModelCard(
                 RoundedCornerShape(16.dp)
             ),
         colors = CardDefaults.cardColors(
-            containerColor = if (model.isSelected) SurfaceLightDark else SurfaceDark
+            containerColor = if (model.isSelected) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface
         ),
         shape = RoundedCornerShape(16.dp)
     ) {
@@ -140,26 +140,26 @@ fun ModelCard(
                     Icon(
                         imageVector = if (model.isSelected) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                         contentDescription = null,
-                        tint = if (model.isSelected) PrimaryColor else TextSecondary
+                        tint = if (model.isSelected) PrimaryColor else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = model.name,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = TextPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
                 Box(
                     modifier = Modifier
-                        .background(SurfaceDark, RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(6.dp))
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = "${model.sizeMb.toInt()} MB",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

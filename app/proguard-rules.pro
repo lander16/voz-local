@@ -17,6 +17,7 @@
 # Compose
 -keep class androidx.compose.runtime.** { *; }
 
+
 # AccessibilityService
 -keep class dev.sebastian.vozlocal.service.DictationAccessibilityService { *; }
 
