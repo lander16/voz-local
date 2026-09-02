@@ -1,6 +1,8 @@
 package dev.sebastian.vozlocal
 
 import android.app.Application
+import android.content.ComponentCallbacks2
+import android.util.Log
 import dev.sebastian.vozlocal.audio.AudioRecorder
 import dev.sebastian.vozlocal.data.repository.DictationRepository
 import kotlinx.coroutines.CoroutineScope
@@ -35,6 +37,23 @@ class VozLocalApp : Application() {
         // already stored locally and never opens a network connection.
         applicationScope.launch {
             runCatching { repository.preloadModel() }
+        }
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        Log.d("VozLocalApp", "onTrimMemory received level: $level")
+        // Under critical memory pressure, release the idle native model to avoid process kill
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
+            if (!audioRecorder.isRecording()) {
+                Log.i("VozLocalApp", "Critical memory pressure ($level). Releasing idle Whisper model to protect process.")
+                applicationScope.launch {
+                    runCatching {
+                        repository.whisperEngine.release()
+                        repository.updateModelLoadedState(false)
+                    }
+                }
+            }
         }
     }
 }

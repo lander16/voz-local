@@ -322,6 +322,7 @@ class DictationRepository(private val context: Context) {
         try {
             val models = allModels.first { it.isNotEmpty() }
             val selectedDownloaded = models.find { it.isSelected && it.isDownloaded }
+                ?: models.firstOrNull { it.isDownloaded }
             val ok = selectedDownloaded?.let { whisperEngine.loadModel(it.id) } == true
             Log.i(TAG, "Preload of selected downloaded model '${selectedDownloaded?.id}' -> loaded=$ok")
             _modelLoaded.value = ok
@@ -337,8 +338,13 @@ class DictationRepository(private val context: Context) {
         ok
     }
 
+    fun updateModelLoadedState(loaded: Boolean) {
+        _modelLoaded.value = loaded
+    }
+
     suspend fun preloadSelectedDownloadedModel(): Boolean = withContext(Dispatchers.IO) {
         val selected = allModels.first { it.isNotEmpty() }.find { it.isSelected && it.isDownloaded }
+            ?: allModels.first { it.isNotEmpty() }.firstOrNull { it.isDownloaded }
         selected?.let { preloadModel(it.id) } ?: false
     }
 

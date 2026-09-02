@@ -51,9 +51,11 @@ class WhisperEngine(private val context: Context) {
 
             try {
                 Log.i(TAG, "Loading Whisper model from ${modelFile.absolutePath}")
-                whisperContext = WhisperContext.createContextFromFile(modelFile.absolutePath)
+                val loadedContext = WhisperContext.createContextFromFile(modelFile.absolutePath)
+                whisperContext = loadedContext
                 currentModelId = modelId
-                Log.i(TAG, "Whisper model $modelId loaded successfully!")
+                Log.i(TAG, "Whisper model $modelId loaded successfully! Pre-warming GGML compute graphs...")
+                warmupInternalLocked(loadedContext)
                 true
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load Whisper model $modelId", e)
@@ -61,6 +63,34 @@ class WhisperEngine(private val context: Context) {
                 currentModelId = null
                 false
             }
+        }
+    }
+
+    suspend fun warmup(): Boolean = withContext(Dispatchers.Default) {
+        lifecycleMutex.withLock {
+            val wContext = whisperContext ?: return@withLock false
+            warmupInternalLocked(wContext)
+            true
+        }
+    }
+
+    private suspend fun warmupInternalLocked(wContext: WhisperContext) {
+        try {
+            val startMs = System.currentTimeMillis()
+            // 200ms dummy audio (16kHz * 0.2s = 3200 samples)
+            val dummyAudio = FloatArray(3200)
+            val warmupParams = WhisperParams(
+                language = "auto",
+                singleSegment = true,
+                noTimestamps = true,
+                noContext = true,
+                audioCtx = 256
+            )
+            wContext.transcribeData(dummyAudio, warmupParams)
+            val elapsedMs = System.currentTimeMillis() - startMs
+            Log.i(TAG, "Whisper GGML compute graph pre-warmed in ${elapsedMs}ms")
+        } catch (e: Exception) {
+            Log.w(TAG, "Non-fatal error during model pre-warm pass", e)
         }
     }
 
