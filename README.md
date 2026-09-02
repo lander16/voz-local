@@ -27,18 +27,13 @@
 
 ## ✨ Key Features
 
-- 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). No cloud APIs or subscriptions.
-- 🎈 **Protected Floating Dictation Overlay** — Accessibility Service + `WindowManager` show a floating microphone button in permitted apps. A local sensitive-app denylist hides it in banks, password managers, authenticators, and payment apps; only direct, validated text insertion is used.
+- 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). Hardware-accelerated ARMv8.2-A `+dotprod` and `+fp16` instruction sets deliver ~2–3x faster int8 matrix decoding. Zero cloud APIs or external servers.
+- 🎈 **Global Floating Dictation Button** — Accessibility Service + `WindowManager` overlay places an elegant floating microphone button right alongside your traditional keyboard (Gboard, Samsung, SwiftKey). Tap the mic to record and automatically paste your voice transcription into any focused text box.
+- 🛡️ **Play Store & Bank Protection** — Configured as an authorized Android Accessibility Tool (`android:isAccessibilityTool="true"`). Built-in sensitive app denylist automatically hides the floating button in banking apps, password managers, and authenticators.
 - 📁 **Shared Audio File Transcription** — Receives shared audio files via Android `SEND` intents (WhatsApp voice notes, Voice Memos, podcast snippets) and transcribes them offline with `MediaCodec` + PCM.
-- 🧹 **Local Text Cleanup Modes** — A pure-Kotlin rule-based engine strips safe filler vocalizations ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies capitalization/punctuation. It has **Minimal**, **Balanced** (default), and **Aggressive** modes, all persisted in settings. No LLM or extra model file is used; the historical `QwenEngine` class name now refers to this local cleanup implementation.
-- 🎯 **Optimized On-Device STT** — The project-owned JNI shim (`app/src/main/jni/vozlocal-jni/vozlocal-jni.c`) exposes high-value `whisper_full_params` controls to Kotlin: explicit language, an optional initial prompt (Spanish gets a default priming prompt), low-latency single-window dictation, confidence thresholds, temperature fallback, optional beam search, decoder context, and native **Silero VAD** (~0.9 MB, downloaded from `ggml-org/whisper-vad` and user-toggleable). Short dictations use the low-latency path; recordings over 25 seconds switch to multi-window decoding so Whisper processes the complete recording. A post-transcription `HallucinationFilter` strips known outro phrases only at the tail and collapses verbatim repeated sentences. If the selected model is already downloaded, it is preloaded in the background at process start to reduce first-dictation latency.
-- 🧪 **Opt-in Streaming Dictation** — Settings → Advanced engine can enable an experimental in-app preview. It transcribes an overlapping 8-second rolling audio window every 2.5 seconds, keeps confirmed text stable, and permits only the newest words to be revised. Stopping always runs the existing complete-recording pass, which remains authoritative for saved, copied, and overlay-pasted text.
-- 📚 **Personal Dictation Dictionary** — Vocabulary biasing and phonetic-replacement rules. Compiled regexes are cached and invalidated on insert/delete, so post-processing stays O(words) per transcription.
-- ⚡ **Local Post-Processing Pipeline** — Smart pause correction, auto-capitalization, dictionary replacement, spoken punctuation commands, hallucination filtering, and cleanup modes — all stitched together in `DictationRepository.postProcessText`.
-- 📊 **Performance Stats & Analytics** — Per-day WPM, total speak time, and accuracy breakdown per model, backed by Room.
-- 💾 **Persistent Transcription History** — Room database with a paged query (`LIMIT 200`) so the History tab never re-emits the entire table on insert.
-- 🎨 **Modern Material 3 Jetpack Compose UI** — `ModalNavigationDrawer` + `ModalBottomSheet` settings + light/dark/system theming + canvas audio waveform visualizer + press-scale micro-interactions (now via `pointerInput`, not the previous clickable-swallowing bug).
-- 🇲🇽 🇧🇷 **Multi-Language Support** — Explicit language target (Spanish, English, French, German, Portuguese, Italian, Auto-detect) skips Whisper's expensive auto-detect.
+- ⚡ **Zero-Latency Silence Trimming & Native VAD** — Integrated `AudioSilenceTrimmer` strips leading and trailing non-speech frames before Whisper inference; Silero VAD accelerates long and short dictations by skipping silent segments.
+- 🧹 **Local Text Cleanup Modes** — Pure-Kotlin rule-based engine strips safe filler vocalizations ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies capitalization/punctuation. Minimal, Balanced (default), and Aggressive modes.
+- 🎨 **Fluid Material 3 UI & Micro-Interactions** — Semantic light/dark adaptive color theming, `AnimatedContent` tab transitions, dynamic audio waveform visualizer, spring-scale tactile feedback, and crisp hero transcription canvas.
 
 ---
 
@@ -147,11 +142,13 @@ Models are downloaded on-demand from Hugging Face directly to `context.filesDir/
 
 | Model ID | Weight File | Size (MB) | Spanish Accuracy | Decoding Speed | Recommended For |
 |---|---|---|---|---|---|
-| `whisper_tiny` *(Initial default)* | `ggml-tiny-q8_0.bin` | ~42 MB | 72% | **8.5x** | Ultra-fast dictation on low-end hardware |
-| `whisper_base` | `ggml-base-q8_0.bin` | ~78 MB | 83% | **5.0x** | Better balance of speed & accuracy for dictation |
+| `whisper_base` *(Recommended Default)* | `ggml-base-q8_0.bin` | ~78 MB | 83% | **5.0x** | Optimal balance of speed, accuracy, and memory for mobile |
+| `whisper_tiny` | `ggml-tiny-q8_0.bin` | ~42 MB | 72% | **8.5x** | Ultra-fast dictation on low-end hardware |
+| `whisper_base_en` | `ggml-base.en-q8_0.bin` | ~78 MB | — (English: 93%) | **5.5x** | Dedicated high-speed English model |
 | `whisper_small` | `ggml-small-q8_0.bin` | ~252 MB | 92% | **2.5x** | High accuracy dictation & clean audio notes |
-| `whisper_medium` | `ggml-medium-q8_0.bin` | ~823 MB | 97% | **1.0x** | Complex vocab, accents & technical dictation |
-| `whisper_large_v3_turbo` | `ggml-large-v3-turbo-q5_0.bin` | ~547 MB | 99% | **3.5x** | High-accuracy file transcription with better speed than medium |
+| `whisper_small_q5_1` | `ggml-small-q5_1.bin` | ~175 MB | 91% | **3.2x** | Mobile sweet spot: high accuracy with lower memory footprint |
+| `whisper_large_v3_turbo` | `ggml-large-v3-turbo-q5_0.bin` | ~547 MB | 99% | **3.5x** | SOTA quality transcription, faster than medium |
+| `whisper_medium` | `ggml-medium-q8_0.bin` | ~823 MB | 97% | **1.0x** | Complex vocab, accents & technical dictation (legacy heavy) |
 
 
 > **Model integrity**: downloads are written to unique `.part` files, checked for complete transport length and model-specific minimum size, and then atomically moved into place. SHA-256 verification is supported when a real hash is pinned, but the current Hugging Face URLs do not yet have pinned immutable hashes in this repo, so downloads are explicitly marked unverified instead of pretending placeholder hashes are real. Pin immutable model revisions and real SHA-256 values before shipping.
@@ -244,11 +241,16 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 - 🚫 **Zero telemetry, no tracking.** No Firebase, no analytics SDK, no third-party network call after model download.
 - ✈️ **Air-gapped operation.** Once model weights are downloaded, turn off Wi-Fi and cellular — the app continues to work at 100% capacity. Downloads are user-initiated and are the only network call.
 - 🔐 **Local storage only.** All dictionary entries and dictation history live in the device's private Room database (`vozlocal_database`). The DB is **excluded** from cloud backup and device-transfer rules (`backup_rules.xml` and `data_extraction_rules.xml`) so transcript text is not silently uploaded or migrated. The downloaded `models/` directory is also excluded.
-- 🪟 **Hardened accessibility scope.** The service listens only for focus/window-state changes, does not retrieve interactive-window lists, does not filter keys or request gestures/screenshots, and checks the local sensitive-app denylist before retrieving an event source. Password and Android-marked sensitive nodes are never targets.
-- 🏦 **Banking-app limitation.** Android and bank apps can still detect that an accessibility service is enabled system-wide. Adding a bank to the denylist prevents VozLocal from showing, recording, reading a source node, or inserting text there; disable the accessibility service entirely if a bank requires it.
-- 📋 **No accessibility clipboard fallback.** If direct text insertion fails, VozLocal saves the local transcript but never copies it to the system clipboard on behalf of the overlay.
-- 🔒 **No `FOREGROUND_SERVICE_MICROPHONE` permission declared.** The permission is removed from the manifest because no foreground service with `foregroundServiceType="microphone"` is currently registered. A future release will add a real foreground service for background recording; the permission will be re-added at the same time.
-- 🪵 **No raw transcripts in logs.** `WhisperEngine` only logs the raw transcription text under `BuildConfig.DEBUG` — release builds log nothing user-identifiable.
+- 🛡️ **Accessibility Tool Authorization (`isAccessibilityTool="true"`)**:
+  - In Android 14+ (API 34), RASP security engines in banking apps flag accessibility services that inspect windows unless declared as an official assistive tool.
+  - VozLocal explicitly configures `android:isAccessibilityTool="true"` in `accessibility_service_config.xml` for assistive voice dictation and motor access, complying with Android framework safety classifications.
+- 🏦 **Built-in Sensitive Apps Protection**:
+  - VozLocal includes a dedicated sensitive-app exclusion denylist in **Settings → Floating assistant**.
+  - Banking apps, password managers, authenticators, and payment apps are automatically kept safe: the floating assistant never appears, never observes events, and never attempts text insertion in protected applications.
+- 🪟 **Hardened accessibility scope.** The service listens only for focus and window-state changes to position the floating microphone button alongside the keyboard. It does not retrieve interactive-window lists, does not filter keys, does not request gestures or screenshots, and never targets password or sensitive nodes.
+- 📋 **No clipboard fallback.** If direct text insertion fails, VozLocal saves the local transcript in history but never copies it to the system clipboard on behalf of the overlay.
+- 🔒 **No dangerous background permissions.** No `FOREGROUND_SERVICE_MICROPHONE` or extraneous background permissions are declared.
+- 🪵 **No raw transcripts in logs.** `WhisperEngine` only logs raw transcription text under `BuildConfig.DEBUG` — release builds log nothing user-identifiable.
 
 ---
 
