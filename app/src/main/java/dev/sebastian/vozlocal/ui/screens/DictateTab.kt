@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -143,17 +144,21 @@ fun DictateTab(
                         )
                     }
                     val isModelDownloaded = selectedModel?.isDownloaded == true
-                    Column {
+                    val rawModelName = selectedModel?.name ?: "Whisper Base"
+                    val baseModelName = rawModelName.substringBefore(" (")
+                    val modelTag = rawModelName.substringAfter(" (", "").removeSuffix(")")
+                    Column(modifier = Modifier.weight(1f, fill = false)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = selectedModel?.name ?: "Whisper Base",
+                                text = baseModelName,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             if (!isModelDownloaded) {
                                 Box(
@@ -172,10 +177,15 @@ fun DictateTab(
                             }
                         }
                         Text(
-                            text = if (isModelDownloaded) "${selectedModel?.sizeMb?.toInt() ?: 78} MB • Ready Offline"
-                                   else "${selectedModel?.sizeMb?.toInt() ?: 78} MB • Download required",
+                            text = if (isModelDownloaded) {
+                                "${selectedModel?.sizeMb?.toInt() ?: 78} MB • Ready Offline" + if (modelTag.isNotEmpty()) " • $modelTag" else ""
+                            } else {
+                                "${selectedModel?.sizeMb?.toInt() ?: 78} MB • Download required"
+                            },
                             fontSize = 10.sp,
-                            color = if (isModelDownloaded) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFEF4444)
+                            color = if (isModelDownloaded) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFEF4444),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }

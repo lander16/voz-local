@@ -179,15 +179,18 @@ fun ModelCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Spanish accuracy
+                // Accuracy
+                val isEnglishOnly = model.id.endsWith("_en") || model.accuracySpanish == 0
+                val accuracyLabel = if (isEnglishOnly) "English accuracy" else "Spanish accuracy"
+                val accuracyValue = if (isEnglishOnly) 93 else model.accuracySpanish
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Spanish accuracy", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = accuracyLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         LinearProgressIndicator(
-                            progress = { model.accuracySpanish / 100f },
+                            progress = { accuracyValue / 100f },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(4.dp)
@@ -195,7 +198,7 @@ fun ModelCard(
                             color = PrimaryColor,
                             trackColor = MaterialTheme.colorScheme.surfaceContainer
                         )
-                        Text(text = "${model.accuracySpanish}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = "${accuracyValue}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     }
                 }
 

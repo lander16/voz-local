@@ -229,27 +229,39 @@ fun HistoryCard(
             Text(text = item.text, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 20.sp)
 
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val modelBadge = item.modelUsed.substringBefore(" (")
                     Box(modifier = Modifier.background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text(text = item.modelUsed, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = modelBadge,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                     if (item.durationSec > 0) {
                         Text(text = "${item.durationSec}s", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(onClick = onReuse) {
-                        Icon(imageVector = Icons.Default.Replay, contentDescription = "Reuse transcript", tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                    IconButton(onClick = onReuse, modifier = Modifier.size(36.dp)) {
+                        Icon(imageVector = Icons.Default.Replay, contentDescription = "Reuse transcript", tint = PrimaryColor, modifier = Modifier.size(18.dp))
                     }
-                    IconButton(onClick = onShare) {
-                        Icon(imageVector = Icons.Default.Share, contentDescription = "Share transcript", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                    IconButton(onClick = onShare, modifier = Modifier.size(36.dp)) {
+                        Icon(imageVector = Icons.Default.Share, contentDescription = "Share transcript", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     }
-                    IconButton(onClick = onCopy) {
-                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy transcription text", tint = PrimaryColor, modifier = Modifier.size(20.dp))
+                    IconButton(onClick = onCopy, modifier = Modifier.size(36.dp)) {
+                        Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copy transcription text", tint = PrimaryColor, modifier = Modifier.size(18.dp))
                     }
-                    IconButton(onClick = { confirmDelete = true }) {
-                        Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = "Delete history log", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                    IconButton(onClick = { confirmDelete = true }, modifier = Modifier.size(36.dp)) {
+                        Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = "Delete history log", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     }
                 }
             }
