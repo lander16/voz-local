@@ -1,6 +1,8 @@
 package dev.sebastian.vozlocal.service
 
 import android.accessibilityservice.AccessibilityService
+import android.animation.Animator
+import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
@@ -13,15 +15,20 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -67,8 +74,9 @@ class DictationAccessibilityService : AccessibilityService() {
     private var bgDrawable: GradientDrawable? = null
     private var panelBgDrawable: GradientDrawable? = null
 
-    private var buttonScreenX = 50
-    private var buttonScreenY = 600
+    private var buttonScreenX = FloatingButtonDockPolicy.DEFAULT_X
+    private var buttonScreenY = FloatingButtonDockPolicy.DEFAULT_Y
+    private var snapAnimator: ValueAnimator? = null
 
     private fun updatePanelPositioning(params: WindowManager.LayoutParams) {
         val panel = expandedPanel ?: return
@@ -156,6 +164,11 @@ class DictationAccessibilityService : AccessibilityService() {
             buttonScreenX = buttonScreenX.coerceIn(0, maxX)
             buttonScreenY = buttonScreenY.coerceIn(0, maxY)
         }
+
+        getSharedPreferences(FloatingButtonDockPolicy.PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putInt(FloatingButtonDockPolicy.PREF_KEY_X, buttonScreenX)
+            .putInt(FloatingButtonDockPolicy.PREF_KEY_Y, buttonScreenY)
+            .apply()
     }
 
     private fun deniedPackages(): Set<String> = repository.getDeniedPackages()
@@ -227,6 +240,10 @@ class DictationAccessibilityService : AccessibilityService() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun createFloatingView() {
+        val prefs = getSharedPreferences(FloatingButtonDockPolicy.PREFS_NAME, Context.MODE_PRIVATE)
+        buttonScreenX = prefs.getInt(FloatingButtonDockPolicy.PREF_KEY_X, FloatingButtonDockPolicy.DEFAULT_X)
+        buttonScreenY = prefs.getInt(FloatingButtonDockPolicy.PREF_KEY_Y, FloatingButtonDockPolicy.DEFAULT_Y)
+
         val dpToPx = { dp: Float ->
             TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp, resources.displayMetrics).toInt()
         }
@@ -246,6 +263,7 @@ class DictationAccessibilityService : AccessibilityService() {
         val buttonContainer = FrameLayout(this).apply {
             background = bg
             elevation = dpToPx(8f).toFloat()
+            isHapticFeedbackEnabled = true
         }
         buttonView = buttonContainer
 
@@ -383,6 +401,8 @@ class DictationAccessibilityService : AccessibilityService() {
             override fun onTouch(v: View, event: MotionEvent): Boolean {
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
+                        snapAnimator?.cancel()
+                        snapAnimator = null
                         startScreenX = buttonScreenX
                         startScreenY = buttonScreenY
                         initialTouchX = event.rawX
@@ -406,11 +426,64 @@ class DictationAccessibilityService : AccessibilityService() {
                     }
                     MotionEvent.ACTION_UP -> {
                         if (isDragging) {
-                            // Snap back into the safe area after the drag ends.
                             clampButtonToSafeArea()
-                            updatePanelPositioning(layoutParams)
-                            windowManager.updateViewLayout(floatingView, layoutParams)
+
+                            val screenWidth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                windowManager.currentWindowMetrics.bounds.width()
+                            } else {
+                                resources.displayMetrics.widthPixels
+                            }
+                            val safeLeft: Int
+                            val safeRight: Int
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val insets = windowManager.currentWindowMetrics.windowInsets.getInsetsIgnoringVisibility(
+                                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+                                )
+                                safeLeft = insets.left
+                                safeRight = insets.right
+                            } else {
+                                safeLeft = 0
+                                safeRight = 0
+                            }
+
+                            val edgeMargin = dpToPx(12f)
+                            val targetDockedX = FloatingButtonDockPolicy.computeDockedX(
+                                buttonScreenX = buttonScreenX,
+                                screenWidth = screenWidth,
+                                btnSize = btnSize,
+                                edgeMargin = edgeMargin,
+                                safeLeft = safeLeft,
+                                safeRight = safeRight
+                            )
+
+                            snapAnimator?.cancel()
+                            val startX = buttonScreenX
+                            val animator = ValueAnimator.ofInt(startX, targetDockedX).apply {
+                                duration = 180L
+                                interpolator = DecelerateInterpolator()
+                                addUpdateListener { va ->
+                                    buttonScreenX = va.animatedValue as Int
+                                    updatePanelPositioning(layoutParams)
+                                    windowManager.updateViewLayout(floatingView, layoutParams)
+                                }
+                                addListener(object : AnimatorListenerAdapter() {
+                                    override fun onAnimationEnd(animation: Animator) {
+                                        buttonScreenX = targetDockedX
+                                        clampButtonToSafeArea()
+                                        updatePanelPositioning(layoutParams)
+                                        windowManager.updateViewLayout(floatingView, layoutParams)
+                                        getSharedPreferences(FloatingButtonDockPolicy.PREFS_NAME, Context.MODE_PRIVATE).edit()
+                                            .putInt(FloatingButtonDockPolicy.PREF_KEY_X, buttonScreenX)
+                                            .putInt(FloatingButtonDockPolicy.PREF_KEY_Y, buttonScreenY)
+                                            .apply()
+                                        snapAnimator = null
+                                    }
+                                })
+                            }
+                            snapAnimator = animator
+                            animator.start()
                         } else {
+                            triggerHapticFeedback(v)
                             toggleDictation()
                         }
                         return true
@@ -435,6 +508,36 @@ class DictationAccessibilityService : AccessibilityService() {
         bgDrawable?.setColor("#D91E222A".toColorInt())
         expandedPanel?.visibility = View.GONE
         updateFloatingViewVisibility()
+    }
+
+    private fun triggerHapticFeedback(v: View) {
+        val performed = v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+        if (!performed) {
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+                    val vibrator = vibratorManager?.defaultVibrator
+                    if (vibrator?.hasVibrator() == true) {
+                        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                    }
+                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    @Suppress("DEPRECATION")
+                    val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                    if (vibrator?.hasVibrator() == true) {
+                        vibrator.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+                    }
+                } else {
+                    @Suppress("DEPRECATION")
+                    val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                    if (vibrator?.hasVibrator() == true) {
+                        @Suppress("DEPRECATION")
+                        vibrator.vibrate(20L)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to perform fallback vibration", e)
+            }
+        }
     }
 
     private fun toggleDictation() {
@@ -677,13 +780,15 @@ class DictationAccessibilityService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        snapAnimator?.cancel()
+        snapAnimator = null
         if (ownsRecorderSession) {
             audioRecorder.stopRecording()
             ownsRecorderSession = false
         }
         serviceScope.cancel()
         clearTarget()
-        val prefs = getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences(FloatingButtonDockPolicy.PREFS_NAME, Context.MODE_PRIVATE)
         prefs.unregisterOnSharedPreferenceChangeListener(prefListener)
         if (floatingView != null) {
             try {
