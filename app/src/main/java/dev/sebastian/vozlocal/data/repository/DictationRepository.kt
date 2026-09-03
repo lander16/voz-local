@@ -651,14 +651,16 @@ class DictationRepository(private val context: Context) {
             return@withContext "Error: Local Whisper model $modelId is not downloaded yet. Please download it first."
         }
 
-        // Fast decoding parameters for shared audio:
-        // - temperatureInc = 0.0f eliminates multi-pass retry loops on conversational hesitations
-        // - noTimestamps = true eliminates generating timestamp tokens for faster token generation
+        // Multi-segment sliding window decoding for shared audio:
+        // - singleSegment = false allows full multi-chunk transcription
+        // - noTimestamps = false is CRITICAL: whisper.cpp multi-segment decoding relies on timestamp
+        //   tokens (<|0.00|>) to compute seek_delta and slide the 30-second window across the full audio!
+        // - printTimestamps = true ensures segment boundaries and timing are maintained
         val transcriptionParams = currentWhisperParams().copy(
             singleSegment = false,
-            printTimestamps = false,
-            noTimestamps = true,
-            temperatureInc = 0.0f,
+            printTimestamps = true,
+            noTimestamps = false,
+            temperatureInc = 0.2f,
             noContext = false,
             vadModelPath = vadPathFor(samples.size, sharedFile = true),
             modelIdHint = modelId
