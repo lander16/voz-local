@@ -173,8 +173,8 @@ fun SettingsSheet(
 
                         PrivacyGuaranteeItem(
                             icon = Icons.Default.AccessibilityNew,
-                            title = "Accessibility Tool",
-                            description = "Officially declared as an assistive accessibility tool (isAccessibilityTool=\"true\"). It only inserts text when the user explicitly triggers dictation and never inspects sensitive/password fields or denylisted banking apps."
+                            title = "Floating dictation",
+                            description = "An optional accessibility service that supports user-triggered voice typing. It rejects password and Android-marked sensitive fields, plus apps you add to the protected-app list."
                         )
 
                         PrivacyGuaranteeItem(
@@ -1173,4 +1173,3 @@ private fun buildTranscriptionHistoryExport(history: List<TranscriptionHistory>)
     }
     return sb.toString()
 }
-

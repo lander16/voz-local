@@ -31,7 +31,7 @@
 - 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). The ARM64 build uses a broadly compatible ARMv8.2-A `+fp16+dotprod` baseline; experimental I8MM/KleidiAI paths are not shipped until they have safe runtime dispatch and device benchmarks. Zero cloud APIs or external servers.
 - ⚡ **Dynamic Audio Context & Focus Warmup** — Dynamic `audio_ctx` scaling adapts the encoder window to utterance duration (eliminating 2.5x–4x redundant processing on short dictations), while input-focused background pre-warming keeps native models hot in RAM for instantaneous dictation response.
 - 🎈 **Global Floating Dictation Button** — Accessibility Service + `WindowManager` overlay places an elegant floating microphone button right alongside your traditional keyboard (Gboard, Samsung, SwiftKey). Features persistent screen positioning across reboots, automatic smooth edge-docking animation, and tactile haptic feedback.
-- 🛡️ **Play Store & Bank Protection** — Configured as an authorized Android Accessibility Tool (`android:isAccessibilityTool="true"`). Built-in sensitive app denylist automatically hides the floating button in banking apps, password managers, and authenticators. Includes in-app privacy policy & offline guarantee dialog.
+- 🛡️ **Protected Floating Dictation** — The optional accessibility service is not declared as an accessibility tool. A user-managed protected-app list hides the floating button in banks, password managers, and authenticators; banks can still detect that any accessibility service is enabled. Includes an in-app privacy policy and offline guarantee dialog.
 - 📁 **Shared Audio File & History Export** — Receives shared voice notes/recordings via Android `SEND` intents, and provides one-tap export of your complete transcription archive to Markdown/Text via the Android Sharesheet.
 - 🗣️ **Intelligent Spoken Punctuation** — Converts vocalized punctuation commands in Spanish and English (e.g., *"punto", "coma", "abrir/cerrar interrogación", "nueva línea", "nuevo párrafo"*) with clean forward/backward symbol attachment.
 - 🧹 **Local Text Cleanup Modes** — Pure-Kotlin rule-based engine strips safe filler vocalizations ("um", "uh", "euh", "ähm"…), collapses repeated tokens, and applies capitalization/punctuation. Minimal, Balanced (default), and Aggressive modes.
@@ -309,17 +309,17 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 - **Air-gapped voice transcription**: All Whisper speech recognition models run purely on-device using local CPU inference (`whisper.cpp`). No audio recordings, audio samples, or generated transcripts are ever transmitted to remote servers.
 - **Air-gapped operation**: Turn on Airplane Mode after downloading a speech model and VozLocal will operate indefinitely at 100% functionality. Network access is utilized exclusively for user-initiated model weight downloads.
 
-### 2. Google Play Accessibility Tool Compliance (`isAccessibilityTool="true"`)
-- **Official Assistive Purpose**: In Android 14+ (API 34), RASP security engines in sensitive applications flag generic accessibility services. VozLocal explicitly declares `android:isAccessibilityTool="true"` in its `accessibility_service_config.xml` to signify compliance with Google Play's Accessibility API policies.
-- **Accessibility Beneficiaries**: VozLocal serves as an assistive voice-typing alternative for individuals with motor disabilities, repetitive strain injuries (RSI), tremors, visual impairments, or situational typing constraints.
+### 2. Optional Accessibility Service
+- **Purpose**: VozLocal offers user-triggered voice typing through an optional floating microphone. It is declared with `android:isAccessibilityTool="false"`; do not represent this app as an accessibility aid unless its purpose and Play Console declarations genuinely meet that policy category.
+- **Banking-app limitation**: A protected-app list prevents overlay display, recording, source-node access, and insertion in selected apps. Android and bank security software can still detect an enabled accessibility service, so users must disable the service entirely if their bank requires it.
 - **Strict Scope of Operation**:
   - The accessibility service only observes focus and window transitions (`TYPE_VIEW_FOCUSED`, `TYPE_WINDOW_STATE_CHANGED`) to position the floating microphone alongside the active keyboard.
-  - It does **not** read screen contents or text from other applications, does not log keystrokes, does not capture screenshots, and does not inspect window node hierarchies.
+  - It does not enumerate interactive windows, log keystrokes, capture screenshots, or persist screen contents. It reads only the focused editable node needed to validate and perform direct insertion.
   - Text insertion occurs solely via Android's `ACTION_SET_TEXT` API when the user explicitly triggers dictation.
 
 ### 3. Sensitive & Banking Application Protection
-- **Automatic Denylist Shielding**: VozLocal incorporates a dedicated sensitive application exclusion manager in **Settings → Floating assistant**.
-- **Password & Financial Safety**: The floating button is automatically hidden and all text operations are rejected when interacting with banking applications, cryptocurrency wallets, password managers, or secure password/PIN input fields.
+- **Protected-app Shielding**: VozLocal includes a local sensitive-application exclusion manager in **Settings → Floating assistant**.
+- **Password & Financial Safety**: The floating button is hidden and all text operations are rejected in apps selected by the user, and for secure password/PIN fields.
 - **Private Local Storage**: Transcripts and custom dictionaries reside exclusively in the device's private Room database (`vozlocal_database`), explicitly excluded from cloud backups and device migration (`backup_rules.xml`).
 
 ### 4. Android Permission Justifications
@@ -328,7 +328,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 |---|---|
 | `android.permission.RECORD_AUDIO` | **Dictation capture**: Used exclusively while an active speech recording session is initiated by the user. The microphone is never accessed in the background or when dictation is stopped. Audio is processed directly in-memory into 16 kHz PCM frames without leaving device RAM. |
 | `android.permission.BIND_ACCESSIBILITY_SERVICE` | **Assistive overlay & text entry**: Used solely to detect when an editable text view is focused so the floating microphone button can be presented, and to insert the generated transcription directly into the active field via `ACTION_SET_TEXT`. |
-| `android.permission.SYSTEM_ALERT_WINDOW` | **Floating overlay presentation**: Required to display the floating microphone button and wave aura over permitted apps alongside the soft keyboard. |
+| `android.permission.VIBRATE` | **Haptic feedback**: Used only for optional tactile feedback from the floating microphone button. |
 | `android.permission.INTERNET` | **Model downloads only**: Utilized exclusively for user-directed downloads of quantized Whisper model weights from Hugging Face. Never invoked during recording or transcription. |
 
 ---

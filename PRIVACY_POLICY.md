@@ -30,16 +30,16 @@ We believe your voice, transcriptions, and personal messages belong solely to yo
 - **Retention:** Audio samples exist only temporarily in volatile memory during transcription and are **immediately wiped** as soon as transcription completes or is cancelled. VozLocal **never** saves raw audio recordings, voiceprints, or acoustic files to disk.
 - **Third-Party Sharing:** Zero audio data is ever transmitted off your device or shared with third parties.
 
-### B. Accessibility Service (`AccessibilityService` / `android:isAccessibilityTool="true"`)
+### B. Accessibility Service (`AccessibilityService` / `android:isAccessibilityTool="false"`)
 VozLocal includes an optional Android Accessibility Service designed to provide hands-free voice input across any application on your device.
-- **Declared Purpose:** Declared officially as an assistive accessibility tool (`android:isAccessibilityTool="true"`) under Google Play Developer Policy.
+- **Declared Purpose:** It provides user-triggered voice typing and is not declared as an accessibility tool.
 - **Capabilities Used:**
   1. **Input Field Detection:** Observes `TYPE_VIEW_FOCUSED` and `TYPE_WINDOW_STATE_CHANGED` accessibility events strictly to detect when an editable text input field (`isEditable == true`) gains focus, displaying the floating microphone overlay button.
-  2. **Text Insertion:** Upon your explicit tap on the microphone, the transcribed text is inserted directly into the active field using standard Android accessibility actions (`ACTION_SET_TEXT` / `ACTION_PASTE`).
+  2. **Text Insertion:** Upon your explicit tap on the microphone, the transcribed text is inserted directly into the active field using `ACTION_SET_TEXT`; it does not use the clipboard as a fallback.
 - **Data Protection & Denylist:**
-  - The service **does not** read, log, collect, monitor, or transmit screen contents, keystrokes, passwords, or personal communications.
+  - The service does not log, collect, monitor, or transmit screen contents, keystrokes, passwords, or personal communications. It reads the currently focused editable node only to validate and perform direct insertion, and does not retain framework node objects.
   - The service explicitly ignores password fields (`isPassword == true`).
-  - A built-in security denylist automatically suspends and hides the accessibility overlay when banking apps, digital wallets, password managers, or two-factor authenticators are opened.
+  - A user-managed protected-app list suspends and hides the accessibility overlay in selected banking apps, digital wallets, password managers, or two-factor authenticators. Those apps can still detect that an accessibility service is enabled.
 - **Retention & Sharing:** No data observed through the Accessibility API is ever logged, stored in persistent memory, or transmitted outside your device.
 
 ### C. Local Audio Files (`READ_MEDIA_AUDIO` / File Picker)
@@ -150,16 +150,16 @@ Creemos que tu voz, tus transcripciones y tus mensajes personales te pertenecen 
 - **Retención:** Las muestras de audio existen únicamente de forma temporal en la memoria volátil durante la transcripción y se **eliminan de inmediato** en cuanto finaliza o se cancela el dictado. VozLocal **nunca** guarda grabaciones de audio en el almacenamiento ni genera huellas de voz.
 - **Compartición:** Cero datos de audio se transmiten fuera de tu dispositivo o se comparten con terceros.
 
-### B. Servicio de Accesibilidad (`AccessibilityService` / `android:isAccessibilityTool="true"`)
+### B. Servicio de Accesibilidad (`AccessibilityService` / `android:isAccessibilityTool="false"`)
 VozLocal incluye un Servicio de Accesibilidad opcional diseñado para permitir la entrada de voz en cualquier aplicación del dispositivo.
-- **Propósito Declarado:** Declarado oficialmente como una herramienta de asistencia de accesibilidad (`android:isAccessibilityTool="true"`) bajo las políticas de Google Play.
+- **Propósito Declarado:** Proporciona dictado por voz iniciado por la persona usuaria y no está declarado como una herramienta de accesibilidad.
 - **Funciones Utilizadas:**
   1. **Detección de Campos de Entrada:** Detecta eventos `TYPE_VIEW_FOCUSED` y `TYPE_WINDOW_STATE_CHANGED` estrictamente para reconocer cuándo un campo de texto editable recibe el foco, mostrando el botón flotante de dictado.
-  2. **Inserción de Texto:** Al pulsar el botón, el texto transcrito se inserta en el campo activo mediante acciones estándar de Android (`ACTION_SET_TEXT` / `ACTION_PASTE`).
+  2. **Inserción de Texto:** Al pulsar el botón, el texto transcrito se inserta directamente en el campo activo mediante `ACTION_SET_TEXT`; no usa el portapapeles como alternativa.
 - **Protección y Lista de Exclusión:**
-  - El servicio **no** lee, registra, recopila ni transmite el contenido de la pantalla, contraseñas ni mensajes personales.
+  - El servicio no registra, recopila, monitorea ni transmite el contenido de la pantalla, contraseñas ni mensajes personales. Solo lee el nodo editable que tiene el foco para validarlo y realizar la inserción directa, y no retiene objetos de nodos del sistema.
   - Ignora de forma automática los campos de contraseña (`isPassword == true`).
-  - Cuenta con una lista de exclusión que oculta y desactiva el botón flotante en aplicaciones bancarias, gestores de contraseñas y autenticadores.
+  - Cuenta con una lista de aplicaciones protegidas gestionada por la persona usuaria que oculta y desactiva el botón flotante en bancos, billeteras digitales, gestores de contraseñas y autenticadores. Estas aplicaciones aún pueden detectar que hay un servicio de accesibilidad habilitado.
 - **Retención y Compartición:** Ningún dato observado mediante la API de Accesibilidad se guarda en memoria persistente ni se transmite fuera del dispositivo.
 
 ### C. Archivos de Audio Locales (`READ_MEDIA_AUDIO` / Selector de Archivos)
