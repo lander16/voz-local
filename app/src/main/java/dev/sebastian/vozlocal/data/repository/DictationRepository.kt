@@ -336,7 +336,12 @@ class DictationRepository(private val context: Context) {
     }
 
     suspend fun preloadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
-        val ok = whisperEngine.loadModel(modelId)
+        val ok = if (modelDownloader.verifyExistingModel(modelId)) {
+            whisperEngine.loadModel(modelId)
+        } else {
+            Log.w(TAG, "Refusing to load unverified model $modelId")
+            false
+        }
         _modelLoaded.value = ok
         ok
     }
@@ -367,7 +372,7 @@ class DictationRepository(private val context: Context) {
         // If the VAD model is already on disk (e.g. from a previous run), publish it now.
         val vadFile = modelDownloader.vadModelFile()
         _vadModelSizeBytes.value = vadFile.length().takeIf { it > 0L } ?: ModelUrls.minimumValidBytes("silero_vad")
-        if (ModelUrls.isValidDownloadedFile(vadFile, "silero_vad")) {
+        if (ModelUrls.isVerifiedDownloadedFile(vadFile, "silero_vad")) {
             _vadModelPath.value = vadFile.absolutePath
             _vadModelReady.value = true
             _vadDownloadProgress.value = 1f
@@ -602,7 +607,7 @@ class DictationRepository(private val context: Context) {
         val activeSamples = if (trimmed.isNotEmpty()) trimmed else samples
 
         // Ensure Whisper engine is loaded with target model
-        val loaded = whisperEngine.loadModel(modelId)
+        val loaded = preloadModel(modelId)
         _modelLoaded.value = loaded
         if (!loaded) {
             Log.e(TAG, "Could not load Whisper model $modelId for transcription")
@@ -629,7 +634,7 @@ class DictationRepository(private val context: Context) {
         onProgress(0.05f, "Decoding audio file...")
         val loadJob = async(Dispatchers.IO) {
             onProgress(0.28f, "Loading local Whisper model...")
-            whisperEngine.loadModel(modelId)
+            preloadModel(modelId)
         }
         val decodedSamples = audioDecoder.decodeToPcm16k(uri) { prog ->
             onProgress(0.05f + prog * 0.23f, "Decoding audio file...")

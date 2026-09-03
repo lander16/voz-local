@@ -57,6 +57,14 @@ object ModelUrls {
         return hasValidSize(file, modelId)
     }
 
+    /** True only when a file was checked against this app version's pinned digest. */
+    fun isVerifiedDownloadedFile(file: File, modelId: String): Boolean {
+        if (!isValidDownloadedFile(file, modelId)) return false
+        val expected = ModelDownloader.sha256Map[modelId] ?: return false
+        val record = File(file.parentFile, "${file.name}.sha256")
+        return record.isFile && record.readText().trim() == "$expected:${file.length()}"
+    }
+
     fun hasValidSize(file: File, modelId: String): Boolean {
         val minBytes = MIN_VALID_BYTES[modelId] ?: 1_000_000L
         return file.exists() && file.length() >= minBytes
@@ -108,7 +116,7 @@ class ModelDownloader(private val context: Context) {
         onContentLength: suspend (Long) -> Unit = {}
     ): String? {
         val file = vadModelFile()
-        if (ModelUrls.isValidDownloadedFile(file, "silero_vad")) {
+        if (ModelUrls.isVerifiedDownloadedFile(file, "silero_vad")) {
             Log.i(TAG, "VAD model already present at ${file.absolutePath}")
             onContentLength(file.length())
             onProgress(1.0f)
@@ -209,6 +217,8 @@ class ModelDownloader(private val context: Context) {
                 )
             }
 
+            writeVerificationRecord(outputFile, expectedSha)
+
             onProgress(1.0f)
 
             Log.i(TAG, "Downloaded ${outputFile.name} successfully to ${outputFile.absolutePath}")
@@ -227,6 +237,48 @@ class ModelDownloader(private val context: Context) {
             if (stale.delete()) {
                 Log.i(TAG, "Deleted stale partial download ${stale.absolutePath}")
             }
+        }
+    }
+
+    /**
+     * Verifies a pre-existing model before it is loaded. This upgrades models
+     * downloaded by older releases, which did not have a verification record.
+     */
+    fun verifyExistingModel(modelId: String): Boolean {
+        val file = ModelUrls.getModelFile(context, modelId)
+        return verifyExistingFile(file, modelId)
+    }
+
+    fun verifyExistingVadModel(): Boolean = verifyExistingFile(vadModelFile(), "silero_vad")
+
+    private fun verifyExistingFile(file: File, modelId: String): Boolean {
+        if (ModelUrls.isVerifiedDownloadedFile(file, modelId)) return true
+        if (!ModelUrls.isValidDownloadedFile(file, modelId)) return false
+        val expected = sha256Map[modelId] ?: return false
+        if (!verifySha256(file, expected)) return false
+        return runCatching {
+            writeVerificationRecord(file, expected)
+            true
+        }.getOrElse {
+            Log.e(TAG, "Could not persist verification record for ${file.name}", it)
+            false
+        }
+    }
+
+    private fun writeVerificationRecord(file: File, expectedSha: String?) {
+        if (expectedSha.isNullOrBlank()) return
+        val record = File(file.parentFile, "${file.name}.sha256")
+        val temporary = File(file.parentFile, "${record.name}.${UUID.randomUUID()}.part")
+        temporary.writeText("$expectedSha:${file.length()}")
+        try {
+            Files.move(
+                temporary.toPath(),
+                record.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
+            )
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(temporary.toPath(), record.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
     }
 

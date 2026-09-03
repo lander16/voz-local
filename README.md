@@ -372,7 +372,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 
 **Completed:**
 
-- [x] Real SHA-256 hashes and immutable model revisions for Whisper and Silero VAD models.
+- [x] Real SHA-256 hashes and immutable model revisions for Whisper and Silero VAD models. Every new download is verified before use; models from older app versions are re-verified once before loading.
 - [x] Release keystore configuration and Google Play Android App Bundle (.aab) generation.
 - [x] Google Play Store compliant Privacy Policy (English & Spanish).
 - [x] Play Store graphical assets (512x512 icon, 1024x500 feature graphic, 6 screenshots).
