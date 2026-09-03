@@ -25,6 +25,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -624,13 +626,13 @@ class DictationRepository(private val context: Context) {
         modelId: String,
         onProgress: (Float, String) -> Unit
     ): String = withContext(Dispatchers.Default) {
-        onProgress(0.10f, "Decoding audio file...")
+        onProgress(0.05f, "Decoding audio file...")
         val loadJob = async(Dispatchers.IO) {
-            onProgress(0.12f, "Loading local Whisper model...")
+            onProgress(0.28f, "Loading local Whisper model...")
             whisperEngine.loadModel(modelId)
         }
         val decodedSamples = audioDecoder.decodeToPcm16k(uri) { prog ->
-            onProgress(0.10f + prog * 0.45f, "Decoding audio file...")
+            onProgress(0.05f + prog * 0.23f, "Decoding audio file...")
         }
 
         if (decodedSamples.isEmpty()) {
@@ -640,27 +642,73 @@ class DictationRepository(private val context: Context) {
 
         val trimmedSamples = AudioSilenceTrimmer.trim(decodedSamples)
         val samples = if (trimmedSamples.isNotEmpty()) trimmedSamples else decodedSamples
+        val audioDurationSec = samples.size / 16000f
 
-        onProgress(0.58f, "Preparing local Whisper model...")
+        onProgress(0.30f, "Preparing local Whisper model...")
         val loaded = loadJob.await()
         _modelLoaded.value = loaded
         if (!loaded) {
             return@withContext "Error: Local Whisper model $modelId is not downloaded yet. Please download it first."
         }
 
-        onProgress(0.65f, "Running local Whisper inference...")
-        val rawResult = whisperEngine.transcribe(
-            samples,
-            language = getLanguage(),
-            params = currentWhisperParams().copy(
-                singleSegment = false,
-                printTimestamps = true,
-                noTimestamps = false,
-                noContext = false,
-                vadModelPath = vadPathFor(samples.size, sharedFile = true),
-                modelIdHint = modelId
-            )
+        // Fast decoding parameters for shared audio:
+        // - temperatureInc = 0.0f eliminates multi-pass retry loops on conversational hesitations
+        // - noTimestamps = true eliminates generating timestamp tokens for faster token generation
+        val transcriptionParams = currentWhisperParams().copy(
+            singleSegment = false,
+            printTimestamps = false,
+            noTimestamps = true,
+            temperatureInc = 0.0f,
+            noContext = false,
+            vadModelPath = vadPathFor(samples.size, sharedFile = true),
+            modelIdHint = modelId
         )
+
+        // Estimated inference speed multiplier per model on modern mobile CPUs
+        val realtimeFactor = when {
+            modelId.contains("tiny", ignoreCase = true) -> 0.18f
+            modelId.contains("base", ignoreCase = true) -> 0.32f
+            modelId.contains("small", ignoreCase = true) -> 0.70f
+            else -> 1.05f
+        }
+        val estimatedTotalSec = (audioDurationSec * realtimeFactor).coerceAtLeast(3f)
+        val inferenceStartMs = System.currentTimeMillis()
+
+        // Active ticker job updating smooth progress and elapsed time
+        val tickerJob = launch {
+            while (isActive) {
+                val elapsedSec = (System.currentTimeMillis() - inferenceStartMs) / 1000f
+                val fraction = (elapsedSec / estimatedTotalSec).coerceIn(0f, 0.96f)
+                val currentProgress = 0.35f + fraction * 0.58f
+                val elapsedMin = (elapsedSec / 60).toInt()
+                val elapsedS = (elapsedSec % 60).toInt()
+                val estTotalMin = (estimatedTotalSec / 60).toInt()
+                val estTotalS = (estimatedTotalSec % 60).toInt()
+
+                val timeMsg = if (audioDurationSec > 30f) {
+                    String.format(
+                        Locale.getDefault(),
+                        "Running Whisper inference (%02d:%02d / ~%02d:%02d)",
+                        elapsedMin, elapsedS, estTotalMin, estTotalS
+                    )
+                } else {
+                    "Running local Whisper inference..."
+                }
+                onProgress(currentProgress, timeMsg)
+                delay(350)
+            }
+        }
+
+        val rawResult = try {
+            whisperEngine.transcribe(
+                samples,
+                language = getLanguage(),
+                params = transcriptionParams
+            )
+        } finally {
+            tickerJob.cancel()
+        }
+
         onProgress(0.95f, "Applying local post-processing...")
 
         rawResult

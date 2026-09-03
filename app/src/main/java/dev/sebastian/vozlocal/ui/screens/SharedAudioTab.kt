@@ -233,12 +233,39 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                                 listOf("Decode", "Load", "Transcribe", "Polish").forEachIndexed { index, label ->
                                     val active = when {
-                                        progress < 0.55f -> index == 0
-                                        progress < 0.70f -> index == 1
-                                        progress < 0.95f -> index == 2
+                                        progress < 0.28f -> index == 0
+                                        progress < 0.35f -> index == 1
+                                        progress < 0.94f -> index == 2
                                         else -> index == 3
                                     }
                                     StagePill(label = label, active = active)
+                                }
+                            }
+
+                            if (statusText.contains("~") || (progress > 0.30f && audioSize.contains("KB") && (audioSize.filter { it.isDigit() }.toIntOrNull() ?: 0) > 300) || audioSize.contains("MB")) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = PrimaryColor,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Text(
+                                            text = "Audio de larga duración detectado: La inferencia con IA se ejecuta 100% en local en el procesador de tu dispositivo para máxima privacidad. El tiempo de procesamiento es proporcional al audio.",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            lineHeight = 15.sp
+                                        )
+                                    }
                                 }
                             }
                         }
