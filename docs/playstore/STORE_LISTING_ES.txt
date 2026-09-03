@@ -1,0 +1,39 @@
+VozLocal es una app de dictado por voz y transcripción 100% offline, privada y rápida.
+
+Funciona totalmente en tu dispositivo con modelos de inteligencia artificial Whisper. Tu voz y tus textos nunca se envían a internet ni a servidores externos.
+
+CARACTERÍSTICAS
+
+• Botón flotante: Dicta en WhatsApp, Telegram, Gmail, notas o cualquier aplicación mediante un botón flotante accesible.
+
+• 100% Sin Conexión: Dicta sin señal, en viajes o en Modo Avión. No requiere suscripciones ni conexión de datos.
+
+• Transcripción de archivos: Comparte o importa notas de voz y archivos de audio para convertirlos en texto en segundos.
+
+• Puntuación por voz: Dicta signos de puntuación de forma natural (punto, coma, signos de interrogación, nuevo párrafo).
+
+• Corrección automática: Añade tildes de forma precisa (así, malecón, canción) y elimina titubeos (eh, um).
+
+• Diccionario propio: Agrega palabras técnicas o nombres propios para un reconocimiento exacto.
+
+• Historial local: Guarda tus transcripciones en tu teléfono, con opción de exportar o borrar cuando quieras.
+
+• Rendimiento móvil: Optimizado para procesadores Snapdragon, Google Tensor y MediaTek con mínimo uso de batería.
+
+PRIVACIDAD Y SEGURIDAD
+
+• Cero telemetría: Sin analíticas, sin rastreadores y sin publicidad.
+
+• Audio en memoria RAM: El micrófono solo graba cuando presionas el botón y se borra al instante. No se guardan grabaciones.
+
+• Protección bancaria: El botón flotante se oculta automáticamente ante apps de bancos, contraseñas y datos sensibles.
+
+DECLARACIÓN DE ACCESIBILIDAD
+
+VozLocal utiliza la API de Accesibilidad de Android (AccessibilityService) como herramienta de asistencia para escribir con la voz:
+
+• Propósito: Ayudar a personas con dificultades motrices, temblores o fatiga a introducir texto sin necesidad de teclear.
+
+• Funcionamiento: Solo detecta cuándo seleccionas un campo de texto para mostrar el botón de dictado e insertar el texto transcrito.
+
+• Privacidad: NO lee tu pantalla, NO guarda contraseñas, NO registra pulsaciones y NO envía información a internet.
