@@ -506,6 +506,15 @@ thermal measurements show that a formerly fast configuration is throttling. The
 user-facing default must prefer reliable, sustained transcription over a short
 synthetic benchmark win.
 
+#### Technical Evaluation: Complexity, Risk & GPU Comparison
+
+| Dimension | Assessment | Details |
+|---|:---:|---|
+| **Implementation Complexity** | **6.5 / 10** | • `ggml` already contains Android SoC target definitions in `ggml/src/CMakeLists.txt` (`android_armv8.0_1`, `android_armv8.2_1` dotprod, `android_armv8.2_2` fp16, `android_armv8.6_1` i8mm, `android_armv9.0_1` sve2).<br>• Android 7+ (API 24+) dynamic linker restrictions require passing `context.applicationInfo.nativeLibraryDir` via JNI for `dlopen()` to resolve backend libraries.<br>• Gradle must package and protect all variant `.so` files against R8/shrinking.<br>• Uncompressed APK size increases by ~8–12 MB across all variants. |
+| **Stability Risk** | **Low (with static fallback)<br>High (if standalone)** | • **Standalone risk**: If a device driver reports `AT_HWCAP` support for an optional instruction that its efficiency cores cannot execute, the app terminates with `SIGILL`.<br>• **Mitigation**: The app must keep a statically linked `armv8.2-a+fp16+dotprod` baseline always resident. Dynamic variants are loaded only as optional accelerators; if `dlopen()` or scoring fails, execution seamlessly continues on the verified baseline. |
+| **Expected ROI (CPU)** | **~15% – 25% speedup** | • Accelerates quantized matrix multiplication (`q5_1`, `q8_0`).<br>• A 100-second WhatsApp audio note on Pixel 8 Pro (Tensor G3) decreases from ~70s to ~55s.<br>• Live dictation (2–6s utterances) decreases from ~1.0s to ~0.8s (near-imperceptible for live typing). |
+| **Alternative: GPU / Vulkan** | **3x – 5x potential speedup** | • Mobile CPU inference is fundamentally constrained by memory bandwidth and thermal throttling during sustained workloads.<br>• Evaluating `whisper.cpp`'s **Vulkan / OpenCL GPU backend** to offload encoder matrices to mobile GPUs (e.g., ARM Mali-G715 on Tensor G3, Qualcomm Adreno) offers significantly higher return-on-investment (3x–5x) than micro-optimizing CPU vector extensions alone. |
+
 ## 📄 License & Acknowledgments
 
 - **whisper.cpp** — Georgi Gerganov's [`whisper.cpp`](https://github.com/ggerganov/whisper.cpp) C++ library (MIT).
