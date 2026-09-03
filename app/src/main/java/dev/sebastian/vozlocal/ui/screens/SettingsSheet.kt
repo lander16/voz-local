@@ -187,7 +187,7 @@ fun SettingsSheet(
 
                         OutlinedButton(
                             onClick = {
-                                val url = "https://github.com/lander16/voz-local"
+                                val url = "https://github.com/lander16/voz-local/blob/main/PRIVACY_POLICY.md"
                                 try {
                                     uriHandler.openUri(url)
                                 } catch (e: Exception) {
@@ -206,7 +206,7 @@ fun SettingsSheet(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Online Documentation (GitHub)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            Text("Official Privacy Policy (GitHub)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 },

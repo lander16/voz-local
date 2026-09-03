@@ -8,6 +8,7 @@
 [![Engine](https://img.shields.io/badge/Engine-whisper.cpp-orange.svg?style=flat)](https://github.com/ggerganov/whisper.cpp)
 [![Cleanup](https://img.shields.io/badge/Text%20Cleanup-Local%20Rule--Based-red.svg?style=flat)](#architecture--tech-stack)
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline-brightgreen.svg?style=flat)](#privacy--security)
+[![Privacy Policy](https://img.shields.io/badge/Privacy%20Policy-Read%20Policy-blue.svg?style=flat)](PRIVACY_POLICY.md)
 
 **VozLocal** is a privacy-first, ultra-fast Android application for local speech-to-text dictation and audio file transcription. It runs on-device using quantized OpenAI Whisper GGUF/bin models via `whisper.cpp` and local rule-based text cleanup — **no cloud APIs, no telemetry, no third-party SDKs that phone home**. Network access is used only to download model files. A global floating accessibility overlay lets you dictate into any app on the device.
 
@@ -298,6 +299,8 @@ VozLocal features phrase-isolated spoken punctuation replacement. When **Spoken 
 ---
 
 ## 🔒 Privacy, Security & Google Play Compliance
+
+> 📄 **Official Public Privacy Policy:** The complete legal privacy document complying with Google Play's User Data policy is published at [**PRIVACY_POLICY.md**](PRIVACY_POLICY.md) (provided in English and Spanish). You can submit this URL directly in Google Play Console: `https://github.com/lander16/voz-local/blob/main/PRIVACY_POLICY.md`
 
 VozLocal is architected from inception for complete local sovereignty, zero cloud tracking, and strict adherence to Google Play Store policies:
 
