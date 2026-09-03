@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
+import dev.sebastian.vozlocal.R
 import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import dev.sebastian.vozlocal.ui.formatShortDateTime
 import dev.sebastian.vozlocal.ui.theme.*
@@ -86,11 +88,11 @@ fun SettingsSheet(
             AlertDialog(
                 onDismissRequest = { showSensitiveAppsDialog = false },
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
-                title = { Text("Sensitive apps", color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.ExtraBold) },
+                title = { Text(stringResource(R.string.sensitive_apps_title), color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.ExtraBold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            "VozLocal hides its floating mic and rejects all text actions in selected apps. Add banks, password managers, authenticators, and payment apps.",
+                            stringResource(R.string.sensitive_apps_description),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontSize = 13.sp
                         )
@@ -98,7 +100,7 @@ fun SettingsSheet(
                             value = sensitiveAppsQuery,
                             onValueChange = { sensitiveAppsQuery = it },
                             singleLine = true,
-                            label = { Text("Search installed apps") },
+                            label = { Text(stringResource(R.string.search_installed_apps)) },
                             modifier = Modifier.fillMaxWidth()
                         )
                         Column(
@@ -126,7 +128,7 @@ fun SettingsSheet(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showSensitiveAppsDialog = false }) { Text("Done") }
+                    TextButton(onClick = { showSensitiveAppsDialog = false }) { Text(stringResource(R.string.button_done)) }
                 }
             )
         }

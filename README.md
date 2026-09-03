@@ -201,6 +201,8 @@ Release builds enable R8 minification + resource shrinking. The `proguard-rules.
 
 ## 📱 How to Use
 
+The primary Dictate, Shared Audio, History, and protected-app flows are localized in English and Spanish. Settings and less-frequent dialogs continue to be localized incrementally; untranslated text must not be presented as a complete localization.
+
 ### 1. Initial Permissions Setup
 On first launch you'll see a 2-step setup wizard:
 1. **Microphone Permission** — required for live dictation

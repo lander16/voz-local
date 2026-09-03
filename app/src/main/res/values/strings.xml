@@ -54,4 +54,10 @@
     <string name="listening">Listening…</string>
     <string name="transcribing">Transcribing…</string>
     <string name="offline_guarantee_badge">100% Offline • Private AI</string>
+
+    <!-- Protected apps -->
+    <string name="sensitive_apps_title">Sensitive apps</string>
+    <string name="sensitive_apps_description">VozLocal hides its floating mic and rejects all text actions in selected apps. Add banks, password managers, authenticators, and payment apps.</string>
+    <string name="search_installed_apps">Search installed apps</string>
+    <string name="button_done">Done</string>
 </resources>

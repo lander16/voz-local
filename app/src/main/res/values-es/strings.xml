@@ -55,4 +55,10 @@
     <string name="listening">Escuchando…</string>
     <string name="transcribing">Transcribiendo…</string>
     <string name="offline_guarantee_badge">100% Offline • IA Privada</string>
+
+    <!-- Aplicaciones protegidas -->
+    <string name="sensitive_apps_title">Aplicaciones sensibles</string>
+    <string name="sensitive_apps_description">VozLocal oculta el micrófono flotante y rechaza toda acción de texto en las aplicaciones seleccionadas. Agrega bancos, gestores de contraseñas, autenticadores y aplicaciones de pago.</string>
+    <string name="search_installed_apps">Buscar aplicaciones instaladas</string>
+    <string name="button_done">Listo</string>
 </resources>
