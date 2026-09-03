@@ -15,6 +15,8 @@ import dev.sebastian.vozlocal.polish.TextPolishEngine
 import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import dev.sebastian.vozlocal.whisper.WhisperEngine
 import dev.sebastian.vozlocal.whisper.WhisperParams
+import dev.sebastian.vozlocal.whisper.CpuBackendManager
+import dev.sebastian.vozlocal.whisper.CpuBackendMode
 import dev.sebastian.vozlocal.whisper.forLiveAudio
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -169,6 +171,12 @@ class DictationRepository(private val context: Context) {
 
     fun saveLanguage(language: String) {
         prefs.edit { putString("whisper_language", language) }
+    }
+
+    fun getCpuBackendMode(): CpuBackendMode = CpuBackendManager.getSavedMode(context)
+
+    fun saveCpuBackendMode(mode: CpuBackendMode) {
+        CpuBackendManager.saveMode(context, mode)
     }
 
     fun getUseAiPolisher(): Boolean {

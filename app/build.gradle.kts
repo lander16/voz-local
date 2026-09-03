@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 // import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy // unused: google-services plugin disabled (no Firebase SDK)
 
 plugins {
@@ -182,4 +184,37 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen) // unused / offline build
+}
+
+val debugApkForBackendVerification = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
+
+tasks.register("verifyDebugNativeBackendPackaging") {
+  group = "verification"
+  description = "Verifies that the debug APK contains safe ARM64 CPU dispatch modules."
+  dependsOn("assembleDebug")
+  inputs.file(debugApkForBackendVerification)
+  doLast {
+    val apk = inputs.files.singleFile
+    check(apk.isFile) { "Debug APK was not produced: $apk" }
+    ZipFile(apk).use { zip ->
+      val entries = zip.entries().asSequence().map { it.name }.toSet()
+      val arm64Prefix = "lib/arm64-v8a/"
+      val required = setOf(
+        "libwhisper.so",
+        "libggml-cpu-android_armv8.0_1.so",
+        "libggml-cpu-android_armv8.2_1.so",
+        "libggml-cpu-android_armv8.2_2.so",
+        "libggml-cpu-android_armv8.6_1.so",
+      ).map { arm64Prefix + it }
+      check(entries.containsAll(required)) {
+        "Missing ARM64 CPU backend modules: ${required.filterNot(entries::contains)}"
+      }
+      check(arm64Prefix + "libwhisper_v8fp16_va.so" !in entries) {
+        "Legacy globally optimized ARM64 wrapper must not be packaged"
+      }
+      check("lib/x86_64/libggml-cpu.so" in entries) {
+        "x86_64 compatibility backend is missing"
+      }
+    }
+  }
 }

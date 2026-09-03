@@ -16,6 +16,8 @@ import dev.sebastian.vozlocal.data.repository.SensitiveApp
 import dev.sebastian.vozlocal.data.repository.VadDownloadStatus
 import dev.sebastian.vozlocal.polish.TextPolishEngine
 import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
+import dev.sebastian.vozlocal.whisper.CpuBackendManager
+import dev.sebastian.vozlocal.whisper.CpuBackendMode
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.ArrayList
@@ -140,6 +142,8 @@ class MainViewModel(
     val saveHistory = MutableStateFlow(repository.getSaveHistory())
     val showOnlyOnInput = MutableStateFlow(repository.getShowOnlyOnInput())
     val whisperLanguage = MutableStateFlow(repository.getLanguage())
+    val cpuBackendMode = MutableStateFlow(repository.getCpuBackendMode())
+    val cpuBackendDiagnostics = CpuBackendManager.diagnostics
     val useAiPolisher = MutableStateFlow(repository.getUseAiPolisher())
     val cleanupMode = MutableStateFlow(CleanupMode.valueOf(repository.getCleanupMode().name))
 
@@ -235,6 +239,11 @@ class MainViewModel(
     fun setLanguage(language: String) {
         repository.saveLanguage(language)
         whisperLanguage.value = language
+    }
+
+    fun setCpuBackendMode(mode: CpuBackendMode) {
+        repository.saveCpuBackendMode(mode)
+        cpuBackendMode.value = mode
     }
 
     fun setUseAiPolisher(value: Boolean) {

@@ -3,6 +3,7 @@ package dev.sebastian.vozlocal.data.repository
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
+import dev.sebastian.vozlocal.whisper.CpuBackendMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -87,6 +88,14 @@ class DictationRepositoryPersistenceTest {
     @Test
     fun getLanguage_defaultsToEs() {
         assertEquals("es", newRepository().getLanguage())
+    }
+
+    @Test
+    fun cpuBackendModeIsOptInAndRoundTrips() {
+        val repo = newRepository()
+        assertEquals(CpuBackendMode.COMPATIBILITY, repo.getCpuBackendMode())
+        repo.saveCpuBackendMode(CpuBackendMode.AUTOMATIC)
+        assertEquals(CpuBackendMode.AUTOMATIC, newRepository().getCpuBackendMode())
     }
 
     @Test

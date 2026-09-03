@@ -10,6 +10,11 @@ data class TranscriptionBenchmarkConfig(
     val temperatureIncrement: Float,
     val vadEnabled: Boolean,
     val audioSource: String,
+    val backendMode: String = "compatibility",
+    val backendTier: String = "unknown",
+    val nativeBuildId: String = "unknown",
+    val streaming: Boolean = false,
+    val coldStart: Boolean = false,
 )
 
 /** Measurements for one utterance and one [TranscriptionBenchmarkConfig]. */
@@ -18,6 +23,7 @@ data class TranscriptionBenchmarkResult(
     val config: TranscriptionBenchmarkConfig,
     val audioDurationMs: Long,
     val modelLoadMs: Long,
+    val warmupMs: Long? = null,
     val inferenceMs: Long,
     val peakResidentBytes: Long? = null,
     val thermalStatusBefore: Int? = null,
@@ -31,6 +37,7 @@ data class TranscriptionBenchmarkResult(
         require(audioDurationMs >= 0) { "audioDurationMs must be non-negative" }
         require(modelLoadMs >= 0) { "modelLoadMs must be non-negative" }
         require(inferenceMs >= 0) { "inferenceMs must be non-negative" }
+        require(warmupMs == null || warmupMs >= 0) { "warmupMs must be non-negative" }
         require(config.threadCount > 0) { "threadCount must be positive" }
     }
 

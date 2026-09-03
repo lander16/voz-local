@@ -37,6 +37,7 @@ import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import dev.sebastian.vozlocal.ui.formatShortDateTime
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
+import dev.sebastian.vozlocal.whisper.CpuBackendMode
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -61,6 +62,8 @@ fun SettingsSheet(
     val cleanupMode by viewModel.cleanupMode.collectAsStateWithLifecycle()
     val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
     val whisperLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
+    val cpuBackendMode by viewModel.cpuBackendMode.collectAsStateWithLifecycle()
+    val cpuBackendDiagnostics by viewModel.cpuBackendDiagnostics.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val noSpeechThold by viewModel.noSpeechThold.collectAsStateWithLifecycle()
     val logprobThold by viewModel.logprobThold.collectAsStateWithLifecycle()
@@ -769,6 +772,64 @@ fun SettingsSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 18.sp
                 )
+
+                Text(
+                    text = "CPU optimization",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                cleanupOptionRow(
+                    title = "Compatibility",
+                    description = "ARMv8-A baseline for the widest device support.",
+                    selected = cpuBackendMode == CpuBackendMode.COMPATIBILITY,
+                    onClick = { viewModel.setCpuBackendMode(CpuBackendMode.COMPATIBILITY) }
+                )
+                cleanupOptionRow(
+                    title = "Automatic (experimental)",
+                    description = "Safely detects FP16, dot-product, I8MM and newer CPU kernels.",
+                    selected = cpuBackendMode == CpuBackendMode.AUTOMATIC,
+                    onClick = { viewModel.setCpuBackendMode(CpuBackendMode.AUTOMATIC) }
+                )
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Active CPU backend: ${cpuBackendDiagnostics.tier}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (cpuBackendDiagnostics.features.isNotEmpty()) {
+                            Text(
+                                text = cpuBackendDiagnostics.features.joinToString(", "),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (cpuBackendMode != cpuBackendDiagnostics.effectiveMode) {
+                            Text(
+                                text = "The new choice applies after VozLocal fully restarts.",
+                                fontSize = 12.sp,
+                                color = PrimaryColor
+                            )
+                        }
+                        if (cpuBackendDiagnostics.recoveredFromInterruptedProbe) {
+                            Text(
+                                text = "Compatibility mode was restored after an optimized startup did not finish. Select Automatic again to retry on the next restart.",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
 
                 // No-speech threshold
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
