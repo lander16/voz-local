@@ -195,7 +195,7 @@ cp .env.example .env          # optional, only if you override build config
 ./gradlew installDebug
 ```
 
-Release builds enable R8 minification + resource shrinking. The `proguard-rules.pro` keeps the JNI bridge, Room entities/DAOs, the `AccessibilityService`, and the Compose runtime intact.
+Release builds enable R8 minification + resource shrinking. The `proguard-rules.pro` keeps the JNI bridge, Room entities/DAOs, the `AccessibilityService`, and the Compose runtime intact. Release credentials are never stored in the repository: provide `KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_ALIAS` (optional; defaults to `upload`), and `KEY_PASSWORD` through CI or your local environment. Without them, Gradle builds an unsigned release for validation only.
 
 ---
 

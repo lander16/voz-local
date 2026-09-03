@@ -9,6 +9,18 @@ plugins {
   // alias(libs.plugins.google.services) // unused: no Firebase SDK
 }
 
+// Release credentials are deliberately supplied only by the local environment or CI.
+// Never add a keystore path or password fallback to version control.
+val releaseKeystorePath = providers.environmentVariable("KEYSTORE_PATH").orNull
+val releaseStorePassword = providers.environmentVariable("STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("KEY_ALIAS").orNull ?: "upload"
+val releaseKeyPassword = providers.environmentVariable("KEY_PASSWORD").orNull
+val hasReleaseSigning = listOf(
+  releaseKeystorePath,
+  releaseStorePassword,
+  releaseKeyPassword
+).all { !it.isNullOrBlank() }
+
 android {
   namespace = "dev.sebastian.vozlocal"
   // SDK decision: stay on compileSdk 36 (stable Android 16, AGP 9.3.1). If we ever need to
@@ -47,11 +59,12 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      storeFile = file(keystorePath)
-      storePassword = System.getenv("STORE_PASSWORD") ?: "vozlocal2026"
-      keyAlias = "upload"
-      keyPassword = System.getenv("KEY_PASSWORD") ?: "vozlocal2026"
+      if (hasReleaseSigning) {
+        storeFile = file(requireNotNull(releaseKeystorePath))
+        storePassword = releaseStorePassword
+        keyAlias = releaseKeyAlias
+        keyPassword = releaseKeyPassword
+      }
     }
 
   }
@@ -62,7 +75,12 @@ android {
       isMinifyEnabled = true
       isShrinkResources = true
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      // A clean checkout can still build an unsigned release for local validation.
+      // CI and publishing must provide all KEYSTORE_PATH / STORE_PASSWORD /
+      // KEY_PASSWORD variables to produce a signed artifact.
+      if (hasReleaseSigning) {
+        signingConfig = signingConfigs.getByName("release")
+      }
     }
     debug { }
   }
