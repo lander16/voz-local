@@ -62,7 +62,9 @@ object ModelUrls {
         if (!isValidDownloadedFile(file, modelId)) return false
         val expected = ModelDownloader.sha256Map[modelId] ?: return false
         val record = File(file.parentFile, "${file.name}.sha256")
-        return record.isFile && record.readText().trim() == "$expected:${file.length()}"
+        return record.isFile && runCatching {
+            record.readText().trim() == "$expected:${file.length()}"
+        }.getOrDefault(false)
     }
 
     fun hasValidSize(file: File, modelId: String): Boolean {

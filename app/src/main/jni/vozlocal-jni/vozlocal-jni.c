@@ -71,11 +71,16 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_requestAbort(
         JNIEnv *env, jobject thiz, jlong context_ptr) {
     UNUSED(env);
     UNUSED(thiz);
-    struct vozlocal_abort_state *state = abort_state_for_context(
-            (struct whisper_context *) context_ptr, false);
+    struct whisper_context *context = (struct whisper_context *) context_ptr;
+    pthread_mutex_lock(&abort_states_mutex);
+    struct vozlocal_abort_state *state = abort_states;
+    while (state != NULL && state->context != context) {
+        state = state->next;
+    }
     if (state != NULL) {
         atomic_store_explicit(&state->requested, true, memory_order_relaxed);
     }
+    pthread_mutex_unlock(&abort_states_mutex);
 }
 
 JNIEXPORT void JNICALL

@@ -29,7 +29,7 @@
 ## ✨ Key Features
 
 - 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). The ARM64 build uses a broadly compatible ARMv8.2-A `+fp16+dotprod` baseline; experimental I8MM/KleidiAI paths are not shipped until they have safe runtime dispatch and device benchmarks. Zero cloud APIs or external servers.
-- ⚡ **Dynamic Audio Context & Focus Warmup** — Dynamic `audio_ctx` scaling adapts the encoder window to utterance duration (eliminating 2.5x–4x redundant processing on short dictations), while input-focused background pre-warming keeps native models hot in RAM for instantaneous dictation response.
+- ⚡ **Focus Warmup & Full-Context Accuracy** — Input-focused background pre-warming keeps locally stored models hot in RAM. Transcription uses Whisper's default full audio context rather than an unbenchmarked shortened context, preserving accuracy across short and long utterances.
 - 🎈 **Global Floating Dictation Button** — Accessibility Service + `WindowManager` overlay places an elegant floating microphone button right alongside your traditional keyboard (Gboard, Samsung, SwiftKey). Features persistent screen positioning across reboots, automatic smooth edge-docking animation, and tactile haptic feedback.
 - 🛡️ **Protected Floating Dictation** — The optional accessibility service is not declared as an accessibility tool. A user-managed protected-app list hides the floating button in banks, password managers, and authenticators; banks can still detect that any accessibility service is enabled. Includes an in-app privacy policy and offline guarantee dialog.
 - 📁 **Shared Audio File & History Export** — Receives shared voice notes/recordings via Android `SEND` intents, and provides one-tap export of your complete transcription archive to Markdown/Text via the Android Sharesheet.
@@ -74,7 +74,7 @@ VozLocal System Architecture (v2)
 │                   WhisperEngine (com.whispercpp.whisper.WhisperContext)      │
 │                  - Single-thread executor (JNI constraint)                   │
 │                  - WhisperLib.fullTranscribeWithParams() — language hint,    │
-│                    dynamic audio_ctx, temperature fallback, and noTimestamps │
+│                    full audio context, temperature fallback, and noTimestamps │
 │                  - adaptive thread count with Tensor G3 & 8+ core optimization│
 │                  - Cleaner-based backstop cleanup (no finalize()/runBlocking)│
 └──────────────────────────────────┬──────────────────────────────────────────┘
@@ -341,7 +341,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 | `WhisperContext` cleanup | `runBlocking` on the GC finalizer thread | Lifecycle mutex serializes load / transcribe / release; cancelling a shared-file job now signals Whisper's native abort callback rather than merely hiding progress UI |
 | CPU thread count | Re-read `/proc/cpuinfo` on every transcription | Adaptive lazy selection with `-Dvozlocal.whisper.threads=N` override; optimized for Tensor G3 (Pixel 8 Pro) and modern 8+ core chips to map 5 threads across high-performance cores |
 | Native hardware acceleration | Wrapper-only architecture flags | A safe `+fp16+dotprod` architecture is passed to the actual ggml CPU backend; optional I8MM is deferred pending runtime dispatch |
-| Dynamic audio context | Fixed 30.0s context window (`audio_ctx = 1500`, 3000 mel frames) | Dynamic `audio_ctx` scaling (`((durationSec + 0.75f) * 50).coerceIn(256, 1500)`) cuts 2.5x–4x redundant encoder computation for short dictations |
+| Audio context | Experimental shortened context | Whisper default context (`audio_ctx = 0`) to avoid accuracy regressions from unbenchmarked context truncation |
 | Floating button ergonomics | Free-floating without memory or haptics | SharedPreferences position memory across reboots, 180ms smooth edge-docking animation to nearest bezel, and tactile click haptic feedback |
 | Spoken punctuation engine | Basic keyword matching with replacement bugs | Comprehensive Spanish and English punctuation command dictionary with forward/backward symbol attachment and clean line break handling |
 | Theme & Contrast | Hardcoded dark colors caused low contrast in Light mode | App-wide semantic Material 3 theming (`onSurface`, `surface`, `onPrimary`, etc.), WCAG AAA compliant contrast, and reactive `MainActivity` `themeMode` binding |
@@ -363,8 +363,8 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 | Dependencies | Firebase BOM, Retrofit, Moshi, logging-interceptor (all unused) | Removed; only Compose, Lifecycle, Room, Coroutines, OkHttp, Accompanist, Robolectric/Roborazzi |
 | `minSdk` / `targetSdk` | 24 / 36 (unreleased) | 26 / 36 (with a comment to pin to 35 once AGP 9.3.1 is verified on 35) |
 | `compileSdk` | `release(36) { minorApiLevel = 1 }` | Same (SDK 36 still tracked) |
-| `WhisperEngine` | Hardcoded `language="en"`, no VAD, no initial_prompt, no threshold tuning, single_segment=false | Project-owned JNI shim exposes language, initial_prompt, single_segment, no_speech_thold / logprob_thold / entropy_thold, beam_size, temperature fallback, decoder context, dynamic audio_ctx, and optional Silero VAD. |
-| Verification coverage | Sparse post-processing coverage | 105 automated unit & Robolectric tests covering cleanup modes, thread allocation, dynamic context scaling, spoken punctuation, card layout, and VAD integrity |
+| `WhisperEngine` | Hardcoded `language="en"`, no VAD, no initial_prompt, no threshold tuning, single_segment=false | Project-owned JNI shim exposes language, initial_prompt, single_segment, no_speech_thold / logprob_thold / entropy_thold, beam_size, temperature fallback, decoder context, full-context inference, and optional Silero VAD. |
+| Verification coverage | Sparse post-processing coverage | Automated unit and Robolectric coverage for cleanup modes, thread allocation, spoken punctuation, card layout, model integrity, and VAD integrity |
 
 ---
 
