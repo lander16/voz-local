@@ -17,6 +17,10 @@
  * symbols in the same .so.
  */
 #include <jni.h>
+#include <stdatomic.h>
+#include <stdbool.h>
+#include <pthread.h>
+#include <stdlib.h>
 #include <string.h>
 #include <android/log.h>
 #include "whisper.h"
@@ -25,6 +29,73 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define UNUSED(x) (void)(x)
+
+// whisper_full is synchronous. Keep an abort flag per native context so a
+// cancelled Kotlin coroutine can interrupt encoder/decoder work promptly.
+struct vozlocal_abort_state {
+    struct whisper_context *context;
+    atomic_bool requested;
+    struct vozlocal_abort_state *next;
+};
+
+static pthread_mutex_t abort_states_mutex = PTHREAD_MUTEX_INITIALIZER;
+static struct vozlocal_abort_state *abort_states = NULL;
+
+static struct vozlocal_abort_state *abort_state_for_context(
+        struct whisper_context *context, bool create) {
+    pthread_mutex_lock(&abort_states_mutex);
+    struct vozlocal_abort_state *state = abort_states;
+    while (state != NULL && state->context != context) {
+        state = state->next;
+    }
+    if (state == NULL && create) {
+        state = calloc(1, sizeof(*state));
+        if (state != NULL) {
+            state->context = context;
+            atomic_init(&state->requested, false);
+            state->next = abort_states;
+            abort_states = state;
+        }
+    }
+    pthread_mutex_unlock(&abort_states_mutex);
+    return state;
+}
+
+static bool vozlocal_abort_callback(void *data) {
+    struct vozlocal_abort_state *state = data;
+    return state != NULL && atomic_load_explicit(&state->requested, memory_order_relaxed);
+}
+
+JNIEXPORT void JNICALL
+Java_com_whispercpp_whisper_WhisperLib_00024Companion_requestAbort(
+        JNIEnv *env, jobject thiz, jlong context_ptr) {
+    UNUSED(env);
+    UNUSED(thiz);
+    struct vozlocal_abort_state *state = abort_state_for_context(
+            (struct whisper_context *) context_ptr, false);
+    if (state != NULL) {
+        atomic_store_explicit(&state->requested, true, memory_order_relaxed);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_com_whispercpp_whisper_WhisperLib_00024Companion_forgetAbortState(
+        JNIEnv *env, jobject thiz, jlong context_ptr) {
+    UNUSED(env);
+    UNUSED(thiz);
+    struct whisper_context *context = (struct whisper_context *) context_ptr;
+    pthread_mutex_lock(&abort_states_mutex);
+    struct vozlocal_abort_state **cursor = &abort_states;
+    while (*cursor != NULL && (*cursor)->context != context) {
+        cursor = &(*cursor)->next;
+    }
+    if (*cursor != NULL) {
+        struct vozlocal_abort_state *state = *cursor;
+        *cursor = state->next;
+        free(state);
+    }
+    pthread_mutex_unlock(&abort_states_mutex);
+}
 
 JNIEXPORT void JNICALL
 Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithLang(
@@ -165,6 +236,14 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
     params.no_context = no_context;
     params.audio_ctx = (audio_ctx > 0 && audio_ctx <= 1500) ? audio_ctx : 0;
     params.offset_ms = 0;
+    struct vozlocal_abort_state *abort_state = abort_state_for_context(context, true);
+    if (abort_state == NULL) {
+        LOGE("fullTranscribeWithParams: could not allocate abort state");
+    } else {
+        atomic_store_explicit(&abort_state->requested, false, memory_order_relaxed);
+        params.abort_callback = vozlocal_abort_callback;
+        params.abort_callback_user_data = abort_state;
+    }
 
     LOGI("whisper_full: strategy=%s, language=%s, threads=%d, samples=%d, "
          "single_segment=%d, print_timestamps=%d, no_timestamps=%d, no_speech_thold=%.2f, "

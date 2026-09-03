@@ -338,7 +338,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 | Area | Before | After |
 |---|---|---|
 | `AudioRecorder` | Two instances (ViewModel + Service), raced for the mic | Process-wide singleton in `VozLocalApp`; state transitions guarded by `synchronized(this)` and the IO reader thread reads `@Volatile` fields |
-| `WhisperContext` cleanup | `runBlocking` on the GC finalizer thread | `Cleaner`-based backstop + lifecycle mutex that serializes load / transcribe / release |
+| `WhisperContext` cleanup | `runBlocking` on the GC finalizer thread | Lifecycle mutex serializes load / transcribe / release; cancelling a shared-file job now signals Whisper's native abort callback rather than merely hiding progress UI |
 | CPU thread count | Re-read `/proc/cpuinfo` on every transcription | Adaptive lazy selection with `-Dvozlocal.whisper.threads=N` override; optimized for Tensor G3 (Pixel 8 Pro) and modern 8+ core chips to map 5 threads across high-performance cores |
 | Native hardware acceleration | Basic ARMv8.2-A `+dotprod` | Upgraded compiler flags to `-march=armv8.2-a+fp16+dotprod+i8mm` for `whisper_v8fp16_va`, activating KleidiAI hardware Int8 matrix multiplication (`SMMLA`/`UMMLA`) |
 | Dynamic audio context | Fixed 30.0s context window (`audio_ctx = 1500`, 3000 mel frames) | Dynamic `audio_ctx` scaling (`((durationSec + 0.75f) * 50).coerceIn(256, 1500)`) cuts 2.5x–4x redundant encoder computation for short dictations |

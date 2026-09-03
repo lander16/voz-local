@@ -14,8 +14,7 @@ private const val LOG_TAG = "LibWhisper"
 
 class WhisperContext private constructor(private var ptr: Long) {
     // Meet Whisper C++ constraint: Don't access from more than one thread at a time.
-    private val executor = Executors.newSingleThreadExecutor()
-    private val scope: CoroutineScope = CoroutineScope(executor.asCoroutineDispatcher())
+    private val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
 
     /**
      * Full-parameter transcription pass. Backed by the project-owned JNI shim's
@@ -26,8 +25,16 @@ class WhisperContext private constructor(private var ptr: Long) {
     suspend fun transcribeData(
         data: FloatArray,
         params: WhisperParams
-    ): String = withContext(scope.coroutineContext) {
-        require(ptr != 0L)
+    ): String = withContext(dispatcher) {
+        val contextPtr = ptr
+        require(contextPtr != 0L)
+        currentCoroutineContext().ensureActive()
+        val cancellationHandler = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
+            if (cause is CancellationException) {
+                WhisperLib.requestAbort(contextPtr)
+            }
+        }
+        try {
         runCatching {
             Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY)
         }
@@ -35,7 +42,7 @@ class WhisperContext private constructor(private var ptr: Long) {
         Log.d(LOG_TAG, "Selecting $numThreads threads, language=${params.language}")
 
         WhisperLib.fullTranscribeWithParams(
-            ptr,
+            contextPtr,
             numThreads,
             data,
             params.language,
@@ -53,14 +60,18 @@ class WhisperContext private constructor(private var ptr: Long) {
             params.audioCtx
         )
 
-        val textCount = WhisperLib.getTextSegmentCount(ptr)
-        return@withContext buildString {
+        currentCoroutineContext().ensureActive()
+        val textCount = WhisperLib.getTextSegmentCount(contextPtr)
+        buildString {
             for (i in 0 until textCount) {
-                val segText = WhisperLib.getTextSegment(ptr, i).trim()
+                val segText = WhisperLib.getTextSegment(contextPtr, i).trim()
                 if (segText.isEmpty()) continue
                 if (isNotEmpty() && !endsWith(' ')) append(' ')
                 append(segText)
             }
+        }
+        } finally {
+            cancellationHandler?.dispose()
         }
     }
 
@@ -81,21 +92,22 @@ class WhisperContext private constructor(private var ptr: Long) {
         return transcribeData(data, params)
     }
 
-    suspend fun benchMemory(nthreads: Int): String = withContext(scope.coroutineContext) {
+    suspend fun benchMemory(nthreads: Int): String = withContext(dispatcher) {
         return@withContext WhisperLib.benchMemcpy(nthreads)
     }
 
-    suspend fun benchGgmlMulMat(nthreads: Int): String = withContext(scope.coroutineContext) {
+    suspend fun benchGgmlMulMat(nthreads: Int): String = withContext(dispatcher) {
         return@withContext WhisperLib.benchGgmlMulMat(nthreads)
     }
 
     suspend fun release() = withContext(Dispatchers.IO) {
         if (ptr != 0L) {
+            WhisperLib.requestAbort(ptr)
+            WhisperLib.forgetAbortState(ptr)
             WhisperLib.freeContext(ptr)
             ptr = 0
         }
-        scope.cancel()
-        executor.shutdown()
+        dispatcher.close()
     }
 
     companion object {
@@ -184,6 +196,8 @@ private class WhisperLib {
             noContext: Boolean,
             audioCtx: Int
         )
+        external fun requestAbort(contextPtr: Long)
+        external fun forgetAbortState(contextPtr: Long)
         external fun getTextSegmentCount(contextPtr: Long): Int
         external fun getTextSegment(contextPtr: Long, index: Int): String
         external fun getTextSegmentT0(contextPtr: Long, index: Int): Long
