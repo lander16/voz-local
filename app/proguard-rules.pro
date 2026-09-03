@@ -21,6 +21,11 @@
 # AccessibilityService
 -keep class dev.sebastian.vozlocal.service.DictationAccessibilityService { *; }
 
+# OkHttp optional TLS platform providers
+-dontwarn org.bouncycastle.jsse.**
+-dontwarn org.conscrypt.**
+-dontwarn org.openjsse.**
+
 # Crash report line numbers
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

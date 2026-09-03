@@ -18,3 +18,8 @@ local.properties
 debug.keystore
 .gradle_home/
 .idea/
+
+# Android signing keystores
+*.jks
+*.keystore
+*.p12

@@ -370,21 +370,23 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 
 ## 🛣️ Roadmap
 
-**Deferred from the current STT correctness and measurement pass:**
+**Completed:**
 
-- [ ] **[J] GPU / Vulkan / OpenCL delegate on Android** — vendored whisper.cpp is CPU-only. Switching to GPU would require forking the build, adding `GGML_VULKAN=ON` / `GGML_OPENCL=ON` to the project-owned CMakeLists, and shipping per-driver fallbacks.
-- [ ] **Audio resampling quality** — replace the current linear resampler with a streaming band-limited/windowed-sinc resampler before 16 kHz Whisper inference; select the cleanest stereo channel rather than always averaging channels.
-- [ ] **Pixel calibration UI** — run the benchmark matrix for model, quantization, thread count, VAD, audio source, and decoding profile; persist the best sustainable configuration per device.
+- [x] Real SHA-256 hashes and immutable model revisions for Whisper and Silero VAD models.
+- [x] Release keystore configuration and Google Play Android App Bundle (.aab) generation.
+- [x] Google Play Store compliant Privacy Policy (English & Spanish).
+- [x] Play Store graphical assets (512x512 icon, 1024x500 feature graphic, 6 screenshots).
+- [x] `MainActivity` reads `themeMode` from `VozLocalApp.repository` and passes it to the top-level `MyApplicationTheme`.
+- [x] Automated Compose tests for layout, transcription rendering, CPU configuration, and spoken punctuation.
 
-**Open items:**
+**Active & Future Items:**
 
-- [ ] **Foreground service for background recording** — add a `<service android:foregroundServiceType="microphone">` so the mic can stay open when the user navigates away mid-dictation. Re-add the `FOREGROUND_SERVICE_MICROPHONE` permission at the same time.
-- [ ] **Real SHA-256 hashes and immutable model revisions** for the 5 Whisper model download map entries.
-- [ ] **Window-size-class adaptive UI** — `NavigationRail` for width ≥ 600 dp, foldable support.
-- [ ] **Room migrations for v2** — the v1 → v2 migration is a no-op stub; the next schema change will add a real `Migration(2, 3)`.
-- [x] **`MainActivity` reads `themeMode` from `VozLocalApp.repository`** and passes it to the top-level `MyApplicationTheme`.
-- [ ] **Detekt + ktlint + CI** for static analysis.
-- [x] **Automated Compose tests** for layout, transcription rendering, CPU configuration, and spoken punctuation.
+- [ ] Foreground service for background recording with screen off.
+- [ ] Window-size-class adaptive UI (NavigationRail for width >= 600 dp, foldable support).
+- [ ] GPU / Vulkan / OpenCL delegate evaluation.
+- [ ] Detekt + ktlint + CI for static analysis.
+- [ ] Audio resampling quality (streaming band-limited/windowed-sinc resampler).
+- [ ] Pixel calibration UI (persist best sustainable configuration per device).
 
 ## 📄 License & Acknowledgments
 
