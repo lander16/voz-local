@@ -390,21 +390,19 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 - [ ] Audio resampling quality (streaming band-limited/windowed-sinc resampler).
 - [ ] Pixel calibration UI (persist best sustainable configuration per device).
 
-### Future work: capability-based CPU kernel dispatch
+### Capability-based CPU kernel dispatch
 
-The currently distributed ARM64 Whisper library intentionally uses the conservative
-`-march=armv8.2-a+fp16+dotprod` baseline. This is a deliberate safety choice: a
-single library compiled with optional ARM instructions can crash with an illegal
-instruction on an otherwise supported ARM64 device if that CPU does not implement
-the instruction. In particular, `+i8mm` must not be enabled globally merely
-because it is beneficial on the development device.
+VozLocal now ships a baseline-safe ARM64 Whisper front-end plus multiple ggml CPU
+kernel modules. **Compatibility** mode loads ARMv8-A kernels and is the default.
+The opt-in **Automatic (experimental)** mode asks each optimized module's native
+score function whether the current process may execute its instructions, then
+uses the first accepted tier. A missing or rejected accelerator therefore reduces
+performance instead of making the app execute an unsupported instruction.
 
-The next native-performance milestone is **multi-variant CPU backend dispatch**:
-ship several compatible ggml CPU backends, discover the processor's actual
-capabilities at runtime, and select only the fastest backend that the device can
-execute. This should use CPU feature bits rather than device marketing names or
-an allowlist of handset models. `Build.MODEL`, chipset names, and Android version
-are not reliable evidence that an instruction extension is executable.
+The front-end, JNI initialization, error handling, and feature scorer are compiled
+for `armv8-a`. Optional instructions exist only inside separately loaded modules.
+The app does not use `Build.MODEL`, a Tensor/Qualcomm allowlist, chipset names, or
+Android version as proof that an extension is executable.
 
 #### Target behavior
 
@@ -428,19 +426,19 @@ ARM64 device starts VozLocal
               └─ future SVE/SVE2/SME backend when benchmarked
 ```
 
-The Pixel 8 Pro's Tensor G3 is a primary benchmark device for this work. When its
-runtime capability flags confirm support, it should select an I8MM-capable
-backend. An ARM64 device that lacks I8MM must instead remain on a dot-product or
-baseline backend without any user-visible failure. The app must never infer I8MM
-support from the fact that the device is a Pixel, a recent Android release, or an
-ARMv9-branded SoC.
+The Pixel 8 Pro test device reports FP16, dot-product, I8MM, SVE, and SVE2 across
+all nine schedulable cores. Automatic mode selects the ARMv8.6 I8MM module on that
+device. This restores the quantized matrix-multiplication path that was lost when
+I8MM was removed from the old global compiler flags. An ARM64 device without
+I8MM falls through to FP16/dot-product, dot-product, or ARMv8-A without relying on
+the Pixel or Tensor name.
 
-#### Preferred ggml implementation
+#### Implemented ggml architecture
 
-The vendored ggml source already contains the required ARM feature scoring code.
-On Android/Linux it reads `AT_HWCAP` and `AT_HWCAP2`, including dot-product,
-FP16, I8MM, SVE, SVE2, and SME flags. The preferred implementation is therefore
-ggml's backend mechanism rather than a parallel Kotlin-only detector:
+The vendored ggml source contains the ARM feature scoring code. On Android/Linux
+it reads `AT_HWCAP` and `AT_HWCAP2`, including dot-product, FP16, I8MM, SVE,
+SVE2, and SME flags. VozLocal uses that mechanism rather than duplicating native
+feature detection in Kotlin:
 
 1. Configure the native build with `GGML_BACKEND_DL=ON` and
    `GGML_CPU_ALL_VARIANTS=ON`.
@@ -448,12 +446,21 @@ ggml's backend mechanism rather than a parallel Kotlin-only detector:
    combination because the point is to build multiple architectures.
 3. Package the baseline and CPU-variant shared libraries in every `arm64-v8a`
    APK/AAB split, including their dependencies and the C++ shared runtime.
-4. Initialize ggml's backend loader from the app's extracted native-library
-   directory, then allow its score function to select the best compatible CPU
-   implementation.
-5. Keep the existing baseline backend available if dynamic discovery, a missing
-   packaged library, or feature probing fails. Failure to optimize must only
-   reduce speed; it must never prevent transcription.
+4. Load exact Android JNI-library sonames in a controlled order. This works when
+   Android keeps native libraries inside the APK (`extractNativeLibs=false`),
+   where filesystem enumeration cannot discover them.
+5. In Automatic mode, try ARMv8.6 I8MM, ARMv8.2 FP16/dot-product,
+   ARMv8.2 dot-product, then ARMv8-A. Every module performs its own HWCAP score
+   before registering CPU kernels.
+6. In Compatibility mode, load only `android_armv8.0_1`.
+7. Treat the absence of every compatible module as a controlled initialization
+   error. Whisper context creation never proceeds with a null CPU backend.
+
+The build currently produces all seven upstream Android ARM variants, totaling
+approximately 5.9 MB before APK-level effects. SVE/SVE2/SME modules are packaged
+but deliberately not selected by the release policy yet. They require comparative
+device benchmarks; a CPU advertising an instruction does not prove that a given
+kernel implementation is faster or more thermally efficient than I8MM.
 
 This approach is preferable to loading multiple top-level `whisper` wrappers in
 Kotlin. ggml owns the actual matrix kernels and can score feature-specific CPU
@@ -464,13 +471,13 @@ which ggml kernel implementation runs.
 
 #### Android packaging and lifecycle requirements
 
-Dynamic backend loading is the riskier part of this project, not the capability
-test itself. Before enabling it for users, the implementation must verify that:
+Dynamic backend loading and process lifecycle are the main integration risks.
+The implementation and release checks therefore require that:
 
 - Gradle packages every variant into both debug APKs and release AAB ABI splits.
-- The backend loader can resolve libraries from Android's native-library path on
-  Android 8 through current Android releases; it must not depend on a writable
-  application directory or manually extracted executable files.
+- The loader first uses an on-disk library path when present and otherwise uses
+  the packaged JNI soname resolved by Android's linker namespace. It never copies
+  executable libraries to a writable application directory.
 - R8/resource shrinking does not remove library metadata or JNI entry points.
 - `libc++_shared.so` and ggml backend dependencies are packaged exactly once and
   load in a deterministic order.
@@ -478,6 +485,22 @@ test itself. Before enabling it for users, the implementation must verify that:
   remain correct when a backend is selected dynamically.
 - The fallback baseline remains available after any failed `dlopen`, feature
   score of zero, or unavailable optional backend.
+- Backend selection happens once per process before any model is created. A mode
+  change applies after VozLocal fully restarts because ggml backends cannot be
+  safely exchanged underneath a live registry.
+- Before the first optimized initialization/warmup, the app writes a synchronous
+  probe marker. If the process does not finish the bounded warmup, the next
+  launch quarantines Automatic mode and returns to Compatibility. Selecting
+  Automatic again clears the quarantine for a deliberate retry.
+- The old `libwhisper_v8fp16_va.so` wrapper is not packaged. The main activity
+  and accessibility service share the same process-wide backend choice.
+
+The former warmup passed silence through a normal unlimited decode with automatic
+language detection. Quantized models could remain CPU-bound generating fallback
+tokens for a long time, obscuring actual startup and kernel performance. The new
+native warmup uses fixed English, one output token, no temperature fallback, and
+a small audio context. It still touches model buffers and selected kernels but is
+bounded.
 
 The app should log only non-sensitive diagnostic facts in debug builds—selected
 backend name, enabled CPU features, thread count, model id, and timing. Release
@@ -506,14 +529,38 @@ thermal measurements show that a formerly fast configuration is throttling. The
 user-facing default must prefer reliable, sustained transcription over a short
 synthetic benchmark win.
 
-#### Technical Evaluation: Complexity, Risk & GPU Comparison
+#### Technical evaluation and longer-term work
 
-| Dimension | Assessment | Details |
-|---|:---:|---|
-| **Implementation Complexity** | **6.5 / 10** | • `ggml` already contains Android SoC target definitions in `ggml/src/CMakeLists.txt` (`android_armv8.0_1`, `android_armv8.2_1` dotprod, `android_armv8.2_2` fp16, `android_armv8.6_1` i8mm, `android_armv9.0_1` sve2).<br>• Android 7+ (API 24+) dynamic linker restrictions require passing `context.applicationInfo.nativeLibraryDir` via JNI for `dlopen()` to resolve backend libraries.<br>• Gradle must package and protect all variant `.so` files against R8/shrinking.<br>• Uncompressed APK size increases by ~8–12 MB across all variants. |
-| **Stability Risk** | **Low (with static fallback)<br>High (if standalone)** | • **Standalone risk**: If a device driver reports `AT_HWCAP` support for an optional instruction that its efficiency cores cannot execute, the app terminates with `SIGILL`.<br>• **Mitigation**: The app must keep a statically linked `armv8.2-a+fp16+dotprod` baseline always resident. Dynamic variants are loaded only as optional accelerators; if `dlopen()` or scoring fails, execution seamlessly continues on the verified baseline. |
-| **Expected ROI (CPU)** | **~15% – 25% speedup** | • Accelerates quantized matrix multiplication (`q5_1`, `q8_0`).<br>• A 100-second WhatsApp audio note on Pixel 8 Pro (Tensor G3) decreases from ~70s to ~55s.<br>• Live dictation (2–6s utterances) decreases from ~1.0s to ~0.8s (near-imperceptible for live typing). |
-| **Alternative: GPU / Vulkan** | **3x – 5x potential speedup** | • Mobile CPU inference is fundamentally constrained by memory bandwidth and thermal throttling during sustained workloads.<br>• Evaluating `whisper.cpp`'s **Vulkan / OpenCL GPU backend** to offload encoder matrices to mobile GPUs (e.g., ARM Mali-G715 on Tensor G3, Qualcomm Adreno) offers significantly higher return-on-investment (3x–5x) than micro-optimizing CPU vector extensions alone. |
+| Dimension | Current assessment |
+|---|---|
+| **Implemented CPU tiers** | ARMv8-A → dot-product → FP16/dot-product → I8MM. Selection is native HWCAP-based and remains opt-in while field validation grows. |
+| **Measured package cost** | The seven generated ARM CPU modules total about 5.9 MB uncompressed. APK/AAB and installed-size effects are measured in release checks rather than estimated. |
+| **Stability model** | The guaranteed tier is ARMv8-A, not ARMv8.2. GGML compiles feature scoring without LTO so optimized instructions cannot leak into the pre-score path. A persisted warmup marker adds next-launch recovery. |
+| **Expected CPU return** | I8MM should particularly help quantized matrix multiplication, but no percentage is promised until the repeatable baseline/I8MM corpus is measured. Latency, WER/CER, temperature, energy, and sustained throughput all gate promotion. |
+| **SVE/SVE2/SME** | Capability detection is available, but these tiers remain disabled by policy until they beat I8MM on representative devices and long thermal runs. |
+| **GPU / Vulkan / OpenCL** | This remains a separate experiment. Potential gains and driver risk must be measured on each backend; CPU dispatch is the lower-risk compatibility and regression fix, not evidence of an assumed GPU multiplier. |
+
+Longer-term CPU work should proceed in this order:
+
+1. Record controlled baseline-versus-I8MM results for short, two-minute, and
+   sustained recordings on the Pixel 8 Pro.
+2. Add selected tier, native build ID, cold/warm state, streaming state,
+   real-time factor, and thermal state to the existing local benchmark schema.
+3. Test 3/4/5/6 threads per model and quantization. Keep thread selection separate
+   from instruction selection; more heterogeneous cores can increase contention
+   and heat instead of throughput.
+4. Add fresh-process instrumentation for Compatibility, Automatic, missing
+   optional modules, and next-launch recovery. GGML's registry is process-global,
+   so tests must not pretend to switch tiers in one process.
+5. Promote Automatic to the default only after representative non-Pixel ARM64
+   devices pass instruction safety, transcript parity, cancellation, and thermal
+   gates.
+6. Benchmark SVE2 independently. If it wins only for particular models or audio
+   lengths, make the preference profile model-aware rather than globally ranking
+   it above I8MM.
+7. Explore CPU affinity only after thread-count measurements. Pinning to prime or
+   performance cores can improve bursts while worsening sustained thermals and UI
+   responsiveness, so it must never be inferred solely from `/proc/cpuinfo`.
 
 ## 📄 License & Acknowledgments
 
