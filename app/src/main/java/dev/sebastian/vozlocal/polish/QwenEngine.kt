@@ -104,6 +104,11 @@ class QwenEngine {
             result = result.replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
         }
 
+        // 5.5. Spanish orthography & missing accent restoration
+        if (language == "es" || language == "auto") {
+            result = SpanishOrthographyHelper.fixAccents(result)
+        }
+
         // 6. Ensure terminal punctuation.
         val last = result.lastOrNull()
         if (last != null && last !in ".!?") result += "."

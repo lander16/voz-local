@@ -18,7 +18,7 @@ private const val TAG = "WhisperEngine"
  * when no explicit initial prompt is configured.
  */
 internal const val SPANISH_PROMPT =
-    "Hola, ¿cómo estás? Voy a dictar en español. Uso acentos y puntuación correcta."
+    "Hola, ¿cómo estás? Voy a dictar en español con correcta ortografía, tildes y puntuación: así, también, aquí, allí, después, malecón, canción, estación, corazón, más, qué, cómo, cuándo, dónde."
 
 /**
  * Resolves the effective initial prompt: an explicitly-configured prompt wins;
