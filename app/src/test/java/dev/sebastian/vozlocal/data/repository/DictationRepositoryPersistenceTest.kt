@@ -2,7 +2,7 @@ package dev.sebastian.vozlocal.data.repository
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
-import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
+import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

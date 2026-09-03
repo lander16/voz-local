@@ -7,9 +7,8 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Local rule-based text polisher. Strips filler words, collapses
- * repeated tokens, and applies light smart-punctuation / capitalization.
- * Pure Kotlin — no model file required. Despite the historical class name,
- * this is rule-based cleanup rather than an LLM/AI backend.
+ * repeated tokens, applies light smart-punctuation, capitalization, and
+ * restores Spanish orthography/accents. Pure Kotlin — zero latency, no model file required.
  *
  * The polisher is intentionally conservative: it only removes pure
  * vocalizations (um, uh, hm, …) that are never words in the target
@@ -17,7 +16,9 @@ import java.util.concurrent.ConcurrentHashMap
  * because they are ambiguous — removing "este", "bueno", "so" or
  * "well" destroys legitimate text ("este libro" must stay "este libro").
  */
-class QwenEngine {
+typealias QwenEngine = TextPolishEngine
+
+class TextPolishEngine {
     enum class CleanupMode { MINIMAL, BALANCED, AGGRESSIVE }
 
     // Only never-legitimate vocalizations per language. Everything else from

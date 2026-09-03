@@ -14,8 +14,8 @@ import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.data.repository.DictationRepository
 import dev.sebastian.vozlocal.data.repository.SensitiveApp
 import dev.sebastian.vozlocal.data.repository.VadDownloadStatus
-import dev.sebastian.vozlocal.polish.QwenEngine
-import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
+import dev.sebastian.vozlocal.polish.TextPolishEngine
+import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.ArrayList
@@ -243,7 +243,7 @@ class MainViewModel(
     }
 
     fun setCleanupMode(value: CleanupMode) {
-        repository.saveCleanupMode(QwenEngine.CleanupMode.valueOf(value.name))
+        repository.saveCleanupMode(value)
         cleanupMode.value = value
     }
 
@@ -536,7 +536,7 @@ class MainViewModel(
                 autoCapitalize = autoCapitalization.value,
                 applyDict = applyDictionary.value,
                 useAiPolisher = useAiPolisher.value,
-                cleanupMode = QwenEngine.CleanupMode.valueOf(cleanupMode.value.name)
+                cleanupMode = cleanupMode.value
             )
 
             val wordCount = processedText.split(REGEX_WORD_SPLIT).count { it.isNotBlank() }
@@ -621,7 +621,7 @@ class MainViewModel(
                 autoCapitalize = autoCapitalization.value,
                 applyDict = applyDictionary.value,
                 useAiPolisher = useAiPolisher.value,
-                cleanupMode = QwenEngine.CleanupMode.valueOf(cleanupMode.value.name)
+                cleanupMode = cleanupMode.value
             )
 
             repository.insertHistory(

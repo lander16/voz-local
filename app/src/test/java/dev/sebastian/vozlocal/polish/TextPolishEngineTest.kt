@@ -1,7 +1,7 @@
 package dev.sebastian.vozlocal.polish
 
 import kotlinx.coroutines.test.runTest
-import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
+import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -13,9 +13,9 @@ import org.junit.Test
  * appends a terminal period, so assertions reflect the real production output
  * (e.g. "um uh hello" -> "Hello." rather than the raw "hello.").
  */
-class QwenEngineTest {
+class TextPolishEngineTest {
 
-    private val engine = QwenEngine()
+    private val engine = TextPolishEngine()
 
     @Test
     fun polish_stripsUniversalVocalizationsInAutoMode() = runTest {

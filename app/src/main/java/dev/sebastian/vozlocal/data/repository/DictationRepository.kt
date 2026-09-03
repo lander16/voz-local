@@ -11,8 +11,8 @@ import dev.sebastian.vozlocal.data.model.DictationModel
 import dev.sebastian.vozlocal.data.model.DictationStat
 import dev.sebastian.vozlocal.data.model.DictionaryWord
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
-import dev.sebastian.vozlocal.polish.QwenEngine
-import dev.sebastian.vozlocal.polish.QwenEngine.CleanupMode
+import dev.sebastian.vozlocal.polish.TextPolishEngine
+import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import dev.sebastian.vozlocal.whisper.WhisperEngine
 import dev.sebastian.vozlocal.whisper.WhisperParams
 import dev.sebastian.vozlocal.whisper.forLiveAudio
@@ -58,7 +58,8 @@ class DictationRepository(private val context: Context) {
     val whisperEngine = WhisperEngine(context)
     val modelDownloader = ModelDownloader(context)
     val audioDecoder = AudioDecoder(context)
-    val qwenEngine = QwenEngine()
+    val textPolishEngine = TextPolishEngine()
+    val qwenEngine: TextPolishEngine get() = textPolishEngine
 
     // Regex cache for the dictionary replacement pass, invalidated whenever words change.
     private var cachedWordRegexes: List<Regex> = emptyList()
@@ -840,7 +841,7 @@ class DictationRepository(private val context: Context) {
 
         // 5. Optional local rule-based "AI" polisher pass (filler removal, punctuation polish)
         if (useAiPolisher) {
-            result = qwenEngine.polish(result, getLanguage(), cleanupMode)
+            result = textPolishEngine.polish(result, getLanguage(), cleanupMode)
         }
 
         result

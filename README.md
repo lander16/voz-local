@@ -64,9 +64,9 @@ VozLocal System Architecture (v2)
 │  AudioRecorder     │  │  DictationRepository      │  │  DictationAccessibility   │
 │  (process-wide     │  │  - WhisperEngine (load)   │  │  Service                  │
 │   singleton,       │  │  - AudioDecoder (decode)  │  │  - Floating overlay       │
-│  synchronized(this)│  │  - QwenEngine (polish)    │  │  - Text injection         │
-└─────────┬──────────┘  │  - Room (DAO) + Prefs     │  │  - Same singleton         │
-          │             │  - postProcessText()      │  │    recorder               │
+│  synchronized(this)│  │  - TextPolishEngine       │  │  - Text injection         │
+│  - Room (DAO) + Prefs     │  │  - Same singleton         │
+└─────────┬──────────┘  │  - postProcessText()      │  │    recorder               │
           │             └────────────┬─────────────┘  └────────────┬──────────────┘
           │                          │                              │
 ┌─────────▼──────────────────────────▼──────────────────────────────▼─────────┐
@@ -90,7 +90,7 @@ VozLocal System Architecture (v2)
 
 | Field | Type | Notes |
 |---|---|---|
-| `repository` | `DictationRepository` | Lazy-initialized; owns the `WhisperEngine`, `ModelDownloader`, `AudioDecoder`, `QwenEngine`, and Room database. |
+| `repository` | `DictationRepository` | Lazy-initialized; owns the `WhisperEngine`, `ModelDownloader`, `AudioDecoder`, `TextPolishEngine`, and Room database. |
 | `audioRecorder` | `AudioRecorder` | Process-wide singleton. Both `MainViewModel` and `DictationAccessibilityService` read this same instance; state transitions are guarded by `synchronized(this)` and the IO reader thread reads `@Volatile` fields, so the two can never open `AudioRecord` on the same mic. |
 | `applicationScope` | `CoroutineScope` | `SupervisorJob() + Dispatchers.IO`. Owns the long-lived `repository.initializeModels()` call (seed default model rows, prune stale ones, refresh download state). |
 
@@ -106,7 +106,7 @@ Compose Screen
                  ├─ WhisperEngine     (JNI bridge to whisper.cpp)
                  ├─ AudioDecoder      (MediaCodec + PCM resample)
                  ├─ ModelDownloader   (OkHttp + SHA-256 verify)
-                 ├─ QwenEngine        (rule-based cleanup)
+                 ├─ TextPolishEngine  (rule-based cleanup & Spanish accent normalization)
                  └─ Room DAOs         (model / history / dictionary / stats)
 ```
 
@@ -126,8 +126,8 @@ A `SharedPreferences.OnSharedPreferenceChangeListener` is registered in the serv
 | **Language** | Kotlin 2.2.10 & C++ (JNI, vendored whisper.cpp) |
 | **UI Framework** | Jetpack Compose (Material 3, BOM 2024.09.00) |
 | **Architecture** | MVVM, Kotlin Coroutines, `StateFlow`, process-scoped singletons |
-| **STT Engine** | `whisper.cpp` (q8_0 / q5_1 GGML quantized with ARMv8.2-A / ARMv9-A `+dotprod` and `+i8mm` hardware acceleration, dynamic `audio_ctx`) |
-| **Text Cleanup** | Local rule-based Kotlin engine (`QwenEngine`) — Minimal / Balanced / Aggressive modes, pure Kotlin, no model file |
+| **STT Engine** | `whisper.cpp` (q8_0 / q5_1 GGML quantized with ARMv8.2-A / ARMv9-A `+dotprod` and `+i8mm` hardware acceleration, adaptive multi-core threading) |
+| **Text Cleanup** | Local rule-based Kotlin engine (`TextPolishEngine`) — Minimal / Balanced / Aggressive modes, Spanish orthography normalization, pure Kotlin, zero latency |
 | **Persistence** | Room 2.7.0 (version 2, with stub `MIGRATION_1_2`, no destructive fallback) |
 | **Audio Capture** | `AudioRecord` API (16 kHz mono PCM, `VOICE_RECOGNITION` source) |
 | **Audio Decoding** | `MediaCodec` + `MediaExtractor`; drains output EOS, handles decoder PCM format changes, downmixes channels, and resamples to 16 kHz |
