@@ -21,10 +21,12 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.Locale
+import dev.sebastian.vozlocal.R
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.ui.historyDateGroupLabel
 import dev.sebastian.vozlocal.ui.formatShortDateTime
@@ -59,15 +61,15 @@ fun HistoryTab(
     if (confirmClear) {
         AlertDialog(
             onDismissRequest = { confirmClear = false },
-            title = { Text("Clear all history?") },
-            text = { Text("This removes every saved transcript from local storage.") },
+            title = { Text(stringResource(R.string.clear_all_history_title)) },
+            text = { Text(stringResource(R.string.clear_all_history_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.clearHistory()
                     confirmClear = false
-                }) { Text("Clear", color = TertiaryColor) }
+                }) { Text(stringResource(R.string.button_clear), color = TertiaryColor) }
             },
-            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { confirmClear = false }) { Text(stringResource(R.string.button_cancel)) } }
         )
     }
 
@@ -83,8 +85,8 @@ fun HistoryTab(
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Transcription history", fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                        Text(text = "Search, copy, share, or reuse saved dictations.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(text = stringResource(R.string.history_title), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(text = stringResource(R.string.history_subtitle), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     if (history.isNotEmpty()) {
                         TextButton(
@@ -94,7 +96,7 @@ fun HistoryTab(
                         ) {
                             Icon(imageVector = Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text(text = "Clear", fontWeight = FontWeight.Bold)
+                            Text(text = stringResource(R.string.button_clear), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -114,7 +116,7 @@ fun HistoryTab(
                             }
                         }
                     },
-                    placeholder = { Text("Search text, file, or model") },
+                    placeholder = { Text(stringResource(R.string.search_history_placeholder)) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PrimaryColor,
@@ -129,7 +131,7 @@ fun HistoryTab(
 
                 if (query.isNotBlank()) {
                     Text(
-                        text = "${filteredHistory.size} ${if (filteredHistory.size == 1) "match" else "matches"} found",
+                        text = if (filteredHistory.size == 1) stringResource(R.string.match_found) else stringResource(R.string.matches_found, filteredHistory.size),
                         fontSize = 12.sp,
                         color = PrimaryColor,
                         fontWeight = FontWeight.Bold
@@ -153,7 +155,7 @@ fun HistoryTab(
                         )
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
-                            text = if (query.isBlank()) "No transcript history yet." else "No results for \"$query\".",
+                            text = if (query.isBlank()) stringResource(R.string.no_history_yet) else stringResource(R.string.no_results_for, query),
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -175,7 +177,7 @@ fun HistoryTab(
                         searchQuery = query,
                         onCopy = {
                             clipboardManager.setText(AnnotatedString(item.text))
-                            Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
                         },
                         onShare = { shareTranscription(context, item) },
                         onReuse = { onReuse(item.text) },
@@ -230,15 +232,15 @@ fun HistoryCard(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete transcript?") },
-            text = { Text("This transcript will be removed from local history.") },
+            title = { Text(stringResource(R.string.delete_transcript_title)) },
+            text = { Text(stringResource(R.string.delete_transcript_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete()
                     confirmDelete = false
-                }) { Text("Delete", color = TertiaryColor) }
+                }) { Text(stringResource(R.string.button_delete), color = TertiaryColor) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.button_cancel)) } }
         )
     }
 

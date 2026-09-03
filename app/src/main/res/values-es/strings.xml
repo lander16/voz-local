@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">VozLocal</string>
+    <string name="accessibility_service_description">El servicio de dictado de VozLocal proporciona dictado flotante global. Toca el micrófono flotante para grabar e insertar transcripciones automáticamente en cualquier campo de texto.</string>
+
+    <!-- Navegación -->
+    <string name="nav_dictate">Dictar</string>
+    <string name="nav_models">Modelos</string>
+    <string name="nav_shared">Audios</string>
+    <string name="nav_history">Historial</string>
+
+    <!-- Pestaña de Audio Compartido -->
+    <string name="shared_audio_title">Transcriptor de Audio</string>
+    <string name="shared_audio_subtitle">Transcribe notas de voz de WhatsApp o Telegram, o selecciona archivos de audio locales directamente desde el almacenamiento de tu teléfono.</string>
+    <string name="choose_audio_file">Seleccionar Archivo de Audio</string>
+    <string name="supported_audio_formats">Compatible con MP3, WAV, M4A, OGG, FLAC y OPUS</string>
+    <string name="size_label">Tamaño: %s</string>
+    <string name="ready_to_transcribe">Listo para Transcribir</string>
+    <string name="active_transcription_model">Modelo activo: %s</string>
+    <string name="transcribe_audio_button">Transcribir Audio</string>
+    <string name="transcription_completed">TRANSCRIPCIÓN COMPLETADA</string>
+    <string name="long_audio_notice">Audio de larga duración detectado: La inferencia con IA se ejecuta 100% en local en el procesador de tu dispositivo para máxima privacidad. El tiempo de procesamiento es proporcional a la duración del audio.</string>
+    <string name="stop_transcription">Detener Transcripción</string>
+    <string name="search_in_transcript_placeholder">Buscar en la transcripción…</string>
+    <string name="matches_found">%d coincidencias encontradas</string>
+    <string name="match_found">1 coincidencia encontrada</string>
+    <string name="copied_to_clipboard">¡Copiado al portapapeles!</string>
+    <string name="share_text">Compartir texto</string>
+    <string name="copy_text">Copiar texto</string>
+    <string name="search_in_transcript">Buscar en transcripción</string>
+
+    <!-- Etapas -->
+    <string name="stage_decode">Decodificar</string>
+    <string name="stage_load">Cargar</string>
+    <string name="stage_transcribe">Transcribir</string>
+    <string name="stage_polish">Pulir</string>
+
+    <!-- Pestaña de Historial -->
+    <string name="history_title">Historial de transcripciones</string>
+    <string name="history_subtitle">Busca, copia, comparte o reutiliza dictados guardados.</string>
+    <string name="search_history_placeholder">Buscar texto, archivo o modelo</string>
+    <string name="clear_all_history_title">¿Borrar todo el historial?</string>
+    <string name="clear_all_history_message">Esto eliminará todas las transcripciones guardadas de tu teléfono.</string>
+    <string name="delete_transcript_title">¿Borrar transcripción?</string>
+    <string name="delete_transcript_message">Esta transcripción será eliminada de tu historial local.</string>
+    <string name="no_history_yet">Aún no hay transcripciones guardadas.</string>
+    <string name="no_results_for">No se encontraron resultados para \"%s\".</string>
+    <string name="button_clear">Borrar</string>
+    <string name="button_cancel">Cancelar</string>
+    <string name="button_delete">Eliminar</string>
+
+    <!-- Pestaña de Dictado -->
+    <string name="tap_to_dictate">Toca para dictar</string>
+    <string name="tap_to_speak">Toca para hablar</string>
+    <string name="listening">Escuchando…</string>
+    <string name="transcribing">Transcribiendo…</string>
+    <string name="offline_guarantee_badge">100% Offline • IA Privada</string>
+</resources>

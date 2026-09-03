@@ -29,10 +29,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sebastian.vozlocal.R
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 
@@ -75,13 +77,13 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "Shared Audio Transcriber",
+                    text = stringResource(R.string.shared_audio_title),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Transcribe voice notes from WhatsApp/Telegram, or select local audio files directly from your phone storage.",
+                    text = stringResource(R.string.shared_audio_subtitle),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -121,13 +123,13 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                         }
 
                         Text(
-                            text = "Tap to choose audio file",
+                            text = stringResource(R.string.choose_audio_file),
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Supports MP3, WAV, M4A, OGG, FLAC and OPUS",
+                            text = stringResource(R.string.supported_audio_formats),
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -238,7 +240,12 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 textAlign = TextAlign.Center
                             )
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                listOf("Decode", "Load", "Transcribe", "Polish").forEachIndexed { index, label ->
+                                listOf(
+                                    stringResource(R.string.stage_decode),
+                                    stringResource(R.string.stage_load),
+                                    stringResource(R.string.stage_transcribe),
+                                    stringResource(R.string.stage_polish)
+                                ).forEachIndexed { index, label ->
                                     val active = when {
                                         progress < 0.28f -> index == 0
                                         progress < 0.35f -> index == 1
@@ -267,7 +274,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                             modifier = Modifier.size(18.dp)
                                         )
                                         Text(
-                                            text = "Audio de larga duración detectado: La inferencia con IA se ejecuta 100% en local en el procesador de tu dispositivo para máxima privacidad. El tiempo de procesamiento es proporcional al audio.",
+                                            text = stringResource(R.string.long_audio_notice),
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             lineHeight = 15.sp
@@ -285,11 +292,11 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Stop,
-                                    contentDescription = "Stop transcription",
+                                    contentDescription = stringResource(R.string.stop_transcription),
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Detener transcripción", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(stringResource(R.string.stop_transcription), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                             }
                         }
                     } else if (resultText.isNotEmpty()) {
@@ -346,7 +353,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "Transcription completed",
+                                    text = stringResource(R.string.transcription_completed),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = PrimaryColor,
@@ -362,7 +369,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Search,
-                                            contentDescription = "Search in transcript",
+                                            contentDescription = stringResource(R.string.search_in_transcript),
                                             tint = if (searchInTranscript) PrimaryColor else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
@@ -371,19 +378,19 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Share,
-                                            contentDescription = "Share text",
+                                            contentDescription = stringResource(R.string.share_text),
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                     IconButton(
                                         onClick = {
                                             clipboardManager.setText(AnnotatedString(resultText))
-                                            Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.copied_to_clipboard), Toast.LENGTH_SHORT).show()
                                         }
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.ContentCopy,
-                                            contentDescription = "Copy text",
+                                            contentDescription = stringResource(R.string.copy_text),
                                             tint = PrimaryColor
                                         )
                                     }
@@ -402,7 +409,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                             }
                                         }
                                     },
-                                    placeholder = { Text("Search in transcript...", fontSize = 13.sp) },
+                                    placeholder = { Text(stringResource(R.string.search_in_transcript_placeholder), fontSize = 13.sp) },
                                     singleLine = true,
                                     colors = OutlinedTextFieldDefaults.colors(
                                         focusedBorderColor = PrimaryColor,
@@ -413,7 +420,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
 
                                 if (transcriptQuery.isNotBlank()) {
                                     Text(
-                                        text = "$matchCount match${if (matchCount == 1) "" else "es"} found",
+                                        text = if (matchCount == 1) stringResource(R.string.match_found) else stringResource(R.string.matches_found, matchCount),
                                         fontSize = 12.sp,
                                         color = PrimaryColor,
                                         fontWeight = FontWeight.Bold,
@@ -443,13 +450,13 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Ready to Transcribe",
+                                text = stringResource(R.string.ready_to_transcribe),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Active Transcription Model: ${activeModel?.name ?: "No model selected"}",
+                                text = stringResource(R.string.active_transcription_model, activeModel?.name ?: "-"),
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -477,7 +484,7 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                         tint = MaterialTheme.colorScheme.onPrimary
                                     )
                                     Text(
-                                        text = "Start Offline Transcription",
+                                        text = stringResource(R.string.transcribe_audio_button),
                                         fontWeight = FontWeight.ExtraBold,
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.onPrimary

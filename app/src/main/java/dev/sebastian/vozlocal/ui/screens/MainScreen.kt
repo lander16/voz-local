@@ -26,9 +26,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sebastian.vozlocal.R
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
@@ -306,11 +308,11 @@ fun MainScreen(
                         },
                         title = {
                             val titleText = when (activeTab) {
-                                Tab.DICTATE -> "Dictate"
-                                Tab.MODELS -> "Models"
+                                Tab.DICTATE -> stringResource(R.string.nav_dictate)
+                                Tab.MODELS -> stringResource(R.string.nav_models)
                                 Tab.DICTIONARY -> "Dictionary"
-                                Tab.HISTORY -> "History"
-                                Tab.SHARED -> "Shared"
+                                Tab.HISTORY -> stringResource(R.string.nav_history)
+                                Tab.SHARED -> stringResource(R.string.nav_shared)
                                 Tab.STATS -> "Stats"
                             }
                             Text(
@@ -348,10 +350,10 @@ fun MainScreen(
                             windowInsets = WindowInsets.navigationBars
                         ) {
                             val tabs = listOf(
-                                Triple(Tab.DICTATE, "Dictate", Icons.Default.KeyboardVoice),
-                                Triple(Tab.MODELS, "Models", Icons.Default.CloudDownload),
-                                Triple(Tab.SHARED, "Shared", Icons.Default.AudioFile),
-                                Triple(Tab.HISTORY, "History", Icons.Default.History)
+                                Triple(Tab.DICTATE, stringResource(R.string.nav_dictate), Icons.Default.KeyboardVoice),
+                                Triple(Tab.MODELS, stringResource(R.string.nav_models), Icons.Default.CloudDownload),
+                                Triple(Tab.SHARED, stringResource(R.string.nav_shared), Icons.Default.AudioFile),
+                                Triple(Tab.HISTORY, stringResource(R.string.nav_history), Icons.Default.History)
                             )
 
                             tabs.forEach { (tab, label, icon) ->

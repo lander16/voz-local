@@ -1,4 +1,57 @@
 <resources>
     <string name="app_name">VozLocal</string>
     <string name="accessibility_service_description">VozLocal Dictation Service provides global floating dictation. Tap the floating microphone to record and auto-paste transcriptions into any text box.</string>
+
+    <!-- Navigation -->
+    <string name="nav_dictate">Dictate</string>
+    <string name="nav_models">Models</string>
+    <string name="nav_shared">Shared</string>
+    <string name="nav_history">History</string>
+
+    <!-- Shared Audio Tab -->
+    <string name="shared_audio_title">Shared Audio Transcriber</string>
+    <string name="shared_audio_subtitle">Transcribe voice notes from WhatsApp/Telegram, or select local audio files directly from your phone storage.</string>
+    <string name="choose_audio_file">Choose Audio File</string>
+    <string name="supported_audio_formats">Supports MP3, WAV, M4A, OGG, FLAC and OPUS</string>
+    <string name="size_label">Size: %s</string>
+    <string name="ready_to_transcribe">Ready to Transcribe</string>
+    <string name="active_transcription_model">Active Transcription Model: %s</string>
+    <string name="transcribe_audio_button">Transcribe Audio</string>
+    <string name="transcription_completed">TRANSCRIPTION COMPLETED</string>
+    <string name="long_audio_notice">Long audio detected: On-device AI inference runs 100% locally on your device\'s processor for maximum privacy. Processing time is proportional to audio duration.</string>
+    <string name="stop_transcription">Stop Transcription</string>
+    <string name="search_in_transcript_placeholder">Search in transcript…</string>
+    <string name="matches_found">%d matches found</string>
+    <string name="match_found">1 match found</string>
+    <string name="copied_to_clipboard">Copied to clipboard!</string>
+    <string name="share_text">Share text</string>
+    <string name="copy_text">Copy text</string>
+    <string name="search_in_transcript">Search in transcript</string>
+
+    <!-- Stages -->
+    <string name="stage_decode">Decode</string>
+    <string name="stage_load">Load</string>
+    <string name="stage_transcribe">Transcribe</string>
+    <string name="stage_polish">Polish</string>
+
+    <!-- History Tab -->
+    <string name="history_title">Transcription history</string>
+    <string name="history_subtitle">Search, copy, share, or reuse saved dictations.</string>
+    <string name="search_history_placeholder">Search text, file, or model</string>
+    <string name="clear_all_history_title">Clear all history?</string>
+    <string name="clear_all_history_message">This removes every saved transcript from local storage.</string>
+    <string name="delete_transcript_title">Delete transcript?</string>
+    <string name="delete_transcript_message">This transcript will be removed from local history.</string>
+    <string name="no_history_yet">No transcript history yet.</string>
+    <string name="no_results_for">No results for \"%s\".</string>
+    <string name="button_clear">Clear</string>
+    <string name="button_cancel">Cancel</string>
+    <string name="button_delete">Delete</string>
+
+    <!-- Dictate Tab -->
+    <string name="tap_to_dictate">Tap to dictate</string>
+    <string name="tap_to_speak">Tap to speak</string>
+    <string name="listening">Listening…</string>
+    <string name="transcribing">Transcribing…</string>
+    <string name="offline_guarantee_badge">100% Offline • Private AI</string>
 </resources>
