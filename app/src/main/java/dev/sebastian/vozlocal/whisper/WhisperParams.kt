@@ -38,18 +38,12 @@ data class WhisperParams(
 )
 
 internal fun WhisperParams.forLiveAudio(sampleCount: Int): WhisperParams {
-    val durationSec = sampleCount.toFloat() / 16000f
-    val dynamicAudioCtx = if (durationSec in 0.5f..28f) {
-        val frames = ((durationSec + 0.75f) * 50).toInt()
-        frames.coerceIn(256, 1500)
-    } else 0
-
     return copy(
-        audioCtx = dynamicAudioCtx,
         singleSegment = false,
         printTimestamps = false,
-        noTimestamps = true,
-        temperatureInc = 0.0f,
+        noTimestamps = false,
+        temperatureInc = 0.2f,
+        audioCtx = 0,
         noContext = false
     )
 }

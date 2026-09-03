@@ -47,39 +47,15 @@ class WhisperParamsTest {
         val params = WhisperParams(
             singleSegment = true,
             printTimestamps = true,
-            noTimestamps = false,
+            noTimestamps = true,
+            temperatureInc = 0.0f,
+            audioCtx = 287
         ).forLiveAudio(16_000 * 5)
 
         assertFalse(params.singleSegment)
         assertFalse(params.printTimestamps)
-        assertTrue(params.noTimestamps)
-        assertEquals(0.0f, params.temperatureInc, 0.0001f)
-        assertEquals(287, params.audioCtx)
-    }
-
-    @Test
-    fun dynamic_audio_context_scaling_calculates_expected_frames() {
-        val baseParams = WhisperParams()
-
-        // Audio < 0.5s returns 0 (default context)
-        assertEquals(0, baseParams.forLiveAudio((16_000 * 0.2f).toInt()).audioCtx)
-        assertEquals(0, baseParams.forLiveAudio(0).audioCtx)
-
-        // Audio in 0.5s..28s returns frames clamped between 256 and 1500
-        // At 0.5s: ((0.5 + 0.75) * 50) = 62 -> clamped to 256
-        assertEquals(256, baseParams.forLiveAudio((16_000 * 0.5f).toInt()).audioCtx)
-
-        // At 5.0s: ((5.0 + 0.75) * 50) = 287
-        assertEquals(287, baseParams.forLiveAudio(16_000 * 5).audioCtx)
-
-        // At 10.0s: ((10.0 + 0.75) * 50) = 537
-        assertEquals(537, baseParams.forLiveAudio(16_000 * 10).audioCtx)
-
-        // At 28.0s: ((28.0 + 0.75) * 50) = 1437
-        assertEquals(1437, baseParams.forLiveAudio(16_000 * 28).audioCtx)
-
-        // Audio > 28s returns 0 (full 30s context / default)
-        assertEquals(0, baseParams.forLiveAudio(16_000 * 29).audioCtx)
-        assertEquals(0, baseParams.forLiveAudio(16_000 * 35).audioCtx)
+        assertFalse(params.noTimestamps)
+        assertEquals(0.2f, params.temperatureInc, 0.0001f)
+        assertEquals(0, params.audioCtx)
     }
 }

@@ -24,6 +24,7 @@ object HallucinationFilter {
     private val PUNCT_GAP = Regex("([.!?])\\s+\\1")
     private val MULTI_SPACE = Regex("\\s+")
     private val REPEATED_SENTENCE = Regex("\\b([^.!?]+[.!?])\\s+\\1\\s*", RegexOption.IGNORE_CASE)
+    private val REPEATED_WORD = Regex("(?i)\\b(\\p{L}+)(?:\\s+\\1\\b){2,}")
 
     fun filter(text: String): String {
         if (text.isBlank()) return text
@@ -33,7 +34,7 @@ object HallucinationFilter {
                 if (isTailMatch(result, match.range)) "" else match.value
             }
         }
-        // Collapse a sentence that's been repeated N>=2 times verbatim
+        // Collapse sentences, multi-word phrases, and words repeated verbatim in loops
         result = collapseRepetition(result)
         // Clean up the resulting double spaces
         result = result.replace(MULTI_SPACE, " ").trim()
@@ -50,13 +51,71 @@ object HallucinationFilter {
     }
 
     private fun collapseRepetition(text: String): String {
-        // If a sentence (ending in . ! ?) appears 2+ times consecutively, keep only one.
-        // The leading \b prevents a false positive like "Goodbye." vs "Bye." where a
-        // substring ("bye.") would otherwise match the backreference case-insensitively.
+        // 1. If a sentence (ending in . ! ?) appears 2+ times consecutively, keep only one.
         var result = text
         while (REPEATED_SENTENCE.containsMatchIn(result)) {
             result = result.replace(REPEATED_SENTENCE, "$1 ")
         }
+        // 2. Collapse pathological single word repetition loops (e.g. "no no no no no..." -> "no")
+        result = result.replace(REPEATED_WORD, "$1")
+        // 3. Collapse multi-word phrase repetition loops (e.g. "ustedes como ven ustedes como ven..." -> "ustedes como ven")
+        result = collapseRepeatedPhrases(result)
         return result
+    }
+
+    private fun collapseRepeatedPhrases(text: String): String {
+        var current = text
+        var previous = ""
+        while (current != previous) {
+            previous = current
+            current = collapseRepeatedPhrasesPass(current)
+        }
+        return current
+    }
+
+    private fun collapseRepeatedPhrasesPass(text: String): String {
+        val tokens = text.split(MULTI_SPACE).filter { it.isNotEmpty() }
+        if (tokens.size < 4) return text
+
+        val resultTokens = mutableListOf<String>()
+        var i = 0
+        while (i < tokens.size) {
+            var matchedLen = 0
+            var matchedReps = 0
+            val maxPhraseLen = minOf(10, (tokens.size - i) / 2)
+            for (len in 2..maxPhraseLen) {
+                val phrase = tokens.subList(i, i + len)
+                var reps = 1
+                while (i + (reps + 1) * len <= tokens.size) {
+                    val nextChunk = tokens.subList(i + reps * len, i + (reps + 1) * len)
+                    val isMatch = (0 until len).all { idx ->
+                        cleanTokenForComparison(phrase[idx]).equals(cleanTokenForComparison(nextChunk[idx]), ignoreCase = true)
+                    }
+                    if (isMatch) {
+                        reps++
+                    } else {
+                        break
+                    }
+                }
+                if (reps >= 2) {
+                    matchedLen = len
+                    matchedReps = reps
+                    break
+                }
+            }
+
+            if (matchedLen > 0 && matchedReps >= 2) {
+                resultTokens.addAll(tokens.subList(i, i + matchedLen))
+                i += matchedLen * matchedReps
+            } else {
+                resultTokens.add(tokens[i])
+                i++
+            }
+        }
+        return resultTokens.joinToString(" ")
+    }
+
+    private fun cleanTokenForComparison(token: String): String {
+        return token.trim().trim('.', ',', '!', '?', ';', ':', '"', '¿', '¡')
     }
 }

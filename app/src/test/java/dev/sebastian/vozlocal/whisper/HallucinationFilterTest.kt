@@ -59,4 +59,23 @@ class HallucinationFilterTest {
     fun filter_is_case_insensitive() {
         assertEquals("", HallucinationFilter.filter("GRACIAS POR VER"))
     }
+
+    @Test
+    fun filter_collapses_repeated_word_loop() {
+        val input = "El cuento de la negro regresa para seguir en el no no no no no no no no no no"
+        val expected = "El cuento de la negro regresa para seguir en el no"
+        assertEquals(expected, HallucinationFilter.filter(input))
+    }
+
+    @Test
+    fun filter_collapses_repeated_phrase_loop_without_punctuation() {
+        val input = "Ustedes como ven ustedes como ven ustedes como ven ustedes como ven ustedes como ven"
+        val expected = "Ustedes como ven"
+        assertEquals(expected, HallucinationFilter.filter(input))
+    }
+
+    @Test
+    fun filter_preserves_legitimate_double_words() {
+        assertEquals("muy muy bien", HallucinationFilter.filter("muy muy bien"))
+    }
 }
