@@ -35,6 +35,19 @@ find_library(LOG_LIB log)
 
 include(FetchContent)
 
+# ARM64 builds keep the JNI / Whisper front-end on the architectural baseline
+# and package ggml's independently scored CPU backends.  Optional instructions
+# (dot-product, FP16, I8MM, SVE, ...) therefore never leak into code that runs
+# before the device capability check. x86_64 retains the regular linked CPU
+# backend so emulator and desktop-style Android builds stay compact.
+if (${ANDROID_ABI} STREQUAL "arm64-v8a")
+    set(BUILD_SHARED_LIBS ON CACHE BOOL "Build shared ggml libraries" FORCE)
+    set(GGML_BACKEND_DL ON CACHE BOOL "Load ggml backends dynamically" FORCE)
+    set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "Build capability-scored CPU variants" FORCE)
+    set(GGML_CPU_ARM_ARCH "" CACHE STRING "No single ARM architecture in dispatch mode" FORCE)
+    set(GGML_NATIVE OFF CACHE BOOL "Do not optimize for the build host" FORCE)
+endif ()
+
 function(build_library target_name)
     add_library(
         ${target_name}
@@ -45,13 +58,8 @@ function(build_library target_name)
     target_compile_definitions(${target_name} PUBLIC GGML_USE_CPU)
     target_compile_definitions(${target_name} PRIVATE WHISPER_VERSION="${WHISPER_VERSION}")
 
-    if (${target_name} STREQUAL "whisper_v8fp16_va")
-        # Keep the distributed ARM64 path compatible with CPUs that do not
-        # implement optional FEAT_I8MM. Configure ggml itself (not only the
-        # JNI wrapper) so its CPU kernels receive the same safe dot-product
-        # baseline selected for this library.
-        set(GGML_CPU_ARM_ARCH "armv8.2-a+fp16+dotprod" CACHE STRING "ggml ARM CPU architecture" FORCE)
-        target_compile_options(${target_name} PRIVATE -march=${GGML_CPU_ARM_ARCH})
+    if (${ANDROID_ABI} STREQUAL "arm64-v8a")
+        target_compile_options(${target_name} PRIVATE -march=armv8-a)
     elseif (${target_name} STREQUAL "whisper_vfpv4")
         target_compile_options(${target_name} PRIVATE -mfpu=neon-vfpv4)
         set(GGML_COMPILE_OPTIONS -mfpu=neon-vfpv4)
@@ -78,11 +86,9 @@ function(build_library target_name)
 
 endfunction()
 
-# Match the vendored output names so the Kotlin LibWhisper.kt loader (which
-# looks for whisper_v8fp16_va / whisper_vfpv4 / whisper) keeps working.
-if (${ANDROID_ABI} STREQUAL "arm64-v8a")
-    build_library("whisper_v8fp16_va")
-elseif (${ANDROID_ABI} STREQUAL "armeabi-v7a")
+# ARM64 now needs only one baseline-safe front-end; ggml chooses an optimized
+# CPU module after startup. Keep the legacy ARMv7 target name for that ABI.
+if (${ANDROID_ABI} STREQUAL "armeabi-v7a")
     build_library("whisper_vfpv4")
 endif ()
 

@@ -5,6 +5,7 @@ import android.content.ComponentCallbacks2
 import android.util.Log
 import dev.sebastian.vozlocal.audio.AudioRecorder
 import dev.sebastian.vozlocal.data.repository.DictationRepository
+import dev.sebastian.vozlocal.whisper.CpuBackendManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -29,6 +30,7 @@ class VozLocalApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CpuBackendManager.startup(this)
         repository = DictationRepository(this)
         applicationScope.launch {
             runCatching { repository.initializeModels() }

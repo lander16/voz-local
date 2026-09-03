@@ -50,12 +50,16 @@ class WhisperEngine(private val context: Context) {
             }
 
             try {
+                val backend = CpuBackendManager.ensureInitialized(context)
+                Log.i(TAG, "Using CPU tier=${backend.tier}, features=${backend.features.joinToString()}")
                 Log.i(TAG, "Loading Whisper model from ${modelFile.absolutePath}")
                 val loadedContext = WhisperContext.createContextFromFile(modelFile.absolutePath)
                 whisperContext = loadedContext
                 currentModelId = modelId
                 Log.i(TAG, "Whisper model $modelId loaded successfully! Pre-warming GGML compute graphs...")
-                warmupInternalLocked(loadedContext)
+                if (warmupInternalLocked(loadedContext)) {
+                    CpuBackendManager.markWarmupSuccessful(context)
+                }
                 true
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load Whisper model $modelId", e)
@@ -70,15 +74,12 @@ class WhisperEngine(private val context: Context) {
         lifecycleMutex.withLock {
             val wContext = whisperContext ?: return@withLock false
             warmupInternalLocked(wContext)
-            true
         }
     }
 
-    private suspend fun warmupInternalLocked(wContext: WhisperContext) {
-        try {
+    private suspend fun warmupInternalLocked(wContext: WhisperContext): Boolean {
+        return try {
             val startMs = System.currentTimeMillis()
-            // 200ms dummy audio (16kHz * 0.2s = 3200 samples)
-            val dummyAudio = FloatArray(3200)
             val warmupParams = WhisperParams(
                 language = "auto",
                 singleSegment = true,
@@ -86,11 +87,13 @@ class WhisperEngine(private val context: Context) {
                 noContext = true,
                 audioCtx = 256
             )
-            wContext.transcribeData(dummyAudio, warmupParams)
+            check(wContext.warmup(com.whispercpp.whisper.WhisperCpuConfig.threadCountFor(warmupParams)))
             val elapsedMs = System.currentTimeMillis() - startMs
             Log.i(TAG, "Whisper GGML compute graph pre-warmed in ${elapsedMs}ms")
+            true
         } catch (e: Exception) {
             Log.w(TAG, "Non-fatal error during model pre-warm pass", e)
+            false
         }
     }
 

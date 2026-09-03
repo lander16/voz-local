@@ -21,8 +21,14 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 #include <android/log.h>
+#if defined(__aarch64__)
+#include <sys/auxv.h>
+#endif
+#include "ggml-backend.h"
 #include "whisper.h"
 
 #define LOG_TAG "VozLocalJNI"
@@ -40,6 +46,180 @@ struct vozlocal_abort_state {
 
 static pthread_mutex_t abort_states_mutex = PTHREAD_MUTEX_INITIALIZER;
 static struct vozlocal_abort_state *abort_states = NULL;
+
+// ggml's backend registry is process-global. Select exactly once, before the
+// first Whisper context is created, and keep a stable diagnostic snapshot.
+static pthread_mutex_t cpu_backend_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bool cpu_backend_initialized = false;
+static char cpu_backend_diagnostics[1024] =
+        "status=uninitialized;mode=compatibility;tier=none;features=none";
+
+static void append_text(char *buffer, size_t capacity, const char *text) {
+    const size_t used = strlen(buffer);
+    if (used + 1 < capacity) {
+        snprintf(buffer + used, capacity - used, "%s", text);
+    }
+}
+
+static void describe_cpu_backend(bool automatic) {
+    ggml_backend_reg_t reg = ggml_backend_reg_by_name("CPU");
+    if (reg == NULL) {
+        snprintf(cpu_backend_diagnostics, sizeof(cpu_backend_diagnostics),
+                 "status=error;mode=%s;tier=none;features=none;error=cpu_backend_unavailable",
+                 automatic ? "automatic" : "compatibility");
+        return;
+    }
+
+    char features[384] = "";
+    bool has_dotprod = false;
+    bool has_fp16 = false;
+    bool has_i8mm = false;
+    bool has_sve = false;
+    bool has_sme = false;
+    ggml_backend_get_features_t get_features =
+            (ggml_backend_get_features_t) ggml_backend_reg_get_proc_address(
+                    reg, "ggml_backend_get_features");
+    if (get_features != NULL) {
+        struct ggml_backend_feature *feature = get_features(reg);
+        for (; feature != NULL && feature->name != NULL; ++feature) {
+            if (features[0] != '\0') append_text(features, sizeof(features), ",");
+            append_text(features, sizeof(features), feature->name);
+            if (strcmp(feature->name, "DOTPROD") == 0) has_dotprod = true;
+            if (strcmp(feature->name, "FP16_VA") == 0) has_fp16 = true;
+            if (strcmp(feature->name, "MATMUL_INT8") == 0) has_i8mm = true;
+            if (strcmp(feature->name, "SVE") == 0) has_sve = true;
+            if (strcmp(feature->name, "SME") == 0) has_sme = true;
+        }
+    }
+    if (features[0] == '\0') snprintf(features, sizeof(features), "none");
+
+    const char *tier = "baseline";
+    if (has_sme) tier = "sme";
+    else if (has_sve && has_i8mm) tier = "sve-i8mm";
+    else if (has_i8mm) tier = "i8mm";
+    else if (has_fp16) tier = "fp16-dotprod";
+    else if (has_dotprod) tier = "dotprod";
+
+#if defined(__aarch64__)
+    const unsigned long hwcap = getauxval(AT_HWCAP);
+    const unsigned long hwcap2 = getauxval(AT_HWCAP2);
+    snprintf(cpu_backend_diagnostics, sizeof(cpu_backend_diagnostics),
+             "status=ready;mode=%s;tier=%s;features=%s;hwcap=%lx;hwcap2=%lx;build=%s",
+             automatic ? "automatic" : "compatibility", tier, features, hwcap, hwcap2,
+             WHISPER_VERSION);
+#else
+    snprintf(cpu_backend_diagnostics, sizeof(cpu_backend_diagnostics),
+             "status=ready;mode=%s;tier=%s;features=%s;build=%s",
+             automatic ? "automatic" : "compatibility", tier, features, WHISPER_VERSION);
+#endif
+}
+
+static ggml_backend_reg_t load_android_cpu_variant(
+        const char *directory, const char *filename) {
+    char explicit_path[1024];
+    snprintf(explicit_path, sizeof(explicit_path), "%s/%s", directory, filename);
+    if (access(explicit_path, R_OK) == 0) {
+        return ggml_backend_load(explicit_path);
+    }
+    // With extractNativeLibs=false Android's linker can resolve packaged JNI
+    // libraries by soname even though they cannot be enumerated as files.
+    return ggml_backend_load(filename);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_whispercpp_whisper_WhisperLib_00024Companion_initializeCpuBackend(
+        JNIEnv *env, jobject thiz, jstring native_library_dir, jboolean automatic) {
+    UNUSED(thiz);
+    pthread_mutex_lock(&cpu_backend_mutex);
+    if (!cpu_backend_initialized) {
+        const char *directory = native_library_dir == NULL ? NULL :
+                (*env)->GetStringUTFChars(env, native_library_dir, NULL);
+        if (native_library_dir != NULL && directory == NULL) {
+            snprintf(cpu_backend_diagnostics, sizeof(cpu_backend_diagnostics),
+                     "status=error;mode=%s;tier=none;features=none;error=invalid_native_library_dir",
+                     automatic ? "automatic" : "compatibility");
+        } else {
+#if defined(__aarch64__)
+            if (directory == NULL || directory[0] == '\0') {
+                snprintf(cpu_backend_diagnostics, sizeof(cpu_backend_diagnostics),
+                         "status=error;mode=%s;tier=none;features=none;error=missing_native_library_dir",
+                         automatic ? "automatic" : "compatibility");
+            } else {
+                if (automatic) {
+                    // Preference order is capability-based. Each module's score
+                    // function is compiled at the ARMv8-A baseline and returns
+                    // zero before optimized code can run on an incompatible CPU.
+                    // SVE/SME tiers stay benchmark-gated: architectural support
+                    // alone does not establish that they outperform I8MM on a
+                    // heterogeneous mobile SoC.
+                    static const char *variants[] = {
+                            "libggml-cpu-android_armv8.6_1.so",
+                            "libggml-cpu-android_armv8.2_2.so",
+                            "libggml-cpu-android_armv8.2_1.so",
+                            "libggml-cpu-android_armv8.0_1.so",
+                    };
+                    for (size_t i = 0; i < sizeof(variants) / sizeof(variants[0]); ++i) {
+                        if (load_android_cpu_variant(directory, variants[i]) != NULL) break;
+                    }
+                    describe_cpu_backend(true);
+                } else {
+                    load_android_cpu_variant(
+                            directory, "libggml-cpu-android_armv8.0_1.so");
+                    describe_cpu_backend(false);
+                }
+            }
+#else
+            // Non-ARM builds retain ggml's linked CPU backend.
+            describe_cpu_backend(false);
+#endif
+        }
+        if (directory != NULL) {
+            (*env)->ReleaseStringUTFChars(env, native_library_dir, directory);
+        }
+        cpu_backend_initialized = true;
+        LOGI("CPU backend: %s", cpu_backend_diagnostics);
+    }
+    jstring result = (*env)->NewStringUTF(env, cpu_backend_diagnostics);
+    pthread_mutex_unlock(&cpu_backend_mutex);
+    return result;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_whispercpp_whisper_WhisperLib_00024Companion_getCpuBackendDiagnostics(
+        JNIEnv *env, jobject thiz) {
+    UNUSED(thiz);
+    pthread_mutex_lock(&cpu_backend_mutex);
+    jstring result = (*env)->NewStringUTF(env, cpu_backend_diagnostics);
+    pthread_mutex_unlock(&cpu_backend_mutex);
+    return result;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_whispercpp_whisper_WhisperLib_00024Companion_warmupContext(
+        JNIEnv *env, jobject thiz, jlong context_ptr, jint num_threads) {
+    UNUSED(env);
+    UNUSED(thiz);
+    struct whisper_context *context = (struct whisper_context *) context_ptr;
+    if (context == NULL) return JNI_FALSE;
+
+    // Exercise model buffers and the selected kernels without allowing silence
+    // to enter the normal fallback decoder and hallucinate unbounded tokens.
+    float silence[3200] = {0};
+    struct whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+    params.language = "en";
+    params.n_threads = num_threads;
+    params.single_segment = true;
+    params.no_timestamps = true;
+    params.no_context = true;
+    params.audio_ctx = 256;
+    params.max_tokens = 1;
+    params.temperature_inc = 0.0f;
+    params.print_realtime = false;
+    params.print_progress = false;
+    params.print_timestamps = false;
+    params.print_special = false;
+    return whisper_full(context, params, silence, 3200) == 0 ? JNI_TRUE : JNI_FALSE;
+}
 
 static struct vozlocal_abort_state *abort_state_for_context(
         struct whisper_context *context, bool create) {

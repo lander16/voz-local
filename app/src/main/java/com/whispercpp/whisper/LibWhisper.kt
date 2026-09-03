@@ -100,6 +100,10 @@ class WhisperContext private constructor(private var ptr: Long) {
         return@withContext WhisperLib.benchGgmlMulMat(nthreads)
     }
 
+    suspend fun warmup(numThreads: Int): Boolean = withContext(dispatcher) {
+        WhisperLib.warmupContext(ptr, numThreads)
+    }
+
     suspend fun release() = withContext(Dispatchers.IO) {
         if (ptr != 0L) {
             WhisperLib.requestAbort(ptr)
@@ -111,6 +115,11 @@ class WhisperContext private constructor(private var ptr: Long) {
     }
 
     companion object {
+        fun initializeCpuBackend(nativeLibraryDir: String, automatic: Boolean): String =
+            WhisperLib.initializeCpuBackend(nativeLibraryDir, automatic)
+
+        fun getCpuBackendDiagnostics(): String = WhisperLib.getCpuBackendDiagnostics()
+
         fun createContextFromFile(filePath: String): WhisperContext {
             val ptr = WhisperLib.initContext(filePath)
             if (ptr == 0L) {
@@ -148,10 +157,10 @@ private class WhisperLib {
         init {
             Log.d(LOG_TAG, "Primary ABI: ${Build.SUPPORTED_ABIS[0]}")
             var loaded = false
-            val librariesToTry = when {
-                isArmEabiV8a() -> listOf("whisper_v8fp16_va", "whisper")
-                isArmEabiV7a() -> listOf("whisper_vfpv4", "whisper")
-                else -> listOf("whisper")
+            val librariesToTry = if (isArmEabiV7a()) {
+                listOf("whisper_vfpv4", "whisper")
+            } else {
+                listOf("whisper")
             }
 
             for (libName in librariesToTry) {
@@ -172,6 +181,9 @@ private class WhisperLib {
         }
 
         // JNI methods
+        external fun initializeCpuBackend(nativeLibraryDir: String, automatic: Boolean): String
+        external fun getCpuBackendDiagnostics(): String
+        external fun warmupContext(contextPtr: Long, numThreads: Int): Boolean
         external fun initContextFromInputStream(inputStream: InputStream): Long
         external fun initContextFromAsset(assetManager: AssetManager, assetPath: String): Long
         external fun initContext(modelPath: String): Long
@@ -225,8 +237,4 @@ private fun toTimestamp(t: Long, comma: Boolean = false): String {
 
 private fun isArmEabiV7a(): Boolean {
     return Build.SUPPORTED_ABIS[0].equals("armeabi-v7a")
-}
-
-private fun isArmEabiV8a(): Boolean {
-    return Build.SUPPORTED_ABIS[0].equals("arm64-v8a")
 }
