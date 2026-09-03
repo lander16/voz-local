@@ -60,7 +60,9 @@ android {
   signingConfigs {
     create("release") {
       if (hasReleaseSigning) {
-        storeFile = file(requireNotNull(releaseKeystorePath))
+        val path = requireNotNull(releaseKeystorePath)
+        val candidate = File(path)
+        storeFile = if (candidate.isAbsolute) candidate else rootProject.file(path)
         storePassword = releaseStorePassword
         keyAlias = releaseKeyAlias
         keyPassword = releaseKeyPassword
