@@ -82,4 +82,46 @@ class ModelDownloaderSha256Test {
         assertFalse(ModelUrls.isValidDownloadedFile(file, "silero_vad"))
         assertTrue((ModelUrls.minimumValidBytes("silero_vad") ?: 0L) > 0L)
     }
+
+    @Test
+    fun allModelsInUrlMapHaveValidSha256InModelDownloader() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val downloader = ModelDownloader(context)
+        val shaRegex = Regex("^[a-f0-9]{64}$")
+
+        assertTrue("URL_MAP should not be empty", ModelUrls.URL_MAP.isNotEmpty())
+        for ((modelId, _) in ModelUrls.URL_MAP) {
+            val hash = downloader.sha256Map[modelId]
+            assertTrue("Expected sha256Map to contain modelId '$modelId'", hash != null)
+            assertTrue(
+                "Model '$modelId' hash '$hash' must be a valid 64-character lowercase hex string",
+                shaRegex.matches(hash!!)
+            )
+            assertEquals("Verified (SHA-256)", downloader.verificationLabel(modelId))
+        }
+
+        assertEquals(ModelUrls.URL_MAP.keys, ModelDownloader.sha256Map.keys)
+    }
+
+    @Test
+    fun sha256Calculation_matchesKnownVector() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val downloader = ModelDownloader(context)
+        val testInput = "hello world"
+        val expectedSha = "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+
+        // Test bytes directly
+        val actualShaBytes = downloader.sha256(testInput.toByteArray(Charsets.UTF_8))
+        assertEquals(expectedSha, actualShaBytes)
+
+        // Test file calculation directly
+        val tempFile = java.io.File(context.cacheDir, "test-sha256-vector.txt")
+        try {
+            tempFile.writeText(testInput, Charsets.UTF_8)
+            val actualShaFile = downloader.sha256(tempFile)
+            assertEquals(expectedSha, actualShaFile)
+        } finally {
+            tempFile.delete()
+        }
+    }
 }

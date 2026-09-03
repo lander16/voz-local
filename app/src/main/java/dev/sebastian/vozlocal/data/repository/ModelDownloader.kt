@@ -69,16 +69,8 @@ class ModelDownloader(private val context: Context) {
     private val client = OkHttpClient.Builder().build()
 
     // SHA-256 verification map: pinned checksums for model security & integrity
-    private val sha256Map: Map<String, String?> = mapOf(
-        "whisper_base" to null,
-        "whisper_tiny" to null,
-        "whisper_base_en" to null,
-        "whisper_small" to null,
-        "whisper_small_q5_1" to null,
-        "whisper_large_v3_turbo" to null,
-        "whisper_medium" to null,
-        "silero_vad" to null
-    )
+    internal val sha256Map: Map<String, String>
+        get() = ModelDownloader.sha256Map
 
     fun verificationLabel(modelId: String): String = if (sha256Map[modelId].isNullOrBlank()) {
         "Verified (Transport & Size)"
@@ -197,6 +189,7 @@ class ModelDownloader(private val context: Context) {
 
             // Integrity check: verify the downloaded file against the expected SHA-256.
             if (!verifySha256(partFile, expectedSha)) {
+                outputFile.delete()
                 return false
             }
 
@@ -257,15 +250,37 @@ class ModelDownloader(private val context: Context) {
         return true
     }
 
-    private fun sha256(file: File): String {
-        val digest = MessageDigest.getInstance("SHA-256")
-        file.inputStream().use { input ->
-            val buffer = ByteArray(65536)
-            var bytesRead: Int
-            while (input.read(buffer).also { bytesRead = it } != -1) {
-                digest.update(buffer, 0, bytesRead)
+    internal fun sha256(file: File): String = ModelDownloader.sha256(file)
+    internal fun sha256(bytes: ByteArray): String = ModelDownloader.sha256(bytes)
+
+    companion object {
+        internal val sha256Map: Map<String, String> = mapOf(
+            "whisper_base" to "c577b9a86e7e048a0b7eada054f4dd79a56bbfa911fbdacf900ac5b567cbb7d9",
+            "whisper_tiny" to "c2085835d3f50733e2ff6e4b41ae8a2b8d8110461e18821b09a15c40c42d1cca",
+            "whisper_base_en" to "a4d4a0768075e13cfd7e19df3ae2dbc4a68d37d36a7dad45e8410c9a34f8c87e",
+            "whisper_small" to "49c8fb02b65e6049d5fa6c04f81f53b867b5ec9540406812c643f177317f779f",
+            "whisper_small_q5_1" to "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb",
+            "whisper_large_v3_turbo" to "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+            "whisper_medium" to "42a1ffcbe4167d224232443396968db4d02d4e8e87e213d3ee2e03095dea6502",
+            "silero_vad" to "2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987"
+        )
+        internal val SHA256_MAP = sha256Map
+
+        internal fun sha256(file: File): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            file.inputStream().use { input ->
+                val buffer = ByteArray(65536)
+                var bytesRead: Int
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    digest.update(buffer, 0, bytesRead)
+                }
             }
+            return digest.digest().joinToString("") { "%02x".format(it) }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+
+        internal fun sha256(bytes: ByteArray): String {
+            val digest = MessageDigest.getInstance("SHA-256")
+            return digest.digest(bytes).joinToString("") { "%02x".format(it) }
+        }
     }
 }
