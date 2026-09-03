@@ -114,6 +114,9 @@ class TextPolishEngine {
         val last = result.lastOrNull()
         if (last != null && last !in ".!?") result += "."
 
+        // 7. Smart paragraph segmentation for readable layout on long text.
+        result = SmartParagraphFormatter.format(result)
+
         result
     }
 }

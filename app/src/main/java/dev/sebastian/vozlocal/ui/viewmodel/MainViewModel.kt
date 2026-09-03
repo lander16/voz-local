@@ -590,6 +590,8 @@ class MainViewModel(
         }
     }
 
+    private var sharedTranscriptionJob: Job? = null
+
     fun startSharedTranscription() {
         val uri = _sharedAudioUri.value ?: return
         val model = selectedModel.value ?: return
@@ -599,48 +601,65 @@ class MainViewModel(
         _sharedResultText.value = ""
         _sharedStatusText.value = "Preparing local decoder..."
 
-        viewModelScope.launch(Dispatchers.Default) {
-            val result = repository.transcribeSharedFile(uri, model.id) { prog, status ->
-                _sharedProgress.value = prog.coerceIn(0f, 1f)
-                _sharedStatusText.value = status
-            }
+        sharedTranscriptionJob?.cancel()
+        sharedTranscriptionJob = viewModelScope.launch(Dispatchers.Default) {
+            try {
+                val result = repository.transcribeSharedFile(uri, model.id) { prog, status ->
+                    _sharedProgress.value = prog.coerceIn(0f, 1f)
+                    _sharedStatusText.value = status
+                }
 
-            if (result.startsWith("Error:")) {
+                if (result.startsWith("Error:")) {
+                    withContext(Dispatchers.Main) {
+                        _sharedProgress.value = 0f
+                        _sharedStatusText.value = result
+                        _sharedResultText.value = result
+                        _isSharedTranscribing.value = false
+                    }
+                    return@launch
+                }
+
+                val processedResult = repository.postProcessText(
+                    text = result,
+                    smartPunctuation = smartPunctuation.value,
+                    autoCapitalize = autoCapitalization.value,
+                    applyDict = applyDictionary.value,
+                    useAiPolisher = useAiPolisher.value,
+                    cleanupMode = cleanupMode.value
+                )
+
+                repository.insertHistory(
+                    TranscriptionHistory(
+                        text = processedResult,
+                        durationSec = 0,
+                        modelUsed = model.name,
+                        type = "shared_file",
+                        fileName = _sharedAudioName.value
+                    )
+                )
+
                 withContext(Dispatchers.Main) {
-                    _sharedProgress.value = 0f
-                    _sharedStatusText.value = result
-                    _sharedResultText.value = result
+                    _sharedProgress.value = 1.0f
+                    _sharedStatusText.value = "Transcription Completed!"
+                    _sharedResultText.value = processedResult
                     _isSharedTranscribing.value = false
                 }
-                return@launch
-            }
-
-            val processedResult = repository.postProcessText(
-                text = result,
-                smartPunctuation = smartPunctuation.value,
-                autoCapitalize = autoCapitalization.value,
-                applyDict = applyDictionary.value,
-                useAiPolisher = useAiPolisher.value,
-                cleanupMode = cleanupMode.value
-            )
-
-            repository.insertHistory(
-                TranscriptionHistory(
-                    text = processedResult,
-                    durationSec = 0,
-                    modelUsed = model.name,
-                    type = "shared_file",
-                    fileName = _sharedAudioName.value
-                )
-            )
-
-            withContext(Dispatchers.Main) {
-                _sharedProgress.value = 1.0f
-                _sharedStatusText.value = "Transcription Completed!"
-                _sharedResultText.value = processedResult
-                _isSharedTranscribing.value = false
+            } catch (e: CancellationException) {
+                withContext(Dispatchers.Main) {
+                    _isSharedTranscribing.value = false
+                    _sharedProgress.value = 0f
+                    _sharedStatusText.value = "Transcription stopped."
+                }
             }
         }
+    }
+
+    fun stopSharedTranscription() {
+        sharedTranscriptionJob?.cancel()
+        sharedTranscriptionJob = null
+        _isSharedTranscribing.value = false
+        _sharedProgress.value = 0f
+        _sharedStatusText.value = "Transcription stopped."
     }
 
     fun clearSharedFile() {

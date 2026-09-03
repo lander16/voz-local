@@ -16,11 +16,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.util.Locale
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.ui.historyDateGroupLabel
 import dev.sebastian.vozlocal.ui.formatShortDateTime
@@ -99,6 +103,17 @@ fun HistoryTab(
                     value = query,
                     onValueChange = { query = it },
                     leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { query = "" }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear search",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
                     placeholder = { Text("Search text, file, or model") },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
@@ -111,6 +126,15 @@ fun HistoryTab(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                if (query.isNotBlank()) {
+                    Text(
+                        text = "${filteredHistory.size} ${if (filteredHistory.size == 1) "match" else "matches"} found",
+                        fontSize = 12.sp,
+                        color = PrimaryColor,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         }
 
@@ -148,6 +172,7 @@ fun HistoryTab(
                 items(groupItems, key = { it.id }) { item ->
                     HistoryCard(
                         item = item,
+                        searchQuery = query,
                         onCopy = {
                             clipboardManager.setText(AnnotatedString(item.text))
                             Toast.makeText(context, "Copied to clipboard!", Toast.LENGTH_SHORT).show()
@@ -167,6 +192,7 @@ fun HistoryTab(
 @Composable
 fun HistoryCard(
     item: TranscriptionHistory,
+    searchQuery: String = "",
     onCopy: () -> Unit,
     onShare: () -> Unit,
     onReuse: () -> Unit,
@@ -174,6 +200,32 @@ fun HistoryCard(
 ) {
     val dateStr = remember(item.timestamp) { formatShortDateTime(item.timestamp) }
     var confirmDelete by remember(item.id) { mutableStateOf(false) }
+
+    val highlightedText = remember(item.text, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isBlank()) {
+            AnnotatedString(item.text)
+        } else {
+            buildAnnotatedString {
+                var startIndex = 0
+                val lowerText = item.text.lowercase(Locale.getDefault())
+                val lowerQ = q.lowercase(Locale.getDefault())
+                while (startIndex < item.text.length) {
+                    val index = lowerText.indexOf(lowerQ, startIndex)
+                    if (index == -1) {
+                        append(item.text.substring(startIndex))
+                        break
+                    }
+                    append(item.text.substring(startIndex, index))
+                    val endIndex = index + q.length
+                    withStyle(SpanStyle(background = PrimaryColor.copy(alpha = 0.35f), color = PrimaryColor, fontWeight = FontWeight.Bold)) {
+                        append(item.text.substring(index, endIndex))
+                    }
+                    startIndex = endIndex
+                }
+            }
+        }
+    }
 
     if (confirmDelete) {
         AlertDialog(
@@ -226,7 +278,7 @@ fun HistoryCard(
                 )
             }
 
-            Text(text = item.text, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 20.sp)
+            Text(text = highlightedText, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface, lineHeight = 20.sp)
 
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Row(

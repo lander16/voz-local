@@ -23,11 +23,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.Locale
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
@@ -42,6 +46,9 @@ fun SharedAudioTab(viewModel: MainViewModel) {
     val statusText by viewModel.sharedStatusText.collectAsStateWithLifecycle()
     val resultText by viewModel.sharedResultText.collectAsStateWithLifecycle()
     val activeModel by viewModel.selectedModel.collectAsStateWithLifecycle()
+
+    var searchInTranscript by remember { mutableStateOf(false) }
+    var transcriptQuery by remember { mutableStateOf("") }
 
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -268,8 +275,68 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                     }
                                 }
                             }
+
+                            OutlinedButton(
+                                onClick = { viewModel.stopSharedTranscription() },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth().height(42.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Stop,
+                                    contentDescription = "Stop transcription",
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Detener transcripción", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            }
                         }
                     } else if (resultText.isNotEmpty()) {
+                        val highlightedResult = remember(resultText, transcriptQuery, searchInTranscript) {
+                            val q = transcriptQuery.trim()
+                            if (q.isBlank() || !searchInTranscript) {
+                                AnnotatedString(resultText)
+                            } else {
+                                buildAnnotatedString {
+                                    var startIndex = 0
+                                    val lowerText = resultText.lowercase(Locale.getDefault())
+                                    val lowerQ = q.lowercase(Locale.getDefault())
+                                    while (startIndex < resultText.length) {
+                                        val index = lowerText.indexOf(lowerQ, startIndex)
+                                        if (index == -1) {
+                                            append(resultText.substring(startIndex))
+                                            break
+                                        }
+                                        append(resultText.substring(startIndex, index))
+                                        val endIndex = index + q.length
+                                        withStyle(SpanStyle(background = PrimaryColor.copy(alpha = 0.35f), color = PrimaryColor, fontWeight = FontWeight.Bold)) {
+                                            append(resultText.substring(index, endIndex))
+                                        }
+                                        startIndex = endIndex
+                                    }
+                                }
+                            }
+                        }
+
+                        val matchCount = remember(resultText, transcriptQuery, searchInTranscript) {
+                            val q = transcriptQuery.trim()
+                            if (q.isBlank() || !searchInTranscript) 0
+                            else {
+                                val lowerText = resultText.lowercase(Locale.getDefault())
+                                val lowerQ = q.lowercase(Locale.getDefault())
+                                var count = 0
+                                var idx = 0
+                                while (idx < lowerText.length) {
+                                    val found = lowerText.indexOf(lowerQ, idx)
+                                    if (found == -1) break
+                                    count++
+                                    idx = found + lowerQ.length
+                                }
+                                count
+                            }
+                        }
+
                         Column(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
@@ -287,6 +354,18 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 )
 
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    IconButton(
+                                        onClick = {
+                                            searchInTranscript = !searchInTranscript
+                                            if (!searchInTranscript) transcriptQuery = ""
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Search,
+                                            contentDescription = "Search in transcript",
+                                            tint = if (searchInTranscript) PrimaryColor else MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
                                     IconButton(
                                         onClick = { shareText(context, resultText, audioName.ifBlank { "VozLocal transcription" }) }
                                     ) {
@@ -311,6 +390,38 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                 }
                             }
 
+                            if (searchInTranscript) {
+                                OutlinedTextField(
+                                    value = transcriptQuery,
+                                    onValueChange = { transcriptQuery = it },
+                                    leadingIcon = { Icon(imageVector = Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                    trailingIcon = {
+                                        if (transcriptQuery.isNotEmpty()) {
+                                            IconButton(onClick = { transcriptQuery = "" }) {
+                                                Icon(imageVector = Icons.Default.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
+                                            }
+                                        }
+                                    },
+                                    placeholder = { Text("Search in transcript...", fontSize = 13.sp) },
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedBorderColor = PrimaryColor,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    modifier = Modifier.fillMaxWidth().height(52.dp)
+                                )
+
+                                if (transcriptQuery.isNotBlank()) {
+                                    Text(
+                                        text = "$matchCount match${if (matchCount == 1) "" else "es"} found",
+                                        fontSize = 12.sp,
+                                        color = PrimaryColor,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(start = 4.dp)
+                                    )
+                                }
+                            }
+
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -319,10 +430,10 @@ fun SharedAudioTab(viewModel: MainViewModel) {
                                     .padding(12.dp)
                             ) {
                                 Text(
-                                    text = resultText,
+                                    text = highlightedResult,
                                     fontSize = 14.sp,
                                     color = MaterialTheme.colorScheme.onSurface,
-                                    lineHeight = 20.sp
+                                    lineHeight = 22.sp
                                 )
                             }
                         }
