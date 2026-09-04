@@ -10,7 +10,7 @@
 [![Privacy](https://img.shields.io/badge/Privacy-100%25%20Offline-brightgreen.svg?style=flat)](#privacy--security)
 [![Privacy Policy](https://img.shields.io/badge/Privacy%20Policy-Read%20Policy-blue.svg?style=flat)](PRIVACY_POLICY.md)
 
-**VozLocal** is a privacy-first, ultra-fast Android application for local speech-to-text dictation and audio file transcription. It runs on-device using quantized OpenAI Whisper GGUF/bin models via `whisper.cpp` and local rule-based text cleanup — **no cloud APIs, no telemetry, no third-party SDKs that phone home**. Network access is used only to download model files. A global floating accessibility overlay lets you dictate into any app on the device.
+**VozLocal** is a privacy-first Android application for on-device speech-to-text dictation and audio file transcription. It runs using quantized OpenAI Whisper GGUF/bin models via `whisper.cpp` and local rule-based text cleanup — **no cloud APIs, no telemetry, no third-party SDKs that phone home**. Network access is used only to download model files. A global floating accessibility overlay lets you dictate into any app on the device.
 
 ---
 
@@ -28,8 +28,8 @@
 
 ## ✨ Key Features
 
-- 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). The ARM64 build uses a broadly compatible ARMv8.2-A `+fp16+dotprod` baseline; experimental I8MM/KleidiAI paths are not shipped until they have safe runtime dispatch and device benchmarks. Zero cloud APIs or external servers.
-- ⚡ **Focus Warmup & Full-Context Accuracy** — Input-focused background pre-warming keeps locally stored models hot in RAM. Transcription uses Whisper's default full audio context rather than an unbenchmarked shortened context, preserving accuracy across short and long utterances.
+- 🎙️ **On-Device Speech Recognition** — Quantized OpenAI Whisper models run locally on Android hardware via JNI C++ bindings (`whisper.cpp`). ARM64 starts from an ARMv8-A compatibility module and can opt into capability-checked dot-product, FP16, and I8MM modules. Unsupported tiers fall back without executing their kernels. Zero cloud APIs or external servers.
+- ⚡ **Focus Warmup & Full-Context Decoding** — Input-focused background pre-warming keeps locally stored models hot in RAM. Transcription currently uses Whisper's default full audio context, avoiding an unmeasured context-truncation tradeoff across short and long utterances.
 - 🎈 **Global Floating Dictation Button** — Accessibility Service + `WindowManager` overlay places an elegant floating microphone button right alongside your traditional keyboard (Gboard, Samsung, SwiftKey). Features persistent screen positioning across reboots, automatic smooth edge-docking animation, and tactile haptic feedback.
 - 🛡️ **Protected Floating Dictation** — The optional accessibility service is not declared as an accessibility tool. A user-managed protected-app list hides the floating button in banks, password managers, and authenticators; banks can still detect that any accessibility service is enabled. Includes an in-app privacy policy and offline guarantee dialog.
 - 📁 **Shared Audio File & History Export** — Receives shared voice notes/recordings via Android `SEND` intents, and provides one-tap export of your complete transcription archive to Markdown/Text via the Android Sharesheet.
@@ -127,7 +127,7 @@ A `SharedPreferences.OnSharedPreferenceChangeListener` is registered in the serv
 | **Language** | Kotlin 2.2.10 & C++ (JNI, vendored whisper.cpp) |
 | **UI Framework** | Jetpack Compose (Material 3, BOM 2024.09.00) |
 | **Architecture** | MVVM, Kotlin Coroutines, `StateFlow`, process-scoped singletons |
-| **STT Engine** | `whisper.cpp` (q8_0 / q5_1 GGML quantized with ARMv8.2-A `+fp16+dotprod`, adaptive multi-core threading) |
+| **STT Engine** | `whisper.cpp` (q8_0 / q5_1 / q5_0 GGML quantization, runtime-selected ARM CPU modules, adaptive multi-core threading) |
 | **Text Cleanup** | Local rule-based Kotlin engine (`TextPolishEngine`) — Minimal / Balanced / Aggressive modes, Spanish orthography normalization, pure Kotlin, zero latency |
 | **Persistence** | Room 2.7.0 (version 2, with stub `MIGRATION_1_2`, no destructive fallback) |
 | **Audio Capture** | `AudioRecord` API (16 kHz mono PCM, `VOICE_RECOGNITION` source) |
@@ -142,18 +142,20 @@ A `SharedPreferences.OnSharedPreferenceChangeListener` is registered in the serv
 
 Models are downloaded on-demand from Hugging Face directly to `context.filesDir/models` and run offline:
 
-| Model ID | Weight File | Size (MB) | Spanish Accuracy | Decoding Speed | Recommended For |
-|---|---|---|---|---|---|
-| `whisper_base` *(Recommended Default)* | `ggml-base-q8_0.bin` | ~78 MB | 83% | **5.0x** | Optimal balance of speed, accuracy, and memory for mobile |
-| `whisper_tiny` | `ggml-tiny-q8_0.bin` | ~42 MB | 72% | **8.5x** | Ultra-fast dictation on low-end hardware |
-| `whisper_base_en` | `ggml-base.en-q8_0.bin` | ~78 MB | — (English: 93%) | **5.5x** | Dedicated high-speed English model |
-| `whisper_small` | `ggml-small-q8_0.bin` | ~252 MB | 92% | **2.5x** | High accuracy dictation & clean audio notes |
-| `whisper_small_q5_1` | `ggml-small-q5_1.bin` | ~175 MB | 91% | **3.2x** | Mobile sweet spot: high accuracy with lower memory footprint |
-| `whisper_large_v3_turbo` | `ggml-large-v3-turbo-q5_0.bin` | ~547 MB | 99% | **3.5x** | SOTA quality transcription, faster than medium |
-| `whisper_medium` | `ggml-medium-q8_0.bin` | ~823 MB | 97% | **1.0x** | Complex vocab, accents & technical dictation (legacy heavy) |
+| Model ID | Weight File | Approx. Download | Language | Quantization | Selection Notes |
+|---|---|---:|---|---|---|
+| `whisper_base` *(default)* | `ggml-base-q8_0.bin` | ~78 MB | Multilingual | q8_0 | Default starting point; compare against Tiny and Small on representative audio. |
+| `whisper_tiny` | `ggml-tiny-q8_0.bin` | ~42 MB | Multilingual | q8_0 | Smallest download; useful when storage or memory is constrained. |
+| `whisper_base_en` | `ggml-base.en-q8_0.bin` | ~78 MB | English only | q8_0 | Not intended for Spanish or multilingual dictation. |
+| `whisper_small` | `ggml-small-q8_0.bin` | ~252 MB | Multilingual | q8_0 | Larger Small checkpoint; compare with the compressed Small variant. |
+| `whisper_small_q5_1` | `ggml-small-q5_1.bin` | ~175 MB | Multilingual | q5_1 | Smaller download than Small q8_0; quantization can affect output and device performance. |
+| `whisper_large_v3_turbo` | `ggml-large-v3-turbo-q5_0.bin` | ~547 MB | Multilingual | q5_0 | Turbo checkpoint with substantial storage and memory demand; benchmark locally. |
+| `whisper_medium` | `ggml-medium-q8_0.bin` | ~823 MB | Multilingual | q8_0 | Largest download in the catalog; benchmark sustained performance before selecting. |
 
 
-> **Model integrity**: downloads are written to unique `.part` files, checked for complete transport length and model-specific minimum size, and then atomically moved into place. SHA-256 verification is supported when a real hash is pinned, but the current Hugging Face URLs do not yet have pinned immutable hashes in this repo, so downloads are explicitly marked unverified instead of pretending placeholder hashes are real. Pin immutable model revisions and real SHA-256 values before shipping.
+The sizes above are approximate download sizes, not RAM estimates. VozLocal does not publish universal accuracy percentages or speed multipliers: meaningful results require a named corpus, device, native backend, thread count, thermal state, and decoding configuration.
+
+> **Model integrity**: downloads use unique `.part` files, transport-length and model-size checks, atomic replacement, and pinned SHA-256 digests. The current Hugging Face URLs still use mutable `/resolve/main/` paths; digest verification protects the expected bytes, but pinning each URL to an immutable repository revision remains future hardening work.
 
 ---
 
@@ -162,17 +164,27 @@ Models are downloaded on-demand from Hugging Face directly to `context.filesDir/
 VozLocal optimizes for complete, accurate local transcription before micro-latency:
 
 - **Multi-core CPU threading optimization** — `WhisperCpuConfig` dynamically discovers high-performance CPU cores by parsing `/sys/devices/system/cpu/` and `/proc/cpuinfo`. It safely allocates up to 5 performance cores on modern 8+ core and 9-core mobile SoCs (such as the Pixel 8 Pro Tensor G3: 1x Cortex-X3 + 4x Cortex-A715) while reserving CPU budget for audio recording and UI threads. Thread allocation also scales by active model size, with configurable JVM override (`-Dvozlocal.whisper.threads=N`).
-- **Native ARM compatibility baseline** — The distributed ARM64 library is compiled for `-march=armv8.2-a+fp16+dotprod`, including ggml CPU kernels. Optional `+i8mm` instructions and KleidiAI are intentionally deferred until a runtime feature-dispatch path and device benchmarks are available.
-- **Input-focus zero-latency model warmup & GGML graph pre-warming** — In `DictationAccessibilityService`, whenever a permitted text input field receives focus (`TYPE_VIEW_FOCUSED` or `TYPE_WINDOW_STATE_CHANGED`), a background coroutine warms up the active Whisper model in memory (`warmupModelIfNeeded()`). In `WhisperEngine`, model loading executes a background dry-run inference pass (200ms dummy audio) to pre-allocate GGML memory arenas and fault kernel code pages ahead of time, eliminating first-run allocation pauses (~300–600ms).
+- **Capability-checked ARM modules** — ARM64 has an ARMv8-A compatibility module plus optional dot-product, FP16/dot-product, and I8MM modules. Native HWCAP checks select a supported tier before its kernels run; a persisted startup sentinel restores compatibility mode after an interrupted optimized probe.
+- **Input-focus model warmup & GGML graph pre-warming** — `DictationAccessibilityService` warms the active model after an allowed text input gains focus. `WhisperEngine` also performs a bounded dry run to allocate graph memory and touch model/kernel pages. The improvement and thermal cost are device-dependent and must be measured rather than described as zero latency.
 - **Smart `onTrimMemory` keep-alive & eviction policy** — `VozLocalApp` monitors Android system memory pressure (`ComponentCallbacks2.onTrimMemory`). Under moderate pressure, the native model remains permanently pinned in RAM; under critical system memory emergencies (`TRIM_MEMORY_COMPLETE`), idle models are gracefully unloaded to protect the accessibility service from being killed, automatically reloading and pre-warming as soon as an input field is focused.
 - **Robust timestamp-guided segmentation** — Live dictation retains standard Whisper timestamp tokens (`noTimestamps = false`) across the full 30-second context window. This ensures long dictations (>8s) are seamlessly decoded across segment boundaries without cutting off speech, while multi-temperature fallback (`temperatureInc = 0.2f`) automatically breaks out of repetition loops.
 - **Hallucination & loop collapse post-filtering** — `HallucinationFilter` automatically detects and collapses pathological word loops ("no no no...") and multi-word phrase loops ("ustedes como ven...") before text is committed.
 - **Long-file coherence** — Shared audio uses timestamps, multi-window decoding, and previous decoder context rather than treating every Whisper window as unrelated speech.
-- **Measurable comparisons** — The `benchmark` package provides deterministic Unicode-aware WER/CER scoring and records model, quantization, threads, VAD, timing, real-time factor, optional memory, and thermal status. Model labels in the UI and table are guidance, not device-specific measurements.
+- **Measurable comparisons** — The `benchmark` package provides deterministic Unicode-aware WER/CER scoring and records model, quantization, threads, VAD, timing, real-time factor, optional memory, and thermal status. Catalog labels expose factual model attributes; measured rankings require explicit benchmark provenance.
 
-### Pixel 8 Pro baseline
+### Pixel 8 Pro measurements
 
-For accuracy-first use, benchmark `large-v3-turbo q5_0` against `small q8_0` on representative recordings before choosing a default. Test 3–6 threads, cold and warm starts, and sustained 10-minute sessions; select the configuration with the best WER/CER that remains comfortably faster than real time without thermal throttling. The app supplies benchmark foundations, but does not yet ship a benchmark UI or hard-code unverified Pixel measurements.
+These measurements are local engineering observations, not universal model rankings. They used a Pixel 8 Pro (Tensor G3), the app's Automatic ARM backend, five threads for Small, Spanish decoding, the current full-context live parameters, and a fixed 10-second excerpt from `app/src/test/resources/test_audio_2min.ogg`. Battery Saver was off and Android reported thermal status `NONE`.
+
+| Model / quantization | Runs | Inference time | Real-time factor | Observed output |
+|---|---:|---:|---:|---|
+| Small q5_1 | 2 | 8.45 s, 8.64 s | 0.85–0.86 | Stable across both runs; omitted a short word relative to q8_0 on this excerpt. |
+| Small q8_0 | 2 | 4.47 s, 4.92 s | 0.45–0.49 | Minor whitespace variation; retained the more grammatically complete phrase on this excerpt. |
+| Large v3 Turbo q5_0 | 1 per thread count | 37.38 s at 6 threads | 3.74 | Much slower than either Small variant on this CPU; 5 and 4 threads were slower still. |
+
+On this narrow workload, Small q8_0 reduced median inference latency by about **45%** relative to Small q5_1 despite its larger file. This is plausible because quantization formats exercise different ARM kernels and memory/compute tradeoffs; a smaller model file does not guarantee faster inference. The excerpt has no hand-verified reference transcript, so its output difference is evidence to expand accuracy testing, not a WER claim. The phone was at low charge during the compact paired experiment, and a preceding compatibility-backend pass showed q8_0 can trigger a slow decoder-fallback outlier. Promotion therefore requires the longer validation matrix below.
+
+For the next controlled evaluation, use multiple clean/noisy Spanish clips and a hand-verified reference; alternate model order; record native encode/decode timing, transcript hashes, WER/CER, memory, battery temperature, and thermal state; then repeat the full ~100.65-second fixture and a 10–20-minute sustained workload. Small q8_0 is the leading Pixel candidate, while Small q5_1 remains valuable where storage/RAM are tighter or until broader accuracy and fallback-tail latency are measured.
 
 ---
 
@@ -342,7 +354,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 | `AudioRecorder` | Two instances (ViewModel + Service), raced for the mic | Process-wide singleton in `VozLocalApp`; state transitions guarded by `synchronized(this)` and the IO reader thread reads `@Volatile` fields |
 | `WhisperContext` cleanup | `runBlocking` on the GC finalizer thread | Lifecycle mutex serializes load / transcribe / release; cancelling a shared-file job now signals Whisper's native abort callback rather than merely hiding progress UI |
 | CPU thread count | Re-read `/proc/cpuinfo` on every transcription | Adaptive lazy selection with `-Dvozlocal.whisper.threads=N` override; optimized for Tensor G3 (Pixel 8 Pro) and modern 8+ core chips to map 5 threads across high-performance cores |
-| Native hardware acceleration | Wrapper-only architecture flags | A safe `+fp16+dotprod` architecture is passed to the actual ggml CPU backend; optional I8MM is deferred pending runtime dispatch |
+| Native hardware acceleration | Wrapper-only architecture flags | Runtime HWCAP dispatch selects separately compiled ARMv8-A, dot-product, FP16/dot-product, or I8MM ggml CPU modules |
 | Audio context | Experimental shortened context | Whisper default context (`audio_ctx = 0`) to avoid accuracy regressions from unbenchmarked context truncation |
 | Floating button ergonomics | Free-floating without memory or haptics | SharedPreferences position memory across reboots, 180ms smooth edge-docking animation to nearest bezel, and tactile click haptic feedback |
 | Spoken punctuation engine | Basic keyword matching with replacement bugs | Comprehensive Spanish and English punctuation command dictionary with forward/backward symbol attachment and clean line break handling |
@@ -352,7 +364,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 | Smart-punctuation | Two implementations, one dead | Kotlin `postProcessText` is the single source of truth; the JNI pause-joiner is removed |
 | Dictionary regexes | Re-compiled every transcription | Hash-keyed cache, invalidated on insert/delete |
 | Download progress | Wrote Room on every 1% (100 writes for an 800 MB model) | In-memory `MutableStateFlow<Map<String,Float>>`; DB written only on completion/failure |
-| Model downloads | Direct writes to final path + placeholder SHA strings | Unique `.part` files, complete-length/size validation, atomic move, explicit unverified state until real SHA-256 hashes are pinned |
+| Model downloads | Direct writes to final path + placeholder SHA strings | Unique `.part` files, complete-length/size validation, atomic move, and pinned SHA-256 verification; immutable URL revisions remain pending |
 | Silero VAD download | Broken upstream URL / oversized validation floor | Downloads from `ggml-org/whisper-vad`, accepts the current ~0.9 MB asset, and keeps VAD optional/user-toggleable |
 | History list | Full table re-emit on every insert | `LIMIT 200` paged flow for the UI; full table retained for stats |
 | Filter toggles | Reset on every app restart | Persisted to SharedPreferences via proper setters |
@@ -374,7 +386,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 
 **Completed:**
 
-- [x] Real SHA-256 hashes and immutable model revisions for Whisper and Silero VAD models. Every new download is verified before use; models from older app versions are re-verified once before loading.
+- [x] Real SHA-256 hashes for Whisper and Silero VAD models. Every new download is verified before use; models from older app versions are re-verified once before loading.
 - [x] Release keystore configuration and Google Play Android App Bundle (.aab) generation.
 - [x] Google Play Store compliant Privacy Policy (English & Spanish).
 - [x] Play Store graphical assets (512x512 icon, 1024x500 feature graphic, 6 screenshots).
@@ -389,6 +401,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 - [ ] Detekt + ktlint + CI for static analysis.
 - [ ] Audio resampling quality (streaming band-limited/windowed-sinc resampler).
 - [ ] Pixel calibration UI (persist best sustainable configuration per device).
+- [ ] Pin every Hugging Face model URL to an immutable repository revision in addition to checking its SHA-256 digest.
 
 ### Capability-based CPU kernel dispatch
 
@@ -428,10 +441,12 @@ ARM64 device starts VozLocal
 
 The Pixel 8 Pro test device reports FP16, dot-product, I8MM, SVE, and SVE2 across
 all nine schedulable cores. Automatic mode selects the ARMv8.6 I8MM module on that
-device. This restores the quantized matrix-multiplication path that was lost when
-I8MM was removed from the old global compiler flags. An ARM64 device without
-I8MM falls through to FP16/dot-product, dot-product, or ARMv8-A without relying on
-the Pixel or Tensor name.
+device. Selection means the module is safe to execute; it does not mean every
+quantization format uses an I8MM-specific inner loop or that the tier will win
+every workload. In particular, Small q5_1 relies heavily on dot-product kernels,
+while the measured Small q8_0 path benefited much more from the selected module.
+An ARM64 device without I8MM falls through to FP16/dot-product, dot-product, or
+ARMv8-A without relying on the Pixel or Tensor name.
 
 #### Implemented ggml architecture
 
@@ -536,9 +551,67 @@ synthetic benchmark win.
 | **Implemented CPU tiers** | ARMv8-A → dot-product → FP16/dot-product → I8MM. Selection is native HWCAP-based and remains opt-in while field validation grows. |
 | **Measured package cost** | The seven generated ARM CPU modules total about 5.9 MB uncompressed. APK/AAB and installed-size effects are measured in release checks rather than estimated. |
 | **Stability model** | The guaranteed tier is ARMv8-A, not ARMv8.2. GGML compiles feature scoring without LTO so optimized instructions cannot leak into the pre-score path. A persisted warmup marker adds next-launch recovery. |
-| **Expected CPU return** | I8MM should particularly help quantized matrix multiplication, but no percentage is promised until the repeatable baseline/I8MM corpus is measured. Latency, WER/CER, temperature, energy, and sustained throughput all gate promotion. |
+| **Expected CPU return** | I8MM can help compatible quantized matrix operations, but the return is quantization- and model-specific. No universal percentage is promised; latency, WER/CER, temperature, energy, and sustained throughput all gate promotion. |
 | **SVE/SVE2/SME** | Capability detection is available, but these tiers remain disabled by policy until they beat I8MM on representative devices and long thermal runs. |
 | **GPU / Vulkan / OpenCL** | This remains a separate experiment. Potential gains and driver risk must be measured on each backend; CPU dispatch is the lower-risk compatibility and regression fix, not evidence of an assumed GPU multiplier. |
+
+#### Performance opportunities identified by Pixel testing
+
+The September 2026 Pixel measurements changed the optimization priorities. They
+show that model architecture and quantization format can matter more than model
+file size, and that a capability-compatible CPU tier is not automatically the
+fastest tier for every model. The next work should be evidence-driven and retain
+the current compatibility escape hatch.
+
+1. **Quantization-aware local calibration.** Benchmark backend tier, model,
+   quantization, and thread count as one device-local profile. Small q8_0 was
+   substantially faster than Small q5_1 on the tested Tensor G3/I8MM path even
+   though q8_0 uses more storage. Do not infer runtime ordering from bit width or
+   download size. Persist a choice only after repeated short and sustained runs,
+   and invalidate it when the native build or model checksum changes.
+2. **Guarded short-dictation audio context.** Earlier duration-sized
+   `audio_ctx` values reduced work but caused truncation and repetition failures.
+   Revisit the idea only as an opt-in fast path using a small set of reusable
+   graph shapes (for example 256/512/768/1024/1280/1500 frames), a safety margin
+   around the recorded duration, and an automatic full-context retry when output
+   is empty, repetitive, low-confidence, or appears truncated. Long and shared
+   audio must retain timestamp-guided full-context decoding.
+3. **Separate encoder and decoder timing.** Reset and expose whisper.cpp native
+   timings for sampling, encoding, decoding, prompt processing, and batched
+   decoding. Total wall time cannot reveal whether a regression came from audio
+   context, a temperature fallback, a kernel, model loading, or scheduling.
+4. **Control decoder tail latency.** The compatibility test produced a q8_0
+   outlier more than twice its first-pass time while the transcript also changed,
+   consistent with extra decoder/fallback work. Keep accuracy-first fallback as
+   the default, but record fallback count and temperature steps. A future latency
+   mode may cap retries only if WER/CER and failure recovery remain acceptable.
+5. **Make warmup workload-aware.** Model-load warmup reduces first-use allocation
+   work but also consumes energy and can bias CPU frequency before a benchmark.
+   Measure load, warmup, and inference separately. Consider delaying speculative
+   warmup until input focus, device idle time, or a sufficiently charged thermal
+   state, and avoid warming a model that is about to be replaced.
+6. **Use model- and workload-specific threads.** Five threads remains appropriate
+   for short Small inference on the Pixel, while Large v3 Turbo measured best at
+   six. Shared files require a separate sustained test because fewer threads may
+   win after DVFS and memory-bandwidth limits appear. CPU affinity should remain
+   deferred until this simpler policy is measured.
+7. **Add a benchmark application mode.** Instrumentation currently starts the
+   normal `Application`, whose background preload can heat the device and compete
+   with the probe. A benchmark-only startup path should disable preload and
+   downloads, accept model/thread/backend/iteration arguments, enforce Battery
+   Saver and thermal admission checks, and emit structured rows with transcript
+   hashes rather than relying on log text.
+8. **Build a representative accuracy corpus.** The current bundled fixture is
+   approximately 100.65 seconds despite its historical `2min` filename and has no
+   hand-verified transcript. Add clean Spanish, noisy Spanish, names/numbers,
+   code-switched speech, short utterances, a 30-second boundary case, and long
+   audio. Report normalized WER/CER and manually review substantive differences.
+9. **Investigate larger-model acceleration separately.** Large v3 Turbo remained
+   far slower than real time on the Pixel CPU even with six threads. GPU/Vulkan
+   work, a more compressed Turbo quantization, or a vetted Spanish-fine-tuned
+   Small checkpoint may be more productive than further CPU thread tuning, but
+   each introduces compatibility or recognition-quality risk and must stay
+   opt-in until measured.
 
 Longer-term CPU work should proceed in this order:
 
