@@ -1,6 +1,8 @@
 package dev.sebastian.vozlocal.ui
 
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
 import dev.sebastian.vozlocal.R
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -88,4 +90,19 @@ fun modelPresentation(modelId: String): ModelPresentation = when (modelId) {
         R.string.model_name_local, R.string.model_badge_local,
         R.string.model_language_unknown, "—", R.string.model_description_unknown,
     )
+}
+
+@Composable
+fun modelDownloadStatusLabel(status: String?): String = when (status) {
+    "Starting" -> stringResource(R.string.model_download_starting)
+    "Downloading" -> stringResource(R.string.model_download_downloading)
+    "Preparing" -> stringResource(R.string.model_download_preparing)
+    else -> stringResource(R.string.model_download_preparing)
+}
+
+@Composable
+fun modelVerificationLabel(label: String?): String = when {
+    label?.contains("SHA-256") == true -> stringResource(R.string.model_verified_sha256)
+    label?.startsWith("Verified") == true -> stringResource(R.string.model_verified_transport)
+    else -> stringResource(R.string.model_unverified)
 }

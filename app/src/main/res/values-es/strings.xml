@@ -97,6 +97,18 @@
     <string name="model_description_unknown">La calidad y el tiempo de transcripción dependen del dispositivo, el audio y la configuración de decodificación.</string>
     <string name="model_delete_description">Eliminar %1$s</string>
     <string name="model_redownload_description">Volver a descargar %1$s</string>
+    <string name="model_delete_title">¿Eliminar modelo?</string>
+    <string name="model_delete_message">Esto elimina los pesos descargados del almacenamiento local.</string>
+    <string name="model_active">Activo</string>
+    <string name="model_activate">Activar</string>
+    <string name="model_download">Descargar modelo</string>
+    <string name="model_download_starting">Iniciando descarga…</string>
+    <string name="model_download_downloading">Descargando pesos del modelo…</string>
+    <string name="model_download_preparing">Preparando descarga…</string>
+    <string name="model_download_sizing">Calculando tamaño…</string>
+    <string name="model_verified_sha256">Verificado (SHA-256)</string>
+    <string name="model_verified_transport">Verificado (transporte y tamaño)</string>
+    <string name="model_unverified">Sin verificar</string>
     <string name="setup_model_downloaded">El modelo “%1$s” (%2$d MB) está guardado localmente y listo para transcribir sin conexión.</string>
     <string name="setup_model_download_prompt" formatted="false">VozLocal transcribe en el dispositivo sin servidores en la nube. Descarga el modelo predeterminado (Whisper Base q8_0, aproximadamente 78 MB) para activar el reconocimiento de voz.</string>
 </resources>

@@ -26,7 +26,9 @@ import dev.sebastian.vozlocal.R
 import dev.sebastian.vozlocal.data.model.DictationModel
 import dev.sebastian.vozlocal.ui.formatDownloadProgress
 import dev.sebastian.vozlocal.ui.formatEta
+import dev.sebastian.vozlocal.ui.modelDownloadStatusLabel
 import dev.sebastian.vozlocal.ui.modelPresentation
+import dev.sebastian.vozlocal.ui.modelVerificationLabel
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 
@@ -99,15 +101,15 @@ fun ModelCard(
     if (confirmDelete) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete model?") },
-            text = { Text("This removes the downloaded weights from local storage.") },
+            title = { Text(stringResource(R.string.model_delete_title)) },
+            text = { Text(stringResource(R.string.model_delete_message)) },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete()
                     confirmDelete = false
-                }) { Text("Delete", color = TertiaryColor) }
+                }) { Text(stringResource(R.string.button_delete), color = TertiaryColor) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.button_cancel)) } }
         )
     }
 
@@ -176,10 +178,11 @@ fun ModelCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ModelMetaChip(text = stringResource(presentation.badgeRes), active = true, accent = PrimaryColor)
                 ModelMetaChip(text = "${model.sizeMb.toInt()} MB", active = false)
+                val isVerified = downloadStatus?.verificationLabel?.startsWith("Verified") == true
                 ModelMetaChip(
-                    text = downloadStatus?.verificationLabel ?: "Unverified",
-                    active = downloadStatus?.verificationLabel == "Verified",
-                    accent = if (downloadStatus?.verificationLabel == "Verified") Color(0xFF10B981) else TextMuted
+                    text = modelVerificationLabel(downloadStatus?.verificationLabel),
+                    active = isVerified,
+                    accent = if (isVerified) Color(0xFF10B981) else TextMuted
                 )
             }
 
@@ -214,14 +217,14 @@ fun ModelCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = downloadStatus?.statusLabel ?: "Downloading model weights...",
+                            text = modelDownloadStatusLabel(downloadStatus?.statusLabel),
                             fontSize = 11.sp,
                             color = PrimaryColor,
                             fontWeight = FontWeight.SemiBold
                         )
                         Column(horizontalAlignment = Alignment.End) {
                             Text(text = "${(downloadProgress * 100).toInt()}%", fontSize = 11.sp, color = PrimaryColor, fontWeight = FontWeight.Bold)
-                            Text(text = formatEta(downloadStatus?.etaSeconds) ?: "Sizing…", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(text = formatEta(downloadStatus?.etaSeconds) ?: stringResource(R.string.model_download_sizing), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Text(
@@ -285,7 +288,7 @@ fun ModelCard(
                                 .pressScale()
                         ) {
                             Text(
-                                text = if (model.isSelected) "Active" else "Activate",
+                                text = stringResource(if (model.isSelected) R.string.model_active else R.string.model_activate),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = if (model.isSelected) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimary
@@ -311,7 +314,7 @@ fun ModelCard(
                                     tint = MaterialTheme.colorScheme.onSecondary
                                 )
                                 Text(
-                                    text = "Download Model",
+                                    text = stringResource(R.string.model_download),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = MaterialTheme.colorScheme.onSecondary

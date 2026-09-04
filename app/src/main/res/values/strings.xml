@@ -96,6 +96,18 @@
     <string name="model_description_unknown">Recognition quality and transcription time depend on the device, audio, and decoding settings.</string>
     <string name="model_delete_description">Delete %1$s</string>
     <string name="model_redownload_description">Download %1$s again</string>
+    <string name="model_delete_title">Delete model?</string>
+    <string name="model_delete_message">This removes the downloaded weights from local storage.</string>
+    <string name="model_active">Active</string>
+    <string name="model_activate">Activate</string>
+    <string name="model_download">Download model</string>
+    <string name="model_download_starting">Starting download…</string>
+    <string name="model_download_downloading">Downloading model weights…</string>
+    <string name="model_download_preparing">Preparing download…</string>
+    <string name="model_download_sizing">Sizing…</string>
+    <string name="model_verified_sha256">Verified (SHA-256)</string>
+    <string name="model_verified_transport">Verified (transport and size)</string>
+    <string name="model_unverified">Unverified</string>
     <string name="setup_model_downloaded">Model “%1$s” (%2$d MB) is stored locally and ready for offline transcription.</string>
     <string name="setup_model_download_prompt" formatted="false">VozLocal transcribes on-device without cloud servers. Download the default model (Whisper Base q8_0, approximately 78 MB) to enable speech recognition.</string>
 </resources>

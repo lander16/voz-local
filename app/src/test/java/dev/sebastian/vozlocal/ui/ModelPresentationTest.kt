@@ -57,6 +57,12 @@ class ModelPresentationTest {
             R.string.model_language_multilingual,
             R.string.model_description_small_q8,
             R.string.model_description_turbo_q5,
+            R.string.model_active,
+            R.string.model_activate,
+            R.string.model_download,
+            R.string.model_download_downloading,
+            R.string.model_verified_sha256,
+            R.string.model_delete_title,
         )
 
         ids.forEach { id ->
