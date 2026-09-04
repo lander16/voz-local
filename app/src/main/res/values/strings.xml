@@ -60,4 +60,42 @@
     <string name="sensitive_apps_description">VozLocal hides its floating mic and rejects all text actions in selected apps. Add banks, password managers, authenticators, and payment apps.</string>
     <string name="search_installed_apps">Search installed apps</string>
     <string name="button_done">Done</string>
+
+    <!-- Speech model catalog -->
+    <string name="models_title">Local speech models</string>
+    <string name="models_subtitle" formatted="false">Download and activate Whisper GGML models in internal storage. Transcription runs 100% offline.</string>
+    <string name="models_benchmark_notice">Quality and transcription time depend on your device, language, audio, CPU backend, and settings. Compare models under the same conditions.</string>
+    <string name="model_language_label">Language</string>
+    <string name="model_quantization_label">Quantization</string>
+    <string name="model_language_multilingual">Multilingual</string>
+    <string name="model_language_english_only">English only</string>
+    <string name="model_language_unknown">Unknown</string>
+    <string name="model_name_tiny_q8">Whisper Tiny q8_0</string>
+    <string name="model_name_base_q8">Whisper Base q8_0</string>
+    <string name="model_name_base_en_q8">Whisper Base English q8_0</string>
+    <string name="model_name_small_q8">Whisper Small q8_0</string>
+    <string name="model_name_small_q5">Whisper Small q5_1</string>
+    <string name="model_name_turbo_q5">Whisper Large v3 Turbo q5_0</string>
+    <string name="model_name_medium_q8">Whisper Medium q8_0</string>
+    <string name="model_name_local">Local model</string>
+    <string name="model_badge_smallest_download">Smallest download</string>
+    <string name="model_badge_default">Default</string>
+    <string name="model_badge_english_only">English only</string>
+    <string name="model_badge_multilingual">Multilingual</string>
+    <string name="model_badge_smaller_small">Smaller Small file</string>
+    <string name="model_badge_turbo">Turbo checkpoint</string>
+    <string name="model_badge_largest_download">Largest download</string>
+    <string name="model_badge_local">Local model</string>
+    <string name="model_description_tiny_q8">Useful when storage and memory are constrained; recognition results can differ from larger models.</string>
+    <string name="model_description_base_q8">Default starting point. Compare it with Tiny or Small using recordings representative of your voice.</string>
+    <string name="model_description_base_en_q8">English-only checkpoint. Do not select it for Spanish or multilingual dictation.</string>
+    <string name="model_description_small_q8">A larger Small checkpoint. Its speed and recognition quality must be benchmarked on each device.</string>
+    <string name="model_description_small_q5">The Small checkpoint with stronger compression. Compression can change both output and performance.</string>
+    <string name="model_description_turbo_q5">Substantial storage and memory requirements. Benchmark it locally before making it the default.</string>
+    <string name="model_description_medium_q8">Intended for devices with ample storage and memory; sustained performance must be measured locally.</string>
+    <string name="model_description_unknown">Recognition quality and transcription time depend on the device, audio, and decoding settings.</string>
+    <string name="model_delete_description">Delete %1$s</string>
+    <string name="model_redownload_description">Download %1$s again</string>
+    <string name="setup_model_downloaded">Model “%1$s” (%2$d MB) is stored locally and ready for offline transcription.</string>
+    <string name="setup_model_download_prompt" formatted="false">VozLocal transcribes on-device without cloud servers. Download the default model (Whisper Base q8_0, approximately 78 MB) to enable speech recognition.</string>
 </resources>

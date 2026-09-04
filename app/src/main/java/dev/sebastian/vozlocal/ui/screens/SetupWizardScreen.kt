@@ -28,11 +28,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sebastian.vozlocal.R
+import dev.sebastian.vozlocal.ui.modelPresentation
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 
@@ -95,6 +98,7 @@ fun SetupWizardScreen(
         val hasDownloadedModel = models.any { it.isDownloaded }
         val defaultModel = models.find { it.id == "whisper_base" } ?: models.firstOrNull()
         val defaultModelId = defaultModel?.id ?: "whisper_base"
+        val defaultModelName = stringResource(modelPresentation(defaultModelId).nameRes)
         val downloadProgress by viewModel.downloadProgressFor(defaultModelId).collectAsStateWithLifecycle()
         val downloadStatus by viewModel.downloadStatusFor(defaultModelId).collectAsStateWithLifecycle()
 
@@ -232,9 +236,13 @@ fun SetupWizardScreen(
 
                 Text(
                     text = if (hasDownloadedModel)
-                        "Model '${defaultModel?.name ?: "Whisper Base q8_0"}' (${defaultModel?.sizeMb?.toInt() ?: 78} MB) is downloaded locally. Ready to transcribe without an internet connection."
+                        stringResource(
+                            R.string.setup_model_downloaded,
+                            defaultModelName,
+                            defaultModel?.sizeMb?.toInt() ?: 78,
+                        )
                     else
-                        "VozLocal transcribes audio 100% on-device with zero cloud servers. Download the default model (Whisper Base q8_0, approximately 78 MB) to enable speech recognition.",
+                        stringResource(R.string.setup_model_download_prompt),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp

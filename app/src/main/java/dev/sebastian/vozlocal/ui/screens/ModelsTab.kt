@@ -17,10 +17,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.sebastian.vozlocal.R
 import dev.sebastian.vozlocal.data.model.DictationModel
 import dev.sebastian.vozlocal.ui.formatDownloadProgress
 import dev.sebastian.vozlocal.ui.formatEta
@@ -46,18 +48,18 @@ fun ModelsTab(viewModel: MainViewModel) {
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
-                    text = "Local Speech Models",
+                    text = stringResource(R.string.models_title),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Download and activate GGUF/bin Whisper models directly onto your internal storage. Runs 100% offline.",
+                    text = stringResource(R.string.models_subtitle),
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Quality and transcription time depend on your device, language, audio, CPU backend, and settings. Compare models under the same conditions.",
+                    text = stringResource(R.string.models_benchmark_notice),
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -88,6 +90,8 @@ fun ModelCard(
     onDelete: () -> Unit,
     onRedownload: () -> Unit
 ) {
+    val presentation = modelPresentation(model.id)
+    val displayName = stringResource(presentation.nameRes)
     val downloadProgress by viewModel.downloadProgressFor(model.id).collectAsStateWithLifecycle()
     val downloadStatus by viewModel.downloadStatusFor(model.id).collectAsStateWithLifecycle()
     var confirmDelete by remember(model.id) { mutableStateOf(false) }
@@ -148,7 +152,7 @@ fun ModelCard(
                         tint = if (model.isSelected) PrimaryColor else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = model.name,
+                        text = displayName,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -170,7 +174,7 @@ fun ModelCard(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModelMetaChip(text = modelPresentation(model.id).badge, active = true, accent = PrimaryColor)
+                ModelMetaChip(text = stringResource(presentation.badgeRes), active = true, accent = PrimaryColor)
                 ModelMetaChip(text = "${model.sizeMb.toInt()} MB", active = false)
                 ModelMetaChip(
                     text = downloadStatus?.verificationLabel ?: "Unverified",
@@ -179,22 +183,21 @@ fun ModelCard(
                 )
             }
 
-            val presentation = modelPresentation(model.id)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Language", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(text = presentation.language, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    Text(text = stringResource(R.string.model_language_label), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = stringResource(presentation.languageRes), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Quantization", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = stringResource(R.string.model_quantization_label), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(text = presentation.quantization, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
             Text(
-                text = presentation.description,
+                text = stringResource(presentation.descriptionRes),
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -253,7 +256,7 @@ fun ModelCard(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.DeleteOutline,
-                                    contentDescription = "Delete ${model.name}",
+                                    contentDescription = stringResource(R.string.model_delete_description, displayName),
                                     tint = TertiaryColor
                                 )
                             }
@@ -263,7 +266,7 @@ fun ModelCard(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Re-download ${model.name}",
+                                    contentDescription = stringResource(R.string.model_redownload_description, displayName),
                                     tint = PrimaryColor
                                 )
                             }

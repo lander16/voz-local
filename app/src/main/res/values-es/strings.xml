@@ -61,4 +61,42 @@
     <string name="sensitive_apps_description">VozLocal oculta el micrófono flotante y rechaza toda acción de texto en las aplicaciones seleccionadas. Agrega bancos, gestores de contraseñas, autenticadores y aplicaciones de pago.</string>
     <string name="search_installed_apps">Buscar aplicaciones instaladas</string>
     <string name="button_done">Listo</string>
+
+    <!-- Catálogo de modelos de voz -->
+    <string name="models_title">Modelos de voz locales</string>
+    <string name="models_subtitle" formatted="false">Descarga y activa modelos Whisper GGML en el almacenamiento interno. La transcripción funciona 100% sin conexión.</string>
+    <string name="models_benchmark_notice">La calidad y el tiempo de transcripción dependen del dispositivo, idioma, audio, backend de CPU y configuración. Compara los modelos en las mismas condiciones.</string>
+    <string name="model_language_label">Idioma</string>
+    <string name="model_quantization_label">Cuantización</string>
+    <string name="model_language_multilingual">Multilingüe</string>
+    <string name="model_language_english_only">Solo inglés</string>
+    <string name="model_language_unknown">Desconocido</string>
+    <string name="model_name_tiny_q8">Whisper Tiny q8_0</string>
+    <string name="model_name_base_q8">Whisper Base q8_0</string>
+    <string name="model_name_base_en_q8">Whisper Base en inglés q8_0</string>
+    <string name="model_name_small_q8">Whisper Small q8_0</string>
+    <string name="model_name_small_q5">Whisper Small q5_1</string>
+    <string name="model_name_turbo_q5">Whisper Large v3 Turbo q5_0</string>
+    <string name="model_name_medium_q8">Whisper Medium q8_0</string>
+    <string name="model_name_local">Modelo local</string>
+    <string name="model_badge_smallest_download">Descarga más pequeña</string>
+    <string name="model_badge_default">Predeterminado</string>
+    <string name="model_badge_english_only">Solo inglés</string>
+    <string name="model_badge_multilingual">Multilingüe</string>
+    <string name="model_badge_smaller_small">Archivo Small más pequeño</string>
+    <string name="model_badge_turbo">Modelo Turbo</string>
+    <string name="model_badge_largest_download">Descarga más grande</string>
+    <string name="model_badge_local">Modelo local</string>
+    <string name="model_description_tiny_q8">Útil cuando el almacenamiento y la memoria son limitados; los resultados pueden diferir de los modelos más grandes.</string>
+    <string name="model_description_base_q8">Punto de partida predeterminado. Compáralo con Tiny o Small usando grabaciones representativas de tu voz.</string>
+    <string name="model_description_base_en_q8">Modelo exclusivo para inglés. No lo selecciones para dictado en español o multilingüe.</string>
+    <string name="model_description_small_q8">Una variante Small más grande. Su velocidad y calidad de reconocimiento deben medirse en cada dispositivo.</string>
+    <string name="model_description_small_q5">El modelo Small con mayor compresión. La compresión puede cambiar tanto el resultado como el rendimiento.</string>
+    <string name="model_description_turbo_q5">Requiere bastante almacenamiento y memoria. Mídelo localmente antes de convertirlo en predeterminado.</string>
+    <string name="model_description_medium_q8">Pensado para dispositivos con suficiente almacenamiento y memoria; el rendimiento sostenido debe medirse localmente.</string>
+    <string name="model_description_unknown">La calidad y el tiempo de transcripción dependen del dispositivo, el audio y la configuración de decodificación.</string>
+    <string name="model_delete_description">Eliminar %1$s</string>
+    <string name="model_redownload_description">Volver a descargar %1$s</string>
+    <string name="setup_model_downloaded">El modelo “%1$s” (%2$d MB) está guardado localmente y listo para transcribir sin conexión.</string>
+    <string name="setup_model_download_prompt" formatted="false">VozLocal transcribe en el dispositivo sin servidores en la nube. Descarga el modelo predeterminado (Whisper Base q8_0, aproximadamente 78 MB) para activar el reconocimiento de voz.</string>
 </resources>
