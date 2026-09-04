@@ -8,9 +8,11 @@ data class DictationModel(
     @PrimaryKey val id: String,
     val name: String,
     val sizeMb: Float,
-    val accuracySpanish: Int, // percentage (e.g., 80)
-    val accuracyEnglish: Int, // percentage
-    val speedMultiplier: Float, // speed relative to baseline (e.g., 10.0f)
+    // Legacy schema fields retained until the next Room migration. The UI does
+    // not present universal accuracy or speed claims without benchmark provenance.
+    val accuracySpanish: Int,
+    val accuracyEnglish: Int,
+    val speedMultiplier: Float,
     val isDownloaded: Boolean = false,
     val downloadProgress: Float = 0.0f,
     val isDownloading: Boolean = false,
@@ -43,4 +45,3 @@ data class DictationStat(
     val durationSec: Int,
     val wpm: Float
 )
-

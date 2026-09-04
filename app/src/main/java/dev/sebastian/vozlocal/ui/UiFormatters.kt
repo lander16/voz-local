@@ -45,11 +45,44 @@ fun historyDateGroupLabel(timestamp: Long): String {
     return SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(Date(timestamp))
 }
 
-fun modelRecommendationLabel(modelId: String): String = when (modelId) {
-    "whisper_tiny" -> "Fastest"
-    "whisper_base" -> "Balanced"
-    "whisper_small" -> "Best accuracy"
-    "whisper_medium" -> "Largest"
-    "whisper_large_v3_turbo" -> "Quality + speed"
-    else -> "Recommended"
+data class ModelPresentation(
+    val badge: String,
+    val language: String,
+    val quantization: String,
+    val description: String,
+)
+
+fun modelPresentation(modelId: String): ModelPresentation = when (modelId) {
+    "whisper_tiny" -> ModelPresentation(
+        "Smallest download", "Multilingual", "q8_0",
+        "Useful when storage and memory are constrained; recognition results can differ from larger models.",
+    )
+    "whisper_base" -> ModelPresentation(
+        "Default", "Multilingual", "q8_0",
+        "Default starting point. Compare it with Tiny or Small using recordings representative of your voice.",
+    )
+    "whisper_base_en" -> ModelPresentation(
+        "English only", "English only", "q8_0",
+        "English-only checkpoint. Do not select it for Spanish or multilingual dictation.",
+    )
+    "whisper_small" -> ModelPresentation(
+        "Multilingual", "Multilingual", "q8_0",
+        "A larger Small checkpoint. Its speed and recognition quality must be benchmarked on each device.",
+    )
+    "whisper_small_q5_1" -> ModelPresentation(
+        "Smaller Small file", "Multilingual", "q5_1",
+        "The Small checkpoint with stronger compression. Compression can change both output and performance.",
+    )
+    "whisper_large_v3_turbo" -> ModelPresentation(
+        "Turbo checkpoint", "Multilingual", "q5_0",
+        "Substantial storage and memory requirements. Benchmark it locally before making it the default.",
+    )
+    "whisper_medium" -> ModelPresentation(
+        "Largest download", "Multilingual", "q8_0",
+        "Intended for devices with ample storage and memory; sustained performance must be measured locally.",
+    )
+    else -> ModelPresentation(
+        "Local model", "Unknown", "Unknown",
+        "Recognition quality and transcription time depend on the device, audio, and decoding settings.",
+    )
 }

@@ -24,7 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.sebastian.vozlocal.data.model.DictationModel
 import dev.sebastian.vozlocal.ui.formatDownloadProgress
 import dev.sebastian.vozlocal.ui.formatEta
-import dev.sebastian.vozlocal.ui.modelRecommendationLabel
+import dev.sebastian.vozlocal.ui.modelPresentation
 import dev.sebastian.vozlocal.ui.theme.*
 import dev.sebastian.vozlocal.ui.viewmodel.MainViewModel
 
@@ -54,6 +54,11 @@ fun ModelsTab(viewModel: MainViewModel) {
                 Text(
                     text = "Download and activate GGUF/bin Whisper models directly onto your internal storage. Runs 100% offline.",
                     fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Quality and transcription time depend on your device, language, audio, CPU backend, and settings. Compare models under the same conditions.",
+                    fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -165,7 +170,7 @@ fun ModelCard(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ModelMetaChip(text = modelRecommendationLabel(model.id), active = true, accent = PrimaryColor)
+                ModelMetaChip(text = modelPresentation(model.id).badge, active = true, accent = PrimaryColor)
                 ModelMetaChip(text = "${model.sizeMb.toInt()} MB", active = false)
                 ModelMetaChip(
                     text = downloadStatus?.verificationLabel ?: "Unverified",
@@ -174,51 +179,25 @@ fun ModelCard(
                 )
             }
 
-            // Accuracy and Speed Ratings Layout
+            val presentation = modelPresentation(model.id)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Accuracy
-                val isEnglishOnly = model.id.endsWith("_en") || model.accuracySpanish == 0
-                val accuracyLabel = if (isEnglishOnly) "English accuracy" else "Spanish accuracy"
-                val accuracyValue = if (isEnglishOnly) 93 else model.accuracySpanish
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = accuracyLabel, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        LinearProgressIndicator(
-                            progress = { accuracyValue / 100f },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(4.dp)
-                                .clip(RoundedCornerShape(2.dp)),
-                            color = PrimaryColor,
-                            trackColor = MaterialTheme.colorScheme.surfaceContainer
-                        )
-                        Text(text = "${accuracyValue}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                    }
+                    Text(text = "Language", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = presentation.language, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 }
-
-                // Speed factor
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Mobile decoding speed", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "${model.speedMultiplier}x",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (model.speedMultiplier > 4f) PrimaryColor else SecondaryColor
-                        )
-                        Text(text = "multiplier", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Text(text = "Quantization", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = presentation.quantization, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                 }
             }
+            Text(
+                text = presentation.description,
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             // Downloader Status / Operation Bar
             if (model.isDownloading) {

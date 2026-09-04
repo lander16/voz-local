@@ -93,10 +93,10 @@ fun SetupWizardScreen(
 
         val models by viewModel.modelsList.collectAsStateWithLifecycle()
         val hasDownloadedModel = models.any { it.isDownloaded }
-        val recommendedModel = models.find { it.id == "whisper_base" } ?: models.firstOrNull()
-        val targetModelId = recommendedModel?.id ?: "whisper_base"
-        val downloadProgress by viewModel.downloadProgressFor(targetModelId).collectAsStateWithLifecycle()
-        val downloadStatus by viewModel.downloadStatusFor(targetModelId).collectAsStateWithLifecycle()
+        val defaultModel = models.find { it.id == "whisper_base" } ?: models.firstOrNull()
+        val defaultModelId = defaultModel?.id ?: "whisper_base"
+        val downloadProgress by viewModel.downloadProgressFor(defaultModelId).collectAsStateWithLifecycle()
+        val downloadStatus by viewModel.downloadStatusFor(defaultModelId).collectAsStateWithLifecycle()
 
         val completionProgress = (if (hasMicPermission) 0.33f else 0f) +
                                  (if (hasAccessibilityEnabled) 0.33f else 0f) +
@@ -232,9 +232,9 @@ fun SetupWizardScreen(
 
                 Text(
                     text = if (hasDownloadedModel)
-                        "Model '${recommendedModel?.name ?: "Whisper Base"}' (${recommendedModel?.sizeMb?.toInt() ?: 78} MB) is downloaded locally. Ready to transcribe without an internet connection."
+                        "Model '${defaultModel?.name ?: "Whisper Base q8_0"}' (${defaultModel?.sizeMb?.toInt() ?: 78} MB) is downloaded locally. Ready to transcribe without an internet connection."
                     else
-                        "VozLocal transcribes audio 100% on-device with zero cloud servers. Download the recommended model (Whisper Base, 78 MB) to enable speech recognition.",
+                        "VozLocal transcribes audio 100% on-device with zero cloud servers. Download the default model (Whisper Base q8_0, approximately 78 MB) to enable speech recognition.",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp
@@ -263,7 +263,7 @@ fun SetupWizardScreen(
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    text = "${String.format(java.util.Locale.US, "%.1f", downloadStatus?.downloadedMb ?: 0f)} / ${recommendedModel?.sizeMb?.toInt() ?: 78} MB",
+                                    text = "${String.format(java.util.Locale.US, "%.1f", downloadStatus?.downloadedMb ?: 0f)} / ${defaultModel?.sizeMb?.toInt() ?: 78} MB",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -286,7 +286,7 @@ fun SetupWizardScreen(
                             }
 
                             Button(
-                                onClick = { viewModel.downloadModel(targetModelId) },
+                                onClick = { viewModel.downloadModel(defaultModelId) },
                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                 shape = RoundedCornerShape(8.dp)
                             ) {

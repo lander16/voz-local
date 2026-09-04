@@ -403,71 +403,71 @@ class DictationRepository(private val context: Context) {
             val defaultModels = listOf(
                 DictationModel(
                     id = "whisper_base",
-                    name = "Whisper Base (Recommended)",
+                    name = "Whisper Base q8_0",
                     sizeMb = 78f,  // q8_0 quantized
-                    accuracySpanish = 83,
-                    accuracyEnglish = 89,
-                    speedMultiplier = 5.0f,
+                    accuracySpanish = 0,
+                    accuracyEnglish = 0,
+                    speedMultiplier = 0f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_base"),
                     isSelected = true
                 ),
                 DictationModel(
                     id = "whisper_tiny",
-                    name = "Whisper Tiny (Ultra Fast)",
+                    name = "Whisper Tiny q8_0",
                     sizeMb = 42f,  // q8_0 quantized
-                    accuracySpanish = 72,
-                    accuracyEnglish = 79,
-                    speedMultiplier = 8.5f,
+                    accuracySpanish = 0,
+                    accuracyEnglish = 0,
+                    speedMultiplier = 0f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_tiny"),
                     isSelected = false
                 ),
                 DictationModel(
                     id = "whisper_base_en",
-                    name = "Whisper Base English (High Speed .en)",
+                    name = "Whisper Base English q8_0",
                     sizeMb = 78f,  // q8_0 quantized
                     accuracySpanish = 0,
-                    accuracyEnglish = 93,
-                    speedMultiplier = 5.5f,
+                    accuracyEnglish = 0,
+                    speedMultiplier = 0f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_base_en"),
                     isSelected = false
                 ),
                 DictationModel(
                     id = "whisper_small",
-                    name = "Whisper Small (High Precision)",
+                    name = "Whisper Small q8_0",
                     sizeMb = 252f,  // q8_0 quantized
-                    accuracySpanish = 92,
-                    accuracyEnglish = 95,
-                    speedMultiplier = 2.5f,
+                    accuracySpanish = 0,
+                    accuracyEnglish = 0,
+                    speedMultiplier = 0f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_small"),
                     isSelected = false
                 ),
                 DictationModel(
                     id = "whisper_small_q5_1",
-                    name = "Whisper Small q5_1 (Mobile Sweet Spot)",
+                    name = "Whisper Small q5_1",
                     sizeMb = 175f,  // q5_1 quantized
-                    accuracySpanish = 91,
-                    accuracyEnglish = 94,
-                    speedMultiplier = 3.2f,
+                    accuracySpanish = 0,
+                    accuracyEnglish = 0,
+                    speedMultiplier = 0f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_small_q5_1"),
                     isSelected = false
                 ),
                 DictationModel(
                     id = "whisper_large_v3_turbo",
-                    name = "Whisper Large v3 Turbo (SOTA Quality)",
+                    name = "Whisper Large v3 Turbo q5_0",
                     sizeMb = 547f,  // q5_0 mobile optimized
-                    accuracySpanish = 99,
-                    accuracyEnglish = 99,
-                    speedMultiplier = 3.5f,
+                    accuracySpanish = 0,
+                    accuracyEnglish = 0,
+                    speedMultiplier = 0f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_large_v3_turbo"),
                     isSelected = false
                 ),
                 DictationModel(
                     id = "whisper_medium",
-                    name = "Whisper Medium (Legacy Heavy)",
+                    name = "Whisper Medium q8_0",
                     sizeMb = 823f,  // q8_0 quantized
-                    accuracySpanish = 97,
-                    accuracyEnglish = 99,
-                    speedMultiplier = 1.0f,
+                    accuracySpanish = 0,
+                    accuracyEnglish = 0,
+                    speedMultiplier = 0f,
                     isDownloaded = ModelUrls.isModelDownloaded(context, "whisper_medium"),
                     isSelected = false
                 )
@@ -496,11 +496,18 @@ class DictationRepository(private val context: Context) {
                     val targetSize = defaultModel?.sizeMb ?: model.sizeMb
                     val targetName = defaultModel?.name ?: model.name
                     val targetSpeed = defaultModel?.speedMultiplier ?: model.speedMultiplier
+                    val targetSpanishAccuracy = defaultModel?.accuracySpanish ?: model.accuracySpanish
+                    val targetEnglishAccuracy = defaultModel?.accuracyEnglish ?: model.accuracyEnglish
 
-                    if (model.isDownloaded != downloaded || model.isDownloading || model.sizeMb != targetSize || model.name != targetName) {
+                    if (model.isDownloaded != downloaded || model.isDownloading || model.sizeMb != targetSize ||
+                        model.name != targetName || model.speedMultiplier != targetSpeed ||
+                        model.accuracySpanish != targetSpanishAccuracy || model.accuracyEnglish != targetEnglishAccuracy
+                    ) {
                         modelDao.updateModel(model.copy(
                             name = targetName,
                             sizeMb = targetSize,
+                            accuracySpanish = targetSpanishAccuracy,
+                            accuracyEnglish = targetEnglishAccuracy,
                             speedMultiplier = targetSpeed,
                             isDownloaded = downloaded,
                             isDownloading = false,

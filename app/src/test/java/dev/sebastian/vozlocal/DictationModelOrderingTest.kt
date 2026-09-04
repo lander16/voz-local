@@ -9,7 +9,7 @@ import org.junit.Test
 class DictationModelOrderingTest {
 
     @Test
-    fun whisperModelsSortBySpeed() {
+    fun whisperModelsUseStableDisplayOrder() {
         val models = listOf(
             DictationModel("whisper_medium", "Whisper Medium", 823f, 97, 99, 1.0f, isDownloaded = false, isSelected = false),
             DictationModel("whisper_tiny", "Whisper Tiny", 42f, 72, 79, 8.5f, isDownloaded = true, isSelected = true),
