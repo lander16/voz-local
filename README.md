@@ -347,293 +347,52 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 
 ---
 
-## 🧱 Recent Architectural Changes (v2)
-
-| Area | Before | After |
-|---|---|---|
-| `AudioRecorder` | Two instances (ViewModel + Service), raced for the mic | Process-wide singleton in `VozLocalApp`; state transitions guarded by `synchronized(this)` and the IO reader thread reads `@Volatile` fields |
-| `WhisperContext` cleanup | `runBlocking` on the GC finalizer thread | Lifecycle mutex serializes load / transcribe / release; cancelling a shared-file job now signals Whisper's native abort callback rather than merely hiding progress UI |
-| CPU thread count | Re-read `/proc/cpuinfo` on every transcription | Adaptive lazy selection with `-Dvozlocal.whisper.threads=N` override; optimized for Tensor G3 (Pixel 8 Pro) and modern 8+ core chips to map 5 threads across high-performance cores |
-| Native hardware acceleration | Wrapper-only architecture flags | Runtime HWCAP dispatch selects separately compiled ARMv8-A, dot-product, FP16/dot-product, or I8MM ggml CPU modules |
-| Audio context | Experimental shortened context | Whisper default context (`audio_ctx = 0`) to avoid accuracy regressions from unbenchmarked context truncation |
-| Floating button ergonomics | Free-floating without memory or haptics | SharedPreferences position memory across reboots, 180ms smooth edge-docking animation to nearest bezel, and tactile click haptic feedback |
-| Spoken punctuation engine | Basic keyword matching with replacement bugs | Comprehensive Spanish and English punctuation command dictionary with forward/backward symbol attachment and clean line break handling |
-| Theme & Contrast | Hardcoded dark colors caused low contrast in Light mode | App-wide semantic Material 3 theming (`onSurface`, `surface`, `onPrimary`, etc.), WCAG AAA compliant contrast, and reactive `MainActivity` `themeMode` binding |
-| In-app dictation & rendering | Mic hijacked by download guard; text collapsed to 0 height | Unconditional recording toggle, dynamic model fallback resolution, and fixed zero-height layout bug in Live Transcription Card |
-| Compliance & Data Export | No in-app policy disclosure; no bulk export | Interactive in-app Privacy Policy & Offline Guarantee modal dialog; one-tap Markdown/Text transcription history export via Android sharesheet |
-| Smart-punctuation | Two implementations, one dead | Kotlin `postProcessText` is the single source of truth; the JNI pause-joiner is removed |
-| Dictionary regexes | Re-compiled every transcription | Hash-keyed cache, invalidated on insert/delete |
-| Download progress | Wrote Room on every 1% (100 writes for an 800 MB model) | In-memory `MutableStateFlow<Map<String,Float>>`; DB written only on completion/failure |
-| Model downloads | Direct writes to final path + placeholder SHA strings | Unique `.part` files, complete-length/size validation, atomic move, and pinned SHA-256 verification; immutable URL revisions remain pending |
-| Silero VAD download | Broken upstream URL / oversized validation floor | Downloads from `ggml-org/whisper-vad`, accepts the current ~0.9 MB asset, and keeps VAD optional/user-toggleable |
-| History list | Full table re-emit on every insert | `LIMIT 200` paged flow for the UI; full table retained for stats |
-| Filter toggles | Reset on every app restart | Persisted to SharedPreferences via proper setters |
-| Cleanup modes | One optional cleanup toggle | Persisted Minimal / Balanced / Aggressive modes exposed in ViewModel and Settings; Dictate tab shows the current mode |
-| `postProcessText` signature | Fixed booleans | Cleanup mode and spoken punctuation settings flow through the shared repository pipeline used by the app and overlay |
-| Database schema | `fallbackToDestructiveMigration(dropAllTables = true)` | `addMigrations(MIGRATION_1_2)`, no destructive fallback; version bumped to 2 |
-| Accessibility service | `typeAllMask` + key-filter | Focus/window-state events only; no interactive-window retrieval; local sensitive-app denylist is checked before source access; password/sensitive nodes and stale targets are rejected |
-| Backup rules | Empty TODOs → default behavior leaked 1.5 GB models to cloud | `models/` + database explicitly excluded |
-| Build | `isMinifyEnabled = false`, no ProGuard rules | `isMinifyEnabled = true`, `isShrinkResources = true`, explicit keep rules for JNI/Room/AccessibilityService |
-| Dependencies | Firebase BOM, Retrofit, Moshi, logging-interceptor (all unused) | Removed; only Compose, Lifecycle, Room, Coroutines, OkHttp, Accompanist, Robolectric/Roborazzi |
-| `minSdk` / `targetSdk` | 24 / 36 (unreleased) | 26 / 36 (with a comment to pin to 35 once AGP 9.3.1 is verified on 35) |
-| `compileSdk` | `release(36) { minorApiLevel = 1 }` | Same (SDK 36 still tracked) |
-| `WhisperEngine` | Hardcoded `language="en"`, no VAD, no initial_prompt, no threshold tuning, single_segment=false | Project-owned JNI shim exposes language, initial_prompt, single_segment, no_speech_thold / logprob_thold / entropy_thold, beam_size, temperature fallback, decoder context, full-context inference, and optional Silero VAD. |
-| Verification coverage | Sparse post-processing coverage | Automated unit and Robolectric coverage for cleanup modes, thread allocation, spoken punctuation, card layout, model integrity, and VAD integrity |
-
----
-
 ## 🛣️ Roadmap
 
-**Completed:**
+Only unfinished work belongs here. Implemented behavior is documented in the
+feature, architecture, privacy, and performance sections above.
 
-- [x] Real SHA-256 hashes for Whisper and Silero VAD models. Every new download is verified before use; models from older app versions are re-verified once before loading.
-- [x] Release keystore configuration and Google Play Android App Bundle (.aab) generation.
-- [x] Google Play Store compliant Privacy Policy (English & Spanish).
-- [x] Play Store graphical assets (512x512 icon, 1024x500 feature graphic, 6 screenshots).
-- [x] `MainActivity` reads `themeMode` from `VozLocalApp.repository` and passes it to the top-level `MyApplicationTheme`.
-- [x] Automated Compose tests for layout, transcription rendering, CPU configuration, and spoken punctuation.
+### Performance and accuracy
 
-**Active & Future Items:**
+1. **Reproducible device benchmark mode** — Disable normal startup preload during
+   measurement; accept model, backend, thread, clip, and iteration arguments; and
+   export structured load, warmup, encode, decode, fallback, memory, energy, and
+   thermal results.
+2. **Representative transcription corpus** — Add hand-verified clean/noisy
+   Spanish, names and numbers, code-switched speech, short utterances, 30-second
+   boundary cases, and sustained recordings. Use normalized WER/CER plus manual
+   review of substantive differences.
+3. **Complete Small q8_0 validation** — Repeat the promising Pixel 8 Pro result
+   across the full corpus, alternating q8_0/q5_1 order and measuring p50/p95,
+   decoder-fallback outliers, memory, battery temperature, and sustained load
+   before changing any default.
+4. **Opt-in local calibration** — Select backend tier and thread count per device,
+   model, quantization, and workload. Invalidate saved profiles after native-build
+   or model-checksum changes and always retain Compatibility mode.
+5. **Guarded short-dictation path** — Re-evaluate duration-binned audio contexts
+   with a full-context retry for empty, repetitive, low-confidence, or apparently
+   truncated output. Long and shared audio must keep timestamp-guided decoding.
+6. **Native timing and fallback telemetry** — Expose whisper.cpp encode/decode and
+   sampling timings locally, including fallback count and temperature steps,
+   without storing transcript text in release diagnostics.
+7. **Warmup and sustained-load tuning** — Separate load, warmup, and inference
+   costs; avoid warming a model that will be replaced; and compare burst versus
+   long-file thread policies under controlled thermal conditions.
+8. **Larger-model acceleration experiments** — Evaluate GPU/Vulkan support, more
+   compressed Turbo variants, and vetted Spanish-fine-tuned Small checkpoints as
+   opt-in alternatives with explicit compatibility and WER/CER gates.
 
-- [ ] Foreground service for background recording with screen off.
-- [ ] Window-size-class adaptive UI (NavigationRail for width >= 600 dp, foldable support).
-- [ ] GPU / Vulkan / OpenCL delegate evaluation.
-- [ ] Detekt + ktlint + CI for static analysis.
-- [ ] Audio resampling quality (streaming band-limited/windowed-sinc resampler).
-- [ ] Pixel calibration UI (persist best sustainable configuration per device).
-- [ ] Pin every Hugging Face model URL to an immutable repository revision in addition to checking its SHA-256 digest.
+### Platform and project quality
 
-### Capability-based CPU kernel dispatch
+- Pin model download URLs to immutable Hugging Face revisions in addition to the
+  existing SHA-256 verification.
+- Replace linear audio downsampling with a streaming band-limited/windowed-sinc
+  resampler and measure its recognition effect.
+- Add a foreground service for user-initiated recording with the screen off.
+- Add window-size-class layouts for tablets and foldables.
+- Add Detekt, ktlint, and continuous-integration checks.
 
-VozLocal now ships a baseline-safe ARM64 Whisper front-end plus multiple ggml CPU
-kernel modules. **Compatibility** mode loads ARMv8-A kernels and is the default.
-The opt-in **Automatic (experimental)** mode asks each optimized module's native
-score function whether the current process may execute its instructions, then
-uses the first accepted tier. A missing or rejected accelerator therefore reduces
-performance instead of making the app execute an unsupported instruction.
-
-The front-end, JNI initialization, error handling, and feature scorer are compiled
-for `armv8-a`. Optional instructions exist only inside separately loaded modules.
-The app does not use `Build.MODEL`, a Tensor/Qualcomm allowlist, chipset names, or
-Android version as proof that an extension is executable.
-
-#### Target behavior
-
-```text
-ARM64 device starts VozLocal
-        │
-        ├─ Load a baseline ARMv8-A CPU backend (always-safe fallback)
-        │
-        ├─ Read runtime ARM capability bits
-        │     ├─ NEON (guaranteed by AArch64)
-        │     ├─ dot-product instructions
-        │     ├─ FP16 vector arithmetic
-        │     ├─ I8MM matrix multiply
-        │     ├─ SVE / SVE2
-        │     └─ SME, when a future Android device exposes it
-        │
-        └─ Activate the highest-scoring compatible backend
-              ├─ baseline ARMv8-A
-              ├─ FP16 + dotprod
-              ├─ FP16 + dotprod + I8MM
-              └─ future SVE/SVE2/SME backend when benchmarked
-```
-
-The Pixel 8 Pro test device reports FP16, dot-product, I8MM, SVE, and SVE2 across
-all nine schedulable cores. Automatic mode selects the ARMv8.6 I8MM module on that
-device. Selection means the module is safe to execute; it does not mean every
-quantization format uses an I8MM-specific inner loop or that the tier will win
-every workload. In particular, Small q5_1 relies heavily on dot-product kernels,
-while the measured Small q8_0 path benefited much more from the selected module.
-An ARM64 device without I8MM falls through to FP16/dot-product, dot-product, or
-ARMv8-A without relying on the Pixel or Tensor name.
-
-#### Implemented ggml architecture
-
-The vendored ggml source contains the ARM feature scoring code. On Android/Linux
-it reads `AT_HWCAP` and `AT_HWCAP2`, including dot-product, FP16, I8MM, SVE,
-SVE2, and SME flags. VozLocal uses that mechanism rather than duplicating native
-feature detection in Kotlin:
-
-1. Configure the native build with `GGML_BACKEND_DL=ON` and
-   `GGML_CPU_ALL_VARIANTS=ON`.
-2. Do **not** set one global `GGML_CPU_ARM_ARCH` in this mode: ggml rejects that
-   combination because the point is to build multiple architectures.
-3. Package the baseline and CPU-variant shared libraries in every `arm64-v8a`
-   APK/AAB split, including their dependencies and the C++ shared runtime.
-4. Load exact Android JNI-library sonames in a controlled order. This works when
-   Android keeps native libraries inside the APK (`extractNativeLibs=false`),
-   where filesystem enumeration cannot discover them.
-5. In Automatic mode, try ARMv8.6 I8MM, ARMv8.2 FP16/dot-product,
-   ARMv8.2 dot-product, then ARMv8-A. Every module performs its own HWCAP score
-   before registering CPU kernels.
-6. In Compatibility mode, load only `android_armv8.0_1`.
-7. Treat the absence of every compatible module as a controlled initialization
-   error. Whisper context creation never proceeds with a null CPU backend.
-
-The build currently produces all seven upstream Android ARM variants, totaling
-approximately 5.9 MB before APK-level effects. SVE/SVE2/SME modules are packaged
-but deliberately not selected by the release policy yet. They require comparative
-device benchmarks; a CPU advertising an instruction does not prove that a given
-kernel implementation is faster or more thermally efficient than I8MM.
-
-This approach is preferable to loading multiple top-level `whisper` wrappers in
-Kotlin. ggml owns the actual matrix kernels and can score feature-specific CPU
-backends using the same capability check that guards their instructions. A
-Kotlin-level selector would need to duplicate native feature detection, library
-search paths, error handling, and fallback behavior while still not controlling
-which ggml kernel implementation runs.
-
-#### Android packaging and lifecycle requirements
-
-Dynamic backend loading and process lifecycle are the main integration risks.
-The implementation and release checks therefore require that:
-
-- Gradle packages every variant into both debug APKs and release AAB ABI splits.
-- The loader first uses an on-disk library path when present and otherwise uses
-  the packaged JNI soname resolved by Android's linker namespace. It never copies
-  executable libraries to a writable application directory.
-- R8/resource shrinking does not remove library metadata or JNI entry points.
-- `libc++_shared.so` and ggml backend dependencies are packaged exactly once and
-  load in a deterministic order.
-- Model loading, warmup, cancellation, and `onTrimMemory` lifecycle behavior
-  remain correct when a backend is selected dynamically.
-- The fallback baseline remains available after any failed `dlopen`, feature
-  score of zero, or unavailable optional backend.
-- Backend selection happens once per process before any model is created. A mode
-  change applies after VozLocal fully restarts because ggml backends cannot be
-  safely exchanged underneath a live registry.
-- Before the first optimized initialization/warmup, the app writes a synchronous
-  probe marker. If the process does not finish the bounded warmup, the next
-  launch quarantines Automatic mode and returns to Compatibility. Selecting
-  Automatic again clears the quarantine for a deliberate retry.
-- The old `libwhisper_v8fp16_va.so` wrapper is not packaged. The main activity
-  and accessibility service share the same process-wide backend choice.
-
-The former warmup passed silence through a normal unlimited decode with automatic
-language detection. Quantized models could remain CPU-bound generating fallback
-tokens for a long time, obscuring actual startup and kernel performance. The new
-native warmup uses fixed English, one output token, no temperature fallback, and
-a small audio context. It still touches model buffers and selected kernels but is
-bounded.
-
-The app should log only non-sensitive diagnostic facts in debug builds—selected
-backend name, enabled CPU features, thread count, model id, and timing. Release
-builds should avoid raw transcription text and should not upload diagnostics.
-
-#### Performance and correctness acceptance gates
-
-An optimized variant is not enabled solely because it loads successfully. It
-must pass a repeatable Pixel 8 Pro benchmark matrix and retain an equivalent
-transcription result to the baseline backend:
-
-| Area | Required check |
-|---|---|
-| Capability safety | Test baseline-only, dotprod, and I8MM-capable ARM64 devices or controlled feature-disabled builds; no `SIGILL`, loader crash, or silent fallback loop. |
-| Accuracy | Compare WER/CER and exact transcript output on Spanish, English, code-switched, short, 30-second-boundary, and two-minute recordings. Investigate any variant-dependent decode change. |
-| Latency | Measure cold model load, warm first-token/first-result latency, total inference time, and real-time factor for tiny, base, small, and the selected accuracy-first model. |
-| Thermal behavior | Run at least 10–20 minutes of representative work, recording thermal state/headroom, throttling, p50/p95 latency, and sustained real-time factor. |
-| Energy | Compare battery drain and CPU utilization at equal transcription workloads; the fastest burst benchmark is not automatically the best mobile default. |
-| Cancellation | Stop a long shared-file transcription while each backend is active and verify the native abort path releases CPU promptly without publishing stale text. |
-| Packaging | Install the signed release AAB on-device and inspect every generated ABI split, not only an Android Studio debug install. |
-
-The selected backend and thread count should eventually be persisted per device
-and model after an opt-in local calibration run. A calibration profile should be
-invalidated after an app/native-backend upgrade and reconsidered when sustained
-thermal measurements show that a formerly fast configuration is throttling. The
-user-facing default must prefer reliable, sustained transcription over a short
-synthetic benchmark win.
-
-#### Technical evaluation and longer-term work
-
-| Dimension | Current assessment |
-|---|---|
-| **Implemented CPU tiers** | ARMv8-A → dot-product → FP16/dot-product → I8MM. Selection is native HWCAP-based and remains opt-in while field validation grows. |
-| **Measured package cost** | The seven generated ARM CPU modules total about 5.9 MB uncompressed. APK/AAB and installed-size effects are measured in release checks rather than estimated. |
-| **Stability model** | The guaranteed tier is ARMv8-A, not ARMv8.2. GGML compiles feature scoring without LTO so optimized instructions cannot leak into the pre-score path. A persisted warmup marker adds next-launch recovery. |
-| **Expected CPU return** | I8MM can help compatible quantized matrix operations, but the return is quantization- and model-specific. No universal percentage is promised; latency, WER/CER, temperature, energy, and sustained throughput all gate promotion. |
-| **SVE/SVE2/SME** | Capability detection is available, but these tiers remain disabled by policy until they beat I8MM on representative devices and long thermal runs. |
-| **GPU / Vulkan / OpenCL** | This remains a separate experiment. Potential gains and driver risk must be measured on each backend; CPU dispatch is the lower-risk compatibility and regression fix, not evidence of an assumed GPU multiplier. |
-
-#### Performance opportunities identified by Pixel testing
-
-The September 2026 Pixel measurements changed the optimization priorities. They
-show that model architecture and quantization format can matter more than model
-file size, and that a capability-compatible CPU tier is not automatically the
-fastest tier for every model. The next work should be evidence-driven and retain
-the current compatibility escape hatch.
-
-1. **Quantization-aware local calibration.** Benchmark backend tier, model,
-   quantization, and thread count as one device-local profile. Small q8_0 was
-   substantially faster than Small q5_1 on the tested Tensor G3/I8MM path even
-   though q8_0 uses more storage. Do not infer runtime ordering from bit width or
-   download size. Persist a choice only after repeated short and sustained runs,
-   and invalidate it when the native build or model checksum changes.
-2. **Guarded short-dictation audio context.** Earlier duration-sized
-   `audio_ctx` values reduced work but caused truncation and repetition failures.
-   Revisit the idea only as an opt-in fast path using a small set of reusable
-   graph shapes (for example 256/512/768/1024/1280/1500 frames), a safety margin
-   around the recorded duration, and an automatic full-context retry when output
-   is empty, repetitive, low-confidence, or appears truncated. Long and shared
-   audio must retain timestamp-guided full-context decoding.
-3. **Separate encoder and decoder timing.** Reset and expose whisper.cpp native
-   timings for sampling, encoding, decoding, prompt processing, and batched
-   decoding. Total wall time cannot reveal whether a regression came from audio
-   context, a temperature fallback, a kernel, model loading, or scheduling.
-4. **Control decoder tail latency.** The compatibility test produced a q8_0
-   outlier more than twice its first-pass time while the transcript also changed,
-   consistent with extra decoder/fallback work. Keep accuracy-first fallback as
-   the default, but record fallback count and temperature steps. A future latency
-   mode may cap retries only if WER/CER and failure recovery remain acceptable.
-5. **Make warmup workload-aware.** Model-load warmup reduces first-use allocation
-   work but also consumes energy and can bias CPU frequency before a benchmark.
-   Measure load, warmup, and inference separately. Consider delaying speculative
-   warmup until input focus, device idle time, or a sufficiently charged thermal
-   state, and avoid warming a model that is about to be replaced.
-6. **Use model- and workload-specific threads.** Five threads remains appropriate
-   for short Small inference on the Pixel, while Large v3 Turbo measured best at
-   six. Shared files require a separate sustained test because fewer threads may
-   win after DVFS and memory-bandwidth limits appear. CPU affinity should remain
-   deferred until this simpler policy is measured.
-7. **Add a benchmark application mode.** Instrumentation currently starts the
-   normal `Application`, whose background preload can heat the device and compete
-   with the probe. A benchmark-only startup path should disable preload and
-   downloads, accept model/thread/backend/iteration arguments, enforce Battery
-   Saver and thermal admission checks, and emit structured rows with transcript
-   hashes rather than relying on log text.
-8. **Build a representative accuracy corpus.** The current bundled fixture is
-   approximately 100.65 seconds despite its historical `2min` filename and has no
-   hand-verified transcript. Add clean Spanish, noisy Spanish, names/numbers,
-   code-switched speech, short utterances, a 30-second boundary case, and long
-   audio. Report normalized WER/CER and manually review substantive differences.
-9. **Investigate larger-model acceleration separately.** Large v3 Turbo remained
-   far slower than real time on the Pixel CPU even with six threads. GPU/Vulkan
-   work, a more compressed Turbo quantization, or a vetted Spanish-fine-tuned
-   Small checkpoint may be more productive than further CPU thread tuning, but
-   each introduces compatibility or recognition-quality risk and must stay
-   opt-in until measured.
-
-Longer-term CPU work should proceed in this order:
-
-1. Record controlled baseline-versus-I8MM results for short, two-minute, and
-   sustained recordings on the Pixel 8 Pro.
-2. Add selected tier, native build ID, cold/warm state, streaming state,
-   real-time factor, and thermal state to the existing local benchmark schema.
-3. Test 3/4/5/6 threads per model and quantization. Keep thread selection separate
-   from instruction selection; more heterogeneous cores can increase contention
-   and heat instead of throughput.
-4. Add fresh-process instrumentation for Compatibility, Automatic, missing
-   optional modules, and next-launch recovery. GGML's registry is process-global,
-   so tests must not pretend to switch tiers in one process.
-5. Promote Automatic to the default only after representative non-Pixel ARM64
-   devices pass instruction safety, transcript parity, cancellation, and thermal
-   gates.
-6. Benchmark SVE2 independently. If it wins only for particular models or audio
-   lengths, make the preference profile model-aware rather than globally ranking
-   it above I8MM.
-7. Explore CPU affinity only after thread-count measurements. Pinning to prime or
-   performance cores can improve bursts while worsening sustained thermals and UI
-   responsiveness, so it must never be inferred solely from `/proc/cpuinfo`.
+---
 
 ## 📄 License & Acknowledgments
 
