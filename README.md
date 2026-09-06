@@ -161,6 +161,9 @@ The sizes above are approximate download sizes, not RAM estimates. VozLocal does
 
 ## ⚖️ Accuracy & Performance
 
+For the complete measurement record, observed constraints, and prioritized
+acceleration roadmap, see [Performance.md](Performance.md).
+
 VozLocal optimizes for complete, accurate local transcription before micro-latency:
 
 - **Multi-core CPU threading optimization** — `WhisperCpuConfig` dynamically discovers high-performance CPU cores by parsing `/sys/devices/system/cpu/` and `/proc/cpuinfo`. It safely allocates up to 5 performance cores on modern 8+ core and 9-core mobile SoCs (such as the Pixel 8 Pro Tensor G3: 1x Cortex-X3 + 4x Cortex-A715) while reserving CPU budget for audio recording and UI threads. Thread allocation also scales by active model size, with configurable JVM override (`-Dvozlocal.whisper.threads=N`).
