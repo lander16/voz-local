@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -103,6 +104,10 @@ class AudioRecorder internal constructor(
     @Volatile private var recordingJob: Job? = null
     private var sessionId = 0L
     private val floatBuffer = FastFloatBuffer()
+    // A parent scope can be cancelled before a lazily-created reader gets a chance to enter its
+    // try/finally block. This independent IO scope performs the one required hardware cleanup in
+    // that case, without making the cancelling UI/service thread wait for AudioRecord.
+    private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @SuppressLint("MissingPermission")
     fun startRecording(
@@ -138,6 +143,11 @@ class AudioRecorder internal constructor(
                 readLoop(id, recorder, minBufferSize / 2, onRmsChanged, onRecordingError)
             }
             recordingJob = reader
+            reader.invokeOnCompletion { cause ->
+                if (cause is CancellationException) {
+                    cleanupScope.launch { finishReader(id, recorder, null, onRecordingError) }
+                }
+            }
             reader.start()
             return true
         }
