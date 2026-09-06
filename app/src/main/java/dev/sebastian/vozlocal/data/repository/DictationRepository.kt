@@ -32,6 +32,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicReference
 
 import androidx.core.content.edit
 
@@ -50,6 +51,27 @@ data class SensitiveApp(
     val label: String,
 )
 
+private data class DictionaryReplacement(
+    val pattern: Regex,
+    val replacement: String,
+    val order: Int,
+)
+
+private data class DictionaryReplacementSnapshot(
+    val replacements: List<DictionaryReplacement>,
+) {
+    companion object {
+        val EMPTY = DictionaryReplacementSnapshot(emptyList())
+    }
+}
+
+private data class DictionaryMatch(
+    val start: Int,
+    val endExclusive: Int,
+    val replacement: String,
+    val order: Int,
+)
+
 class DictationRepository(private val context: Context) {
     private val database = AppDatabase.getDatabase(context)
     private val modelDao = database.modelDao()
@@ -65,11 +87,12 @@ class DictationRepository(private val context: Context) {
     val textPolishEngine = TextPolishEngine()
     val qwenEngine: TextPolishEngine get() = textPolishEngine
 
-    // Regex cache for the dictionary replacement pass, invalidated whenever words change.
-    private var cachedWordRegexes: List<Regex> = emptyList()
-    private var cachedWordReplacements: List<String> = emptyList()
-    private var lastDictHash: Int = 0
-    @Volatile private var dictionarySnapshot: List<DictionaryWord> = emptyList()
+    /**
+     * The complete dictionary replacement state is published in one atomic operation.
+     * A transcription always uses exactly one immutable snapshot, even while the user
+     * edits the dictionary on another coroutine.
+     */
+    private val dictionaryReplacementSnapshot = AtomicReference(DictionaryReplacementSnapshot.EMPTY)
 
     // Silero VAD model state: populated from disk or by an explicit user download.
     private val _vadModelReady = MutableStateFlow(false)
@@ -796,14 +819,74 @@ class DictationRepository(private val context: Context) {
     }
 
     private suspend fun refreshDictionarySnapshot() {
-        dictionarySnapshot = dictionaryDao.getWordsList()
-        invalidateRegexCache()
+        val words = dictionaryDao.getWordsList()
+        dictionaryReplacementSnapshot.set(buildDictionaryReplacementSnapshot(words))
     }
 
-    fun invalidateRegexCache() {
-        lastDictHash = 0
-        cachedWordRegexes = emptyList()
-        cachedWordReplacements = emptyList()
+    /**
+     * Dictionary replacement is deliberately non-cascading: every match is found in
+     * the original text, so a canonical value cannot become input for another entry.
+     * When entries overlap, the longest match wins; equal-length matches use the
+     * deterministic dictionary order (canonical word, then database id).
+     */
+    private fun buildDictionaryReplacementSnapshot(words: List<DictionaryWord>): DictionaryReplacementSnapshot {
+        val replacements = buildList {
+            var order = 0
+            words.sortedWith(
+                compareBy<DictionaryWord>({ it.word.lowercase(Locale.ROOT) }, { it.word }, { it.id })
+            ).forEach { dictionaryWord ->
+                fun addPattern(source: String) {
+                    add(
+                        DictionaryReplacement(
+                            pattern = Regex("\\b${Regex.escape(source)}\\b", RegexOption.IGNORE_CASE),
+                            replacement = dictionaryWord.word,
+                            order = order++
+                        )
+                    )
+                }
+
+                dictionaryWord.replacement
+                    .split(",")
+                    .map(String::trim)
+                    .filter(String::isNotEmpty)
+                    .forEach(::addPattern)
+                addPattern(dictionaryWord.word)
+            }
+        }
+        return DictionaryReplacementSnapshot(replacements)
+    }
+
+    private fun applyDictionaryReplacements(
+        text: String,
+        snapshot: DictionaryReplacementSnapshot
+    ): String {
+        val matches = snapshot.replacements.flatMap { replacement ->
+            replacement.pattern.findAll(text).map { match ->
+                DictionaryMatch(
+                    start = match.range.first,
+                    endExclusive = match.range.last + 1,
+                    replacement = replacement.replacement,
+                    order = replacement.order
+                )
+            }.toList()
+        }.sortedWith(
+            compareBy<DictionaryMatch> { it.start }
+                .thenByDescending { it.endExclusive - it.start }
+                .thenBy { it.order }
+        )
+
+        if (matches.isEmpty()) return text
+
+        val output = StringBuilder(text.length)
+        var consumedUntil = 0
+        for (match in matches) {
+            if (match.start < consumedUntil) continue
+            output.append(text, consumedUntil, match.start)
+            output.append(match.replacement)
+            consumedUntil = match.endExclusive
+        }
+        output.append(text, consumedUntil, text.length)
+        return output.toString()
     }
 
     // Advanced Local Post-Processing Pipeline
@@ -822,32 +905,8 @@ class DictationRepository(private val context: Context) {
 
         // 2. Dictionary Replacements & Misheard Vocabulary Biasing
         if (applyDict) {
-            val words = dictionarySnapshot
-            val dictHash = words.fold(0) { acc, w -> 31 * acc + w.id + w.word.hashCode() }
-            if (dictHash != lastDictHash) {
-                val regexes = mutableListOf<Regex>()
-                val replacements = mutableListOf<String>()
-                for (dictWord in words) {
-                    if (dictWord.replacement.isNotBlank()) {
-                        val variants = dictWord.replacement.split(",")
-                        for (variant in variants) {
-                            val trimmedVariant = variant.trim()
-                            if (trimmedVariant.isNotEmpty()) {
-                                regexes.add(Regex("(?i)\\b${Regex.escape(trimmedVariant)}\\b"))
-                                replacements.add(dictWord.word)
-                            }
-                        }
-                    }
-                    regexes.add(Regex("(?i)\\b${Regex.escape(dictWord.word)}\\b"))
-                    replacements.add(dictWord.word)
-                }
-                cachedWordRegexes = regexes
-                cachedWordReplacements = replacements
-                lastDictHash = dictHash
-            }
-            for (i in cachedWordRegexes.indices) {
-                result = result.replace(cachedWordRegexes[i], cachedWordReplacements[i])
-            }
+            val snapshot = dictionaryReplacementSnapshot.get()
+            result = applyDictionaryReplacements(result, snapshot)
         }
 
         // 3. Smart Punctuation. Spoken punctuation commands are opt-in because
