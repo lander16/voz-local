@@ -41,26 +41,32 @@ class AccessibilityTargetPolicyTest {
     }
 
     @Test
-    fun placeholderDetectionMatchesAskGoogleAndCommonHints() {
-        // "Ask Google" placeholder without hintText attribute
-        assertTrue(AccessibilityTargetPolicy.isPlaceholderText("Ask Google"))
-        assertTrue(AccessibilityTargetPolicy.isPlaceholderText("ask google"))
-        assertTrue(AccessibilityTargetPolicy.isPlaceholderText("Search"))
-        assertTrue(AccessibilityTargetPolicy.isPlaceholderText("Buscar"))
-        assertTrue(AccessibilityTargetPolicy.isPlaceholderText("Type a message"))
-
-        // With isShowingHintText = true
+    fun placeholderDetectionUsesFrameworkHintStateAndEmptyControls() {
+        assertTrue(AccessibilityTargetPolicy.isPlaceholderText(""))
+        assertTrue(AccessibilityTargetPolicy.isPlaceholderText("   "))
         assertTrue(AccessibilityTargetPolicy.isPlaceholderText("Custom Hint", isShowingHintText = true))
+    }
 
-        // When text matches hintText
-        assertTrue(AccessibilityTargetPolicy.isPlaceholderText("Enter your query here", hintText = "Enter your query here"))
-
-        // When text matches contentDescription
-        assertTrue(AccessibilityTargetPolicy.isPlaceholderText("Search web", contentDescription = "Search web"))
-
-        // Real user text should NOT be flagged as placeholder
+    @Test
+    fun placeholderDetectionPreservesAmbiguousNonemptyText() {
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("message"))
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("buscar"))
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Ask Google"))
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Enter your query here", hintText = "Enter your query here"))
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Search web", contentDescription = "Search web"))
         assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Hello world this is my dictation"))
         assertFalse(AccessibilityTargetPolicy.isPlaceholderText("My bank note"))
+    }
+
+    @Test
+    fun placeholderDetectionPrefersFrameworkStateOverMatchingMetadata() {
+        assertTrue(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                text = "Enter your query here",
+                hintText = "Enter your query here",
+                isShowingHintText = true
+            )
+        )
     }
 
     @Test
@@ -86,5 +92,17 @@ class AccessibilityTargetPolicyTest {
             isPlaceholder = false
         )
         org.junit.Assert.assertEquals("Hello world", result)
+    }
+
+    @Test
+    fun computeInsertionRespectsSelectionInAmbiguousText() {
+        val result = AccessibilityTargetPolicy.computeInsertionText(
+            rawText = "buscar ahora",
+            textToInsert = "después",
+            selectionStart = 0,
+            selectionEnd = 6,
+            isPlaceholder = false
+        )
+        org.junit.Assert.assertEquals("después ahora", result)
     }
 }

@@ -28,28 +28,6 @@ object AccessibilityTargetPolicy {
             recordingTarget.packageName == currentTarget.packageName &&
             recordingTarget.windowId == currentTarget.windowId
 
-    val COMMON_PLACEHOLDERS = setOf(
-        "ask google",
-        "search",
-        "search...",
-        "search google",
-        "search google or type url",
-        "search or type url",
-        "search or type web address",
-        "search or enter address",
-        "type a message",
-        "type a message...",
-        "send a message",
-        "write a message",
-        "message",
-        "buscar",
-        "buscar...",
-        "buscar en google",
-        "pregúntale a google",
-        "escribe un mensaje",
-        "escribe un mensaje..."
-    )
-
     fun isPlaceholderText(
         text: String,
         hintText: String? = null,
@@ -57,17 +35,9 @@ object AccessibilityTargetPolicy {
         isShowingHintText: Boolean = false
     ): Boolean {
         if (text.isBlank()) return true
-        if (isShowingHintText) return true
-
-        val trimmed = text.trim()
-        if (!hintText.isNullOrBlank() && trimmed.equals(hintText.trim(), ignoreCase = true)) {
-            return true
-        }
-        if (!contentDescription.isNullOrBlank() && trimmed.equals(contentDescription.trim(), ignoreCase = true)) {
-            return true
-        }
-
-        return trimmed.lowercase() in COMMON_PLACEHOLDERS
+        // Framework state is the only trustworthy evidence that a nonempty value is a hint.
+        // Matching hint or content-description strings can also be deliberate user text.
+        return isShowingHintText
     }
 
     fun computeInsertionText(
