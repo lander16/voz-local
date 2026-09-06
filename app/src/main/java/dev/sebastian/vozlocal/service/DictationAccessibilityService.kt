@@ -593,22 +593,45 @@ class DictationAccessibilityService : AccessibilityService() {
                 }
             }
 
-            val started = audioRecorder.startRecording(serviceScope) { amplitude ->
-                mainHandler.post {
-                    waveBars.forEachIndexed { index, bar ->
-                        val scaleFactor = 1.0f + (amplitude * 3.5f * (1f + (index % 3) * 0.25f))
-                        bar.scaleY = scaleFactor
+            // Mark ownership before starting the reader: an immediate hardware/read failure may
+            // otherwise notify us before startRecording returns.
+            ownsRecorderSession = true
+            val started = try {
+                audioRecorder.startRecording(
+                    scope = serviceScope,
+                    onRmsChanged = { amplitude ->
+                        mainHandler.post {
+                            waveBars.forEachIndexed { index, bar ->
+                                val scaleFactor = 1.0f + (amplitude * 3.5f * (1f + (index % 3) * 0.25f))
+                                bar.scaleY = scaleFactor
+                            }
+                        }
+                    },
+                    onRecordingError = { error ->
+                        mainHandler.post {
+                            if (ownsRecorderSession) {
+                                Log.w(TAG, "Microphone capture failed", error)
+                                ownsRecorderSession = false
+                                isRecording = false
+                                timerJob?.cancel()
+                                timerJob = null
+                                stopRecordingUI()
+                            }
+                        }
                     }
-                }
+                )
+            } catch (error: SecurityException) {
+                Log.w(TAG, "Microphone permission was revoked", error)
+                false
             }
             if (!started) {
+                ownsRecorderSession = false
                 timerJob?.cancel()
                 timerJob = null
                 isRecording = false
                 stopRecordingUI()
                 return
             }
-            ownsRecorderSession = true
         } else {
             timerJob?.cancel()
             timerJob = null
@@ -626,10 +649,10 @@ class DictationAccessibilityService : AccessibilityService() {
             }
 
             startWaveformAnimation()
-            val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
-            ownsRecorderSession = false
-
-            serviceScope.launch(Dispatchers.Default) {
+            serviceScope.launch {
+                val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
+                ownsRecorderSession = false
+                launch(Dispatchers.Default) {
                 val models = repository.allModels.first()
                 val selected = models.find { it.isSelected && it.isDownloaded }
                     ?: models.firstOrNull { it.isDownloaded }
@@ -646,6 +669,7 @@ class DictationAccessibilityService : AccessibilityService() {
                     } else {
                         stopRecordingUI()
                     }
+                }
                 }
             }
         }
@@ -803,8 +827,8 @@ class DictationAccessibilityService : AccessibilityService() {
         timerJob?.cancel()
         timerJob = null
         if (ownsRecorderSession) {
-            audioRecorder.stopRecording() // Intentionally discard the returned PCM.
             ownsRecorderSession = false
+            serviceScope.launch { audioRecorder.discardRecording() }
         }
         clearTarget()
         stopRecordingUI()
@@ -815,8 +839,8 @@ class DictationAccessibilityService : AccessibilityService() {
         isRecording = false
         stopWaveformAnimation()
         if (ownsRecorderSession) {
-            audioRecorder.stopRecording()
             ownsRecorderSession = false
+            serviceScope.launch { audioRecorder.discardRecording() }
         }
         clearTarget()
     }
@@ -828,8 +852,8 @@ class DictationAccessibilityService : AccessibilityService() {
         warmupJob = null
         lastWarmedModelId = null
         if (ownsRecorderSession) {
-            audioRecorder.stopRecording()
             ownsRecorderSession = false
+            serviceScope.launch(NonCancellable) { audioRecorder.discardRecording() }
         }
         serviceScope.cancel()
         clearTarget()

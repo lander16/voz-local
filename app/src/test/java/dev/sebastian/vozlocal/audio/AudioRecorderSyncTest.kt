@@ -2,9 +2,11 @@ package dev.sebastian.vozlocal.audio
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -14,168 +16,134 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import kotlin.concurrent.thread
+import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Regression guard for the audit finding that [AudioRecorder] wasn't actually
- * synchronized: two callers (ViewModel + Accessibility Service) could both check
- * `isRecording` and open the mic.
- *
- * The recorder uses Android's native `AudioRecord`, which is exercised through
- * Robolectric's `ShadowAudioRecord` so `getMinBufferSize()`, the constructor and
- * the read path are stubbed without touching the audio HAL.
- *
- * LIMITATION: native/device audio behavior (real PCM capture, RMS values) is not
- * covered here — that belongs in an instrumented/device test. This test covers the
- * state-transition contract that the audit flagged.
- */
+/** Lifecycle regressions for the recorder's failure and asynchronous shutdown contract. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class AudioRecorderSyncTest {
 
     @Test
-    fun isRecording_falseOnFreshInstance() {
-        assertFalse(AudioRecorder().isRecording())
-    }
+    fun startFailure_rollsBackAndReleasesCandidate() {
+        val handle = FakeHandle(startFailure = IllegalStateException("unavailable"))
+        val recorder = AudioRecorder(AudioRecordFactory { _, _ -> handle })
+        val scope = testScope()
 
-    @Test
-    fun release_isIdempotent() {
-        val recorder = AudioRecorder()
-        recorder.release()
-        recorder.release() // must not throw
+        assertFalse(recorder.startRecording(scope))
         assertFalse(recorder.isRecording())
+        assertEquals(1, handle.releaseCalls.get())
+        scope.cancel()
     }
 
     @Test
-    fun stopRecording_emptyArrayWhenNeverStarted() {
-        val samples = AudioRecorder().stopRecording()
-        assertTrue(samples.isEmpty())
+    fun terminalReadError_releasesRecorderAndReportsFailure() = runBlocking {
+        val handle = FakeHandle(reads = mutableListOf(-3))
+        val errors = CopyOnWriteArrayList<AudioRecordingException>()
+        val recorder = AudioRecorder(AudioRecordFactory { _, _ -> handle })
+        val scope = testScope()
+
+        assertTrue(recorder.startRecording(scope, onRecordingError = errors::add))
+        withTimeout(2_000) { while (recorder.isRecording()) delay(10) }
+
+        assertEquals(1, errors.size)
+        assertTrue(errors.single().message!!.contains("-3"))
+        assertEquals(1, handle.stopCalls.get())
+        assertEquals(1, handle.releaseCalls.get())
+        scope.cancel()
     }
 
     @Test
-    fun snapshotRecording_emptyArrayWhenNeverStarted() {
-        val recorder = AudioRecorder()
+    fun stopRecording_keepsLastReadBlockAndReleasesWhenStopFails() = runBlocking {
+        val readEntered = CountDownLatch(1)
+        val allowRead = CountDownLatch(1)
+        val handle = FakeHandle(
+            reads = mutableListOf(1),
+            readEntered = readEntered,
+            allowRead = allowRead,
+            stopFailure = IllegalStateException("stop failed")
+        )
+        val recorder = AudioRecorder(AudioRecordFactory { _, _ -> handle })
+        val scope = testScope()
+
+        assertTrue(recorder.startRecording(scope))
+        assertTrue(readEntered.await(2, TimeUnit.SECONDS))
+        allowRead.countDown()
+        val samples = recorder.stopRecording()
+
+        assertArrayEquals(floatArrayOf(0.5f), samples, 0.0001f)
+        assertFalse(recorder.isRecording())
+        assertEquals(1, handle.releaseCalls.get())
+        scope.cancel()
+    }
+
+    @Test
+    fun discardRecording_doesNotCopyAccumulatedPcm() = runBlocking {
+        val handle = FakeHandle(reads = mutableListOf(1))
+        val recorder = AudioRecorder(AudioRecordFactory { _, _ -> handle })
+        val scope = testScope()
+
+        assertTrue(recorder.startRecording(scope))
+        withTimeout(2_000) { while (recorder.snapshotRecording().isEmpty()) delay(10) }
+        recorder.discardRecording()
 
         assertTrue(recorder.snapshotRecording().isEmpty())
         assertFalse(recorder.isRecording())
-    }
-
-    @Test
-    fun snapshotRecording_returnsIndependentNonConsumingCopy() {
-        val recorder = AudioRecorder()
-        appendSamplesForTest(recorder, shortArrayOf(0, 8192, -16384, 32767))
-
-        val first = recorder.snapshotRecording()
-        first[1] = -1f
-        val second = recorder.snapshotRecording()
-
-        assertArrayEquals(
-            floatArrayOf(0f, 0.25f, -0.5f, 32767 / 32768f),
-            second,
-            0.000001f
-        )
-        assertEquals("snapshot must not consume accumulated PCM", first.size, second.size)
-    }
-
-    @Test
-    fun snapshotRecording_canLimitCopyToLatestSamples() {
-        val recorder = AudioRecorder()
-        appendSamplesForTest(recorder, shortArrayOf(0, 4096, 8192, 12288))
-
-        assertArrayEquals(
-            floatArrayOf(0.25f, 0.375f),
-            recorder.snapshotRecording(maxSamples = 2),
-            0.000001f
-        )
-        assertTrue(recorder.snapshotRecording(maxSamples = 0).isEmpty())
-        assertThrows(IllegalArgumentException::class.java) {
-            recorder.snapshotRecording(maxSamples = -1)
-        }
-    }
-
-    @Test
-    fun stopRecording_waitsForCaptureReaderToExit() {
-        val recorder = AudioRecorder()
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-        assertTrue("Robolectric AudioRecord should initialize", recorder.startRecording(scope))
-        val readerJob = AudioRecorder::class.java
-            .getDeclaredField("recordingJob")
-            .apply { isAccessible = true }
-            .get(recorder) as Job
-
-        recorder.stopRecording()
-
-        // The snapshot/reset in stopRecording must happen only after this job has
-        // completed; otherwise an in-flight AudioRecord.read() can append PCM after
-        // the returned samples have already been copied.
-        assertTrue("capture reader must be complete before stop returns", readerJob.isCompleted)
         scope.cancel()
     }
 
     @Test
-    fun concurrentStartStop_leavesRecorderInCleanState() {
-        val recorder = AudioRecorder()
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-        val startThreads = 8
-        val stopThreads = 8
+    fun cancelledOwnerScope_releasesRecorderAndReconcilesState() = runBlocking {
+        val handle = FakeHandle(reads = mutableListOf(0))
+        val recorder = AudioRecorder(AudioRecordFactory { _, _ -> handle })
+        val scope = testScope()
 
-        // N threads try to start simultaneously — the synchronized(state) guard must
-        // ensure exactly one wins (or at worst, a deterministic winner) with no torn state.
-        val go = CountDownLatch(1)
-        val startDone = CountDownLatch(startThreads)
-        repeat(startThreads) {
-            thread {
-                go.await()
-                try {
-                    recorder.startRecording(scope)
-                } catch (e: Exception) {
-                    // Ignore: a losing caller may see isRecording already true and return.
-                }
-                startDone.countDown()
-            }
-        }
-        go.countDown()
-        assertTrue(startDone.await(10, TimeUnit.SECONDS))
-
-        // M threads stop simultaneously. stopRecording is idempotent under the same lock.
-        val stopGo = CountDownLatch(1)
-        val stopDone = CountDownLatch(stopThreads)
-        repeat(stopThreads) {
-            thread {
-                stopGo.await()
-                try {
-                    recorder.stopRecording()
-                } catch (e: Exception) {
-                    // Ignore: concurrent stop is expected to be safe, but we assert state below.
-                }
-                stopDone.countDown()
-            }
-        }
-        stopGo.countDown()
-        assertTrue(stopDone.await(10, TimeUnit.SECONDS))
-
-        // Clean final state: not recording, no leaked recorder.
-        assertFalse(recorder.isRecording())
-
-        // Releasing afterwards must also be safe.
-        recorder.release()
+        assertTrue(recorder.startRecording(scope))
         scope.cancel()
+        withTimeout(2_000) { while (recorder.isRecording()) delay(10) }
+
+        assertEquals(1, handle.releaseCalls.get())
     }
 
-    private fun appendSamplesForTest(recorder: AudioRecorder, samples: ShortArray) {
-        val buffer = AudioRecorder::class.java
-            .getDeclaredField("floatBuffer")
-            .apply { isAccessible = true }
-            .get(recorder) ?: error("AudioRecorder.floatBuffer must be initialized")
-        val appendPcm16 = buffer.javaClass
-            .getDeclaredMethod("appendPCM16", ShortArray::class.java, Int::class.javaPrimitiveType)
-            .apply { isAccessible = true }
-
-        synchronized(buffer) {
-            appendPcm16.invoke(buffer, samples, samples.size)
+    @Test
+    fun start_requiresMicrophonePermission() {
+        assertThrows(SecurityException::class.java) {
+            AudioRecorder(AudioRecordFactory { _, _ -> FakeHandle() })
+                .startRecording(testScope(), hasRecordPermission = false)
         }
+    }
+
+    private fun testScope() = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    private class FakeHandle(
+        override val isInitialized: Boolean = true,
+        private val reads: MutableList<Int> = mutableListOf(0),
+        private val startFailure: Exception? = null,
+        private val stopFailure: Exception? = null,
+        private val readEntered: CountDownLatch? = null,
+        private val allowRead: CountDownLatch? = null
+    ) : AudioRecordHandle {
+        val stopCalls = AtomicInteger()
+        val releaseCalls = AtomicInteger()
+        override fun startRecording() {
+            startFailure?.let { throw it }
+        }
+
+        override fun read(buffer: ShortArray, offsetInShorts: Int, sizeInShorts: Int): Int {
+            readEntered?.countDown()
+            allowRead?.await(2, TimeUnit.SECONDS)
+            val result = synchronized(reads) { if (reads.isNotEmpty()) reads.removeAt(0) else 0 }
+            if (result > 0) buffer[offsetInShorts] = 16384
+            return result
+        }
+
+        override fun stop() {
+            stopCalls.incrementAndGet()
+            stopFailure?.let { throw it }
+        }
+
+        override fun release() { releaseCalls.incrementAndGet() }
     }
 }

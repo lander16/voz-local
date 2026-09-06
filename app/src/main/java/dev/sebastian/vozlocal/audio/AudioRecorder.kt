@@ -5,17 +5,59 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.max
 import kotlin.math.sqrt
 
 private const val TAG = "AudioRecorder"
 const val SAMPLE_RATE = 16000
 
-/**
- * High-performance, zero-allocation primitive float buffer for raw PCM recording.
- * Avoids Java Object boxing and byte array stream conversions for smooth 60fps recording.
- */
+/** A terminal capture failure which callers can present as a recoverable microphone error. */
+class AudioRecordingException(message: String) : IllegalStateException(message)
+
+/** Small seam around the platform recorder so lifecycle failures are testable without an audio HAL. */
+internal interface AudioRecordHandle {
+    val isInitialized: Boolean
+    fun startRecording()
+    fun read(buffer: ShortArray, offsetInShorts: Int, sizeInShorts: Int): Int
+    fun stop()
+    fun release()
+}
+
+internal fun interface AudioRecordFactory {
+    fun create(source: Int, bufferSizeInBytes: Int): AudioRecordHandle
+}
+
+private class PlatformAudioRecord(private val delegate: AudioRecord) : AudioRecordHandle {
+    override val isInitialized get() = delegate.state == AudioRecord.STATE_INITIALIZED
+    override fun startRecording() = delegate.startRecording()
+    override fun read(buffer: ShortArray, offsetInShorts: Int, sizeInShorts: Int) =
+        delegate.read(buffer, offsetInShorts, sizeInShorts)
+    override fun stop() = delegate.stop()
+    override fun release() = delegate.release()
+}
+
+private val platformAudioRecordFactory = AudioRecordFactory { source, bufferSize ->
+    PlatformAudioRecord(
+        AudioRecord(
+            source,
+            SAMPLE_RATE,
+            AudioFormat.CHANNEL_IN_MONO,
+            AudioFormat.ENCODING_PCM_16BIT,
+            bufferSize
+        )
+    )
+}
+
+/** High-performance primitive buffer for raw PCM recording. */
 private class FastFloatBuffer(initialCapacity: Int = SAMPLE_RATE * 15) {
     private var buffer = FloatArray(initialCapacity)
     var size = 0
@@ -23,25 +65,17 @@ private class FastFloatBuffer(initialCapacity: Int = SAMPLE_RATE * 15) {
 
     fun appendPCM16(shorts: ShortArray, count: Int): Double {
         val requiredCapacity = size + count
-        if (requiredCapacity > buffer.size) {
-            var newCap = buffer.size * 2
-            if (newCap < requiredCapacity) newCap = requiredCapacity
-            buffer = buffer.copyOf(newCap)
-        }
-
+        if (requiredCapacity > buffer.size) buffer = buffer.copyOf(max(buffer.size * 2, requiredCapacity))
         var sumSquares = 0.0
         for (i in 0 until count) {
             val sample = shorts[i]
-            val floatVal = sample / 32768.0f
-            buffer[size++] = floatVal
-            sumSquares += (sample.toDouble() * sample.toDouble())
+            buffer[size++] = sample / 32768.0f
+            sumSquares += sample.toDouble() * sample.toDouble()
         }
         return sumSquares
     }
 
-    fun toFloatArray(): FloatArray {
-        return buffer.copyOf(size)
-    }
+    fun toFloatArray() = buffer.copyOf(size)
 
     fun snapshotLast(maxSamples: Int): FloatArray {
         require(maxSamples >= 0) { "maxSamples must be non-negative" }
@@ -49,191 +83,196 @@ private class FastFloatBuffer(initialCapacity: Int = SAMPLE_RATE * 15) {
         return buffer.copyOfRange(size - sampleCount, size)
     }
 
-    fun reset() {
-        size = 0
-    }
+    fun reset() { size = 0 }
 }
 
 /**
- * Locking discipline:
- *  - State transitions (`isRecording`, `audioRecord`, `recordingJob`) are guarded by
- *    `synchronized(this)`. Kotlin's intrinsic monitors are reentrant, so a call that
- *    arrives on a thread already holding the monitor (e.g. the accessibility service
- *    posting back to the main thread) is safe.
- *  - The IO reader thread reads `isRecording` and `audioRecord` directly inside its
- *    `while` loop; both are `@Volatile` so it always sees fresh writes without holding
- *    the monitor.
- *  - The float buffer is independently synchronized on its own monitor so the lock is
- *    held only for the (cheap) state mutations, never while draining PCM.
+ * Records PCM from the microphone.
+ *
+ * State transitions are short synchronized sections. Potentially blocking platform shutdown and
+ * reader joining deliberately happen outside that monitor and on Dispatchers.IO, so callers may
+ * safely stop recording from a UI or accessibility-service callback.
  */
-class AudioRecorder {
-    @Volatile private var audioRecord: AudioRecord? = null
+class AudioRecorder internal constructor(
+    private val recorderFactory: AudioRecordFactory = platformAudioRecordFactory
+) {
+    private enum class SessionState { IDLE, RECORDING, STOPPING }
+
+    @Volatile private var sessionState = SessionState.IDLE
+    @Volatile private var audioRecord: AudioRecordHandle? = null
     @Volatile private var recordingJob: Job? = null
-    @Volatile private var isRecording = false
+    private var sessionId = 0L
     private val floatBuffer = FastFloatBuffer()
 
     @SuppressLint("MissingPermission")
     fun startRecording(
         scope: CoroutineScope,
         hasRecordPermission: Boolean = true,
-        onRmsChanged: ((Float) -> Unit)? = null
+        onRmsChanged: ((Float) -> Unit)? = null,
+        onRecordingError: ((AudioRecordingException) -> Unit)? = null
     ): Boolean {
-        if (!hasRecordPermission) {
-            throw SecurityException("RECORD_AUDIO permission not granted")
-        }
+        if (!hasRecordPermission) throw SecurityException("RECORD_AUDIO permission not granted")
+        if (!scope.isActive) return false
 
         synchronized(this) {
-            if (isRecording) return false
-
+            if (sessionState != SessionState.IDLE) return false
             val minBufferSize = max(
-                AudioRecord.getMinBufferSize(
-                    SAMPLE_RATE,
-                    AudioFormat.CHANNEL_IN_MONO,
-                    AudioFormat.ENCODING_PCM_16BIT
-                ),
+                AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT),
                 4096
             )
-
-            val sources = intArrayOf(
-                MediaRecorder.AudioSource.VOICE_RECOGNITION,
-                MediaRecorder.AudioSource.MIC
-            )
-            var initializedRecord: AudioRecord? = null
-            for (source in sources) {
-                try {
-                    val candidate = AudioRecord(
-                        source,
-                        SAMPLE_RATE,
-                        AudioFormat.CHANNEL_IN_MONO,
-                        AudioFormat.ENCODING_PCM_16BIT,
-                        minBufferSize
-                    )
-                    if (candidate.state == AudioRecord.STATE_INITIALIZED) {
-                        initializedRecord = candidate
-                        break
-                    } else {
-                        candidate.release()
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "AudioSource $source failed: ${e.message}")
-                }
-            }
-
-            if (initializedRecord == null) {
-                Log.e(TAG, "AudioRecord initialization failed across all audio sources!")
-                audioRecord = null
+            val recorder = createInitializedRecorder(minBufferSize) ?: return false
+            try {
+                // Do not publish RECORDING until Android has accepted the start request.
+                recorder.startRecording()
+            } catch (error: Exception) {
+                Log.e(TAG, "AudioRecord failed to start", error)
+                releaseRecorder(recorder)
                 return false
             }
-            audioRecord = initializedRecord
 
-            synchronized(floatBuffer) {
-                floatBuffer.reset()
+            synchronized(floatBuffer) { floatBuffer.reset() }
+            val id = ++sessionId
+            audioRecord = recorder
+            sessionState = SessionState.RECORDING
+            val reader = scope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
+                readLoop(id, recorder, minBufferSize / 2, onRmsChanged, onRecordingError)
             }
-            isRecording = true
-            audioRecord?.startRecording()
-
-            // Keep one stable native recorder reference for the lifetime of this reader.
-            // `stopRecording()` stops it before joining this job, which unblocks a
-            // pending blocking read without allowing a new session to swap the field
-            // underneath the reader.
-            val recorder = audioRecord ?: return false
-            recordingJob = scope.launch(Dispatchers.IO) {
-                val buffer = ShortArray(minBufferSize / 2)
-
-                while (isActive && isRecording) {
-                    val readCount = recorder.read(buffer, 0, buffer.size)
-                    if (readCount > 0) {
-                        val sumSquares: Double
-                        synchronized(floatBuffer) {
-                            sumSquares = floatBuffer.appendPCM16(buffer, readCount)
-                        }
-
-                        // Calculate RMS amplitude for live waveform UI
-                        val rms = sqrt(sumSquares / readCount).toFloat()
-                        val rmsDb = if (rms > 0) (20 * kotlin.math.log10(rms.toDouble())).toFloat() else 0f
-                        val normalizedAmp = (rmsDb / 90f).coerceIn(0.05f, 1.0f)
-                        onRmsChanged?.invoke(normalizedAmp)
-                    }
-                }
-            }
+            recordingJob = reader
+            reader.start()
             return true
         }
     }
 
-    fun stopRecording(): FloatArray {
+    private fun createInitializedRecorder(bufferSize: Int): AudioRecordHandle? {
+        for (source in intArrayOf(MediaRecorder.AudioSource.VOICE_RECOGNITION, MediaRecorder.AudioSource.MIC)) {
+            val candidate = try {
+                recorderFactory.create(source, bufferSize)
+            } catch (error: Exception) {
+                Log.w(TAG, "AudioSource $source failed to construct", error)
+                continue
+            }
+            if (candidate.isInitialized) return candidate
+            releaseRecorder(candidate)
+        }
+        Log.e(TAG, "AudioRecord initialization failed across all audio sources")
+        return null
+    }
+
+    private suspend fun readLoop(
+        id: Long,
+        recorder: AudioRecordHandle,
+        bufferSizeInShorts: Int,
+        onRmsChanged: ((Float) -> Unit)?,
+        onRecordingError: ((AudioRecordingException) -> Unit)?
+    ) {
+        var failure: AudioRecordingException? = null
+        try {
+            val buffer = ShortArray(bufferSizeInShorts)
+            while (currentCoroutineContext().isActive && sessionState == SessionState.RECORDING) {
+                when (val readCount = recorder.read(buffer, 0, buffer.size)) {
+                    in 1..Int.MAX_VALUE -> {
+                        val sumSquares = synchronized(floatBuffer) { floatBuffer.appendPCM16(buffer, readCount) }
+                        val rms = sqrt(sumSquares / readCount).toFloat()
+                        val rmsDb = if (rms > 0f) (20 * kotlin.math.log10(rms.toDouble())).toFloat() else 0f
+                        onRmsChanged?.invoke((rmsDb / 90f).coerceIn(0.05f, 1.0f))
+                    }
+                    0 -> kotlinx.coroutines.delay(10) // Prevent a defective implementation spinning a CPU core.
+                    else -> {
+                        failure = AudioRecordingException("Microphone capture failed (AudioRecord error $readCount)")
+                        break
+                    }
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            failure = AudioRecordingException(
+                "Microphone capture stopped unexpectedly: ${error.message ?: error.javaClass.simpleName}"
+            )
+        } finally {
+            finishReader(id, recorder, failure, onRecordingError)
+        }
+    }
+
+    private fun finishReader(
+        id: Long,
+        recorder: AudioRecordHandle,
+        failure: AudioRecordingException?,
+        onRecordingError: ((AudioRecordingException) -> Unit)?
+    ) {
+        val ownsUnexpectedShutdown = synchronized(this) {
+            if (id != sessionId || audioRecord !== recorder || sessionState == SessionState.STOPPING) false
+            else {
+                sessionState = SessionState.STOPPING
+                audioRecord = null
+                recordingJob = null
+                true
+            }
+        }
+        if (!ownsUnexpectedShutdown) return
+
+        // The reader is already on Dispatchers.IO. Always release even if stop fails.
+        stopAndRelease(recorder)
+        synchronized(floatBuffer) { floatBuffer.reset() }
         synchronized(this) {
-            isRecording = false
-            val readerJob = recordingJob
-            recordingJob = null
-
-            try {
-                audioRecord?.stop()
-                audioRecord?.release()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error stopping AudioRecord", e)
-            }
-            audioRecord = null
-
-            // Do not snapshot/reset the shared PCM buffer until the reader has
-            // completely exited. A cancelled coroutine can still be returning from
-            // AudioRecord.read(); without this join it could append one final block
-            // after the snapshot, losing the end of an utterance (or leaking it into
-            // the next session).
-            readerJob?.cancel()
-            runBlocking { readerJob?.join() }
-
-            synchronized(floatBuffer) {
-                val samples = floatBuffer.toFloatArray()
-                floatBuffer.reset()
-                return samples
-            }
+            if (id == sessionId && sessionState == SessionState.STOPPING) sessionState = SessionState.IDLE
         }
+        failure?.let { onRecordingError?.invoke(it) }
     }
 
-    /**
-     * Returns a point-in-time copy of the raw PCM accumulated by the active session.
-     *
-     * This does not stop capture, trim silence, or consume samples. Callers implementing
-     * opt-in streaming can request only their rolling window via [maxSamples], avoiding an
-     * ever-growing copy for long recordings. The returned array never aliases the recorder's
-     * internal buffer and is therefore safe to transcribe or mutate on another thread.
-     *
-     * When no session has produced audio yet this returns an empty array. The final, trimmed
-     * recording remains available through [stopRecording] exactly as before.
-     */
-    fun snapshotRecording(maxSamples: Int = Int.MAX_VALUE): FloatArray {
-        synchronized(floatBuffer) {
-            return floatBuffer.snapshotLast(maxSamples)
+    /** Stops capture, awaits the reader off the main thread, and returns the final PCM once. */
+    suspend fun stopRecording(): FloatArray = finishSession(keepSamples = true)
+
+    /** Stops capture without allocating a full PCM copy. */
+    suspend fun discardRecording() { finishSession(keepSamples = false) }
+
+    private suspend fun finishSession(keepSamples: Boolean): FloatArray {
+        val session = synchronized(this) {
+            if (sessionState != SessionState.RECORDING) return@synchronized null
+            sessionState = SessionState.STOPPING
+            Triple(sessionId, audioRecord, recordingJob).also {
+                audioRecord = null
+                recordingJob = null
+            }
+        } ?: return FloatArray(0)
+
+        withContext(Dispatchers.IO) {
+            session.second?.let(::stopAndRelease)
+            session.third?.join()
         }
-    }
-
-    fun isRecording(): Boolean = isRecording
-
-    /**
-     * Frees all recorder resources. Safe to call whether or not recording is active.
-     */
-    fun release() {
+        val samples = synchronized(floatBuffer) {
+            (if (keepSamples) floatBuffer.toFloatArray() else FloatArray(0)).also { floatBuffer.reset() }
+        }
         synchronized(this) {
-            isRecording = false
-            val readerJob = recordingJob
-            recordingJob = null
+            if (session.first == sessionId && sessionState == SessionState.STOPPING) sessionState = SessionState.IDLE
+        }
+        return samples
+    }
 
-            try {
-                audioRecord?.stop()
-                audioRecord?.release()
-            } catch (e: Exception) {
-                Log.e(TAG, "Error releasing AudioRecord", e)
-            }
-            audioRecord = null
-
-            // Apply the same ordering as stopRecording: a reader that is just
-            // returning from a blocking read must finish before its buffer is reset.
-            readerJob?.cancel()
-            runBlocking { readerJob?.join() }
-
-            synchronized(floatBuffer) {
-                floatBuffer.reset()
-            }
+    private fun stopAndRelease(recorder: AudioRecordHandle) {
+        try {
+            recorder.stop()
+        } catch (error: Exception) {
+            Log.w(TAG, "Error stopping AudioRecord", error)
+        } finally {
+            releaseRecorder(recorder)
         }
     }
+
+    private fun releaseRecorder(recorder: AudioRecordHandle) {
+        try {
+            recorder.release()
+        } catch (error: Exception) {
+            Log.w(TAG, "Error releasing AudioRecord", error)
+        }
+    }
+
+    fun snapshotRecording(maxSamples: Int = Int.MAX_VALUE): FloatArray = synchronized(floatBuffer) {
+        floatBuffer.snapshotLast(maxSamples)
+    }
+
+    fun isRecording(): Boolean = sessionState == SessionState.RECORDING
+
+    /** Frees recorder resources without blocking the caller's thread. */
+    suspend fun release() = discardRecording()
 }

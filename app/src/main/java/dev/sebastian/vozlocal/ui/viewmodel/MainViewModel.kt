@@ -478,10 +478,27 @@ class MainViewModel(
             }
 
             try {
-                val started = audioRecorder.startRecording(viewModelScope) { amplitude ->
-                    pushWaveform(amplitude)
-                }
+                // Mark ownership before starting the reader: an immediate hardware/read failure
+                // may otherwise notify us before startRecording returns.
+                ownsRecorderSession = true
+                val started = audioRecorder.startRecording(
+                    scope = viewModelScope,
+                    onRmsChanged = { amplitude -> pushWaveform(amplitude) },
+                    onRecordingError = { error ->
+                        viewModelScope.launch {
+                            if (ownsRecorderSession) {
+                                ownsRecorderSession = false
+                                timerJob?.cancel()
+                                timerJob = null
+                                _isRecording.value = false
+                                _currentLiveTranscription.value = error.message ?: "Microphone capture failed."
+                                _liveWaveform.value = emptyList()
+                            }
+                        }
+                    }
+                )
                 if (!started) {
+                    ownsRecorderSession = false
                     timerJob?.cancel()
                     timerJob = null
                     _isRecording.value = false
@@ -489,8 +506,8 @@ class MainViewModel(
                     _liveWaveform.value = emptyList()
                     return@launch
                 }
-                ownsRecorderSession = true
             } catch (e: SecurityException) {
+                ownsRecorderSession = false
                 timerJob?.cancel()
                 timerJob = null
                 _isRecording.value = false
@@ -507,19 +524,20 @@ class MainViewModel(
         timerJob = null
         _isRecording.value = false
 
-        val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
-        ownsRecorderSession = false
-        val finalDuration = _recordDurationSec.value
+        viewModelScope.launch {
+            val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
+            ownsRecorderSession = false
+            val finalDuration = _recordDurationSec.value
 
-        if (samples.isEmpty()) {
-            _currentLiveTranscription.value = "No mic audio captured."
-            _liveWaveform.value = emptyList()
-            return
-        }
+            if (samples.isEmpty()) {
+                _currentLiveTranscription.value = "No mic audio captured."
+                _liveWaveform.value = emptyList()
+                return@launch
+            }
 
-        _currentLiveTranscription.value = "Running local Whisper model inference..."
+            _currentLiveTranscription.value = "Running local Whisper model inference..."
 
-        viewModelScope.launch(Dispatchers.Default) {
+            launch(Dispatchers.Default) {
             val model = getActiveDownloadedModel()
             if (model == null) {
                 withContext(Dispatchers.Main) {
@@ -572,6 +590,7 @@ class MainViewModel(
             withContext(Dispatchers.Main) {
                 _currentLiveTranscription.value = processedText
                 _liveWaveform.value = emptyList()
+            }
             }
         }
     }
@@ -721,7 +740,7 @@ class MainViewModel(
 
     override fun onCleared() {
         if (ownsRecorderSession) {
-            audioRecorder.stopRecording()
+            viewModelScope.launch(NonCancellable) { audioRecorder.discardRecording() }
             ownsRecorderSession = false
         }
         super.onCleared()
