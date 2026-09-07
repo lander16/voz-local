@@ -1,12 +1,52 @@
 # Transcription performance: audit and implementation plan
 
 Baseline: `921f413f0be25537b87092daf90b8617cd542133`, audited 2026-09-06.
-Status: P1 and P2 implementation completed on 2026-09-07 (P01–P08). Validated via
-unit test suites, lint, and on-device Pixel 8 Pro instrumentation.
+Status: P01–P08 have implementation work, but are **not all acceptance-complete**.
+The September 7 follow-up fixes below have host regression coverage. Real native
+cancellation, calibration benefit, corpus accuracy, and device latency remain
+release gates; the package-name instrumentation test does not validate these.
 See [general issues plan](Issues-Implementation-Plan.md) for G01–G19 dependencies
 and [historical measurements](Performance.md) for the original experiment record.
 
 ## Implementation record (P01–P08)
+
+### September 7 review corrections (working tree)
+
+Host validation: `:app:testDebugUnitTest :app:lintDebug --offline` completed
+successfully after these fixes: 199 tests, zero failures/errors/skips; lint zero
+errors and 62 warnings. No new device timing or release-validation claim is made.
+
+- P01: real repository/native leases are mandatory. Thread overrides are per
+  request; backend/build/tier, PCM/model hashes, and quantization are checked.
+  Cold runs allocate once and warm once; warm runs reject a missing resident
+  model. Native stage timings are collected inside the same lease. Unmeasured
+  verification, decoding, and trimming stages are null, not fabricated zeros.
+  This is a batch-PCM runner, not an end-to-end UI benchmark. Streaming, native
+  VAD, custom prompts, seed control, and implicit repetitions fail explicitly.
+  Cold denotes native-context cold, not OS-page-cache cold.
+- P02: missing, unexpected, duplicate, and empty corpus coverage is rejected.
+  An explicitly empty hypothesis is scored as deletions, not skipped. The
+  manifest/scoring infrastructure is not a recorded, licensed audio corpus or
+  proof of q8_0 superiority. Capture audio and publish complete raw results before
+  closing the accuracy gate.
+- P03: Settings now offers explicit local calibration using a 3–30 second speech
+  file. It tests up to six thread counts in three rotated rounds, selecting the
+  lowest median among candidates matching the initial transcript. It refuses
+  battery saver or moderate/higher thermal state and has a 10-minute inference
+  budget plus cancellation. Profiles persist with device/OS, model checksum,
+  native build/backend, decoder settings, and short/long workload identity.
+  No startup calibration occurs. A matching transcript on one clip is only a
+  safeguard, not corpus accuracy proof; Pixel speed/thermal validation is pending.
+- P05: replacement verifies before loading and releases the old native allocation
+  before allocating the new model. Failed allocation leaves a retryable unloaded
+  engine, rather than retaining two potentially large models in RAM.
+- P07: the original 31-tap claim was incorrect near Nyquist. The replacement uses
+  a rate-scaled Hann FIR with an explicit transition width; synthetic tests cover
+  8.05–10 kHz at 32/44.1/48/96 kHz input and require >45 dB rejection. Decimation
+  avoids evaluating discarded input frames. Measure total decode+inference cost
+  and corpus accuracy on hardware before claiming a performance win.
+- P08: parameter support is not completion of the planned prompt/context
+  experiments. Duration-binned device experiments and reference transcripts remain.
 
 - **P01:** `b801d72` — Add reproducible transcription benchmarks and native stage metrics.
   Upstream `whisper.cpp` timing counters exposed via JNI (`whisper_get_timings`),
@@ -35,8 +75,8 @@ and [historical measurements](Performance.md) for the original experiment record
   emissions to ~30 FPS with forced boundary emissions, and implemented atomic Room
   SQL history retention pruning in `HistoryDao` and `DictationRepository`.
 - **P07:** `cc7b541` — Add anti-aliasing resampling and fix silence trimmer boundary preservation.
-  Upgraded `AudioDecoder` with a 31-tap Hann windowed-sinc band-limited low-pass FIR
-  filter with exact unity DC gain (>45 dB suppression above Nyquist) preserving
+  Initially added a 31-tap Hann windowed-sinc filter; the follow-up above replaces
+  its insufficient near-Nyquist rejection with a rate-scaled filter preserving
   inter-chunk filter history, preserved the final sub-frame audio tail in
   `AudioSilenceTrimmer`, and implemented a conservative silence shortcut skipping
   Whisper inference on dead audio without dropping quiet speech.

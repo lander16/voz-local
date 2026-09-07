@@ -14,6 +14,26 @@
 
 ---
 
+## Optional CPU calibration
+
+In **Settings → Advanced engine**, choose **Choose audio and calibrate CPU**.
+Use a 3–30 second speech file representative of your dictation, keep the app open,
+disable battery saver, and let the phone cool first. Audio stays on-device and is
+not added to transcription history. Calibration tests up to six thread counts,
+three times each, with a 10-minute calibration budget. You can cancel it; starting
+in-app dictation or file transcription also cancels calibration.
+
+A profile is saved only after a complete run, using the fastest median among
+candidates whose transcript matches the initial result. The app reuses it only
+for matching device/OS, native build/backend, model checksum, decoder settings,
+and clip-length range (under 25 seconds or longer). Other requests retain the
+safe default policy. This is experimental: one matching clip does not prove
+accuracy across languages or guarantee a speedup. No calibration runs at startup.
+
+See [performance implementation and validation status](Performance-Implementation-Plan.md)
+for remaining device experiments. Benchmark infrastructure and passing unit tests
+must not be confused with measured Pixel performance improvements.
+
 ## 📱 Application Screenshots
 
 | Live Dictate | Speech Models | Shared Audio File |

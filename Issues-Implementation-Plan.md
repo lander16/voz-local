@@ -1,10 +1,30 @@
 # Application audit: issues and general improvements
 
 Audit baseline: `921f413f0be25537b87092daf90b8617cd542133` (2026-09-06).
-Status: P1 implementation completed on 2026-09-07. Device-only validation
+Status: P1 implementation revised after the September 7 review. Device-only validation
 scenarios remain release gates; see each item's validation section.
 Companion: [Performance implementation plan](Performance-Implementation-Plan.md).
 Historical measurements: [Performance.md](Performance.md).
+
+## September 7 review follow-up
+
+Validation: 199 host tests passed and Android debug lint completed with zero
+errors (62 warnings). No phone installation or native device stress run was made.
+
+- G01: native abort is now registered on job cancellation, not final completion.
+  A blocking-worker regression test checks that abort fires before the worker
+  exits. Context destruction is non-cancellable and serialized on its worker.
+  Real JNI cancellation latency and repeated cancel/restart remain device gates.
+- G06: selection acquires the target model-operation lock and rechecks downloaded
+  state transactionally. Deletion rereads current selection inside its final
+  transaction so it cannot overwrite a newer selection using a stale snapshot.
+- Model replacement releases the old allocation before creating the replacement;
+  missing/empty replacement files preserve the old context, while allocation
+  failure leaves an unloaded engine that can retry. Two models are not retained
+  merely to provide rollback.
+- Benchmark honesty, calibration persistence/UI, filter rejection, and strict
+  accuracy coverage are tracked in the companion performance plan. These host
+  checks do not establish device performance or bank-app compatibility.
 
 ## Scope, evidence, and priorities
 
