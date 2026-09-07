@@ -24,13 +24,26 @@ internal const val SPANISH_PROMPT =
     "Hola, ¿cómo estás? Voy a dictar en español con correcta ortografía, tildes y puntuación: así, también, aquí, allí, después, malecón, canción, estación, corazón, más, qué, cómo, cuándo, dónde."
 
 /**
- * Resolves the effective initial prompt: an explicitly-configured prompt wins;
- * otherwise Spanish gets the default priming prompt and other languages get
- * none (let Whisper auto-prompt).
+ * Resolves the effective initial prompt based on promptMode:
+ * - OFF: returns null
+ * - CUSTOM: returns initialPrompt (or null if blank)
+ * - AUTOMATIC: explicit prompt wins if present; otherwise Spanish gets the default
+ *   priming prompt and other languages get none.
  */
-internal fun effectivePrompt(language: String, initialPrompt: String?): String? {
-    if (initialPrompt != null) return initialPrompt
-    return if (language == "es") SPANISH_PROMPT else null
+internal fun effectivePrompt(
+    language: String,
+    initialPrompt: String?,
+    promptMode: PromptMode = PromptMode.AUTOMATIC
+): String? {
+    return when (promptMode) {
+        PromptMode.OFF -> null
+        PromptMode.CUSTOM -> initialPrompt?.ifBlank { null }
+        PromptMode.AUTOMATIC -> {
+            if (initialPrompt != null) initialPrompt
+            else if (language == "es") SPANISH_PROMPT
+            else null
+        }
+    }
 }
 
 interface WhisperContextAdapter {
@@ -218,7 +231,7 @@ class WhisperEngine internal constructor(
             val effectiveLanguage = if (language == "es") params.language else language
             val effectiveParams = params.copy(
                 language = effectiveLanguage,
-                initialPrompt = effectivePrompt(effectiveLanguage, params.initialPrompt),
+                initialPrompt = effectivePrompt(effectiveLanguage, params.initialPrompt, params.promptMode),
                 modelIdHint = params.modelIdHint ?: currentModelId
             ).forIndependentRequest()
 

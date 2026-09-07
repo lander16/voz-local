@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.PowerManager
 import com.whispercpp.whisper.WhisperNativeTimings
 import dev.sebastian.vozlocal.data.repository.DictationRepository
+import dev.sebastian.vozlocal.whisper.PromptMode
 import dev.sebastian.vozlocal.whisper.WhisperEngine
 import dev.sebastian.vozlocal.whisper.WhisperParams
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +34,8 @@ data class TranscriptionBenchmarkConfig(
     val seed: Long? = null,
     val modelSha256: String? = null,
     val pcmSha256: String? = null,
+    val promptMode: PromptMode = PromptMode.AUTOMATIC,
+    val audioCtx: Int = 0,
 ) {
     init {
         require(modelId.isNotBlank()) { "modelId must not be blank" }
@@ -42,6 +45,7 @@ data class TranscriptionBenchmarkConfig(
         require(beamSize >= 0) { "beamSize must be non-negative" }
         require(temperatureIncrement >= 0.0f) { "temperatureIncrement must be non-negative" }
         require(repetitions > 0) { "repetitions must be positive" }
+        require(audioCtx >= 0) { "audioCtx must be non-negative" }
     }
 }
 
@@ -368,6 +372,8 @@ object BenchmarkRunner {
             beamSize = config.beamSize,
             temperatureInc = config.temperatureIncrement,
             vadModelPath = if (config.vadEnabled) "vad" else null,
+            promptMode = config.promptMode,
+            audioCtx = config.audioCtx,
         )
 
         val inferenceStart = nowNanos()
@@ -471,7 +477,9 @@ object BenchmarkRunner {
         append("    \"repetitions\": ${result.config.repetitions},\n")
         append("    \"seed\": ${result.config.seed ?: "null"},\n")
         append("    \"modelSha256\": ${result.config.modelSha256?.let { escape(it) } ?: "null"},\n")
-        append("    \"pcmSha256\": ${result.config.pcmSha256?.let { escape(it) } ?: "null"}\n")
+        append("    \"pcmSha256\": ${result.config.pcmSha256?.let { escape(it) } ?: "null"},\n")
+        append("    \"promptMode\": ${escape(result.config.promptMode.name)},\n")
+        append("    \"audioCtx\": ${result.config.audioCtx}\n")
         append("  },\n")
 
         // stageTimings
@@ -581,6 +589,10 @@ object BenchmarkRunner {
             seed = (configMap["seed"] as? Number)?.toLong(),
             modelSha256 = configMap["modelSha256"]?.toString(),
             pcmSha256 = configMap["pcmSha256"]?.toString(),
+            promptMode = configMap["promptMode"]?.toString()?.let {
+                runCatching { PromptMode.valueOf(it) }.getOrNull()
+            } ?: PromptMode.AUTOMATIC,
+            audioCtx = (configMap["audioCtx"] as? Number)?.toInt() ?: 0,
         )
 
         val stageMap = map["stageTimings"] as? Map<*, *> ?: emptyMap<String, Any?>()
@@ -668,6 +680,8 @@ object BenchmarkRunner {
         "seed",
         "modelSha256",
         "pcmSha256",
+        "promptMode",
+        "audioCtx",
         "audioDurationMs",
         "recordingDurationMs",
         "modelLoadMs",
@@ -731,6 +745,8 @@ object BenchmarkRunner {
                 r.config.seed?.toString() ?: "",
                 r.config.modelSha256 ?: "",
                 r.config.pcmSha256 ?: "",
+                r.config.promptMode.name,
+                r.config.audioCtx.toString(),
                 r.audioDurationMs.toString(),
                 r.recordingDurationMs?.toString() ?: "",
                 r.modelLoadMs.toString(),
@@ -806,6 +822,10 @@ object BenchmarkRunner {
                 seed = getLong("seed"),
                 modelSha256 = get("modelSha256"),
                 pcmSha256 = get("pcmSha256"),
+                promptMode = get("promptMode")?.let {
+                    runCatching { PromptMode.valueOf(it) }.getOrNull()
+                } ?: PromptMode.AUTOMATIC,
+                audioCtx = getInt("audioCtx") ?: 0,
             )
 
             val stageTimings = BenchmarkStageTimings(

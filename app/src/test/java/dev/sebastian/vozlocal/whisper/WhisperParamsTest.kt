@@ -28,6 +28,7 @@ class WhisperParamsTest {
         assertFalse(params.noContext)
         assertFalse(params.noTimestamps)
         assertEquals(0, params.audioCtx)
+        assertEquals(PromptMode.AUTOMATIC, params.promptMode)
     }
 
     @Test

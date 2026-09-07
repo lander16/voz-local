@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import dev.sebastian.vozlocal.whisper.CpuBackendMode
+import dev.sebastian.vozlocal.whisper.PromptMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -143,5 +144,20 @@ class DictationRepositoryPersistenceTest {
         assertEquals("en", repo2.getLanguage())
         assertTrue(repo2.getUseAiPolisher())
         assertEquals(CleanupMode.AGGRESSIVE, repo2.getCleanupMode())
+    }
+
+    @Test
+    fun promptMode_defaultsToAutomatic() {
+        assertEquals(PromptMode.AUTOMATIC, newRepository().getPromptMode())
+    }
+
+    @Test
+    fun promptMode_roundTrips() {
+        val repo = newRepository()
+        for (mode in PromptMode.values()) {
+            repo.savePromptMode(mode)
+            assertEquals(mode, repo.getPromptMode())
+            assertEquals(mode, newRepository().getPromptMode())
+        }
     }
 }

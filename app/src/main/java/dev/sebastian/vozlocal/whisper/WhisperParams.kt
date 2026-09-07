@@ -1,5 +1,11 @@
 package dev.sebastian.vozlocal.whisper
 
+enum class PromptMode {
+    AUTOMATIC, // Default: Spanish gets SPANISH_PROMPT, other languages get null
+    OFF,       // No priming prompt is passed (null)
+    CUSTOM     // Explicit user-defined prompt is passed
+}
+
 /**
  * Parameters for a single Whisper transcription pass, mirroring the
  * `whisper_full_params` surface exposed by the project-owned JNI shim
@@ -8,6 +14,7 @@ package dev.sebastian.vozlocal.whisper
  *
  * @param language whisper.cpp language code, or "auto" for auto-detection.
  * @param initialPrompt optional text primed into the decoder before the audio.
+ * @param promptMode how initialPrompt is interpreted (automatic, off, custom).
  * @param singleSegment true forces one segment output (live dictation).
  * @param printTimestamps true keeps per-segment timestamps (shared-file timeline).
  * @param noSpeechThold segment is skipped if no-speech probability is higher.
@@ -23,6 +30,7 @@ package dev.sebastian.vozlocal.whisper
 data class WhisperParams(
     val language: String = "es",
     val initialPrompt: String? = null,
+    val promptMode: PromptMode = PromptMode.AUTOMATIC,
     val singleSegment: Boolean = false,
     val printTimestamps: Boolean = false,
     val noSpeechThold: Float = 0.6f,

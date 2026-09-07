@@ -96,6 +96,14 @@ class TranscriptionBenchmarkTest {
         } catch (e: IllegalArgumentException) {
             assertTrue(e.message!!.contains("repetitions"))
         }
+
+        // Negative audioCtx
+        try {
+            createValidConfig().copy(audioCtx = -1)
+            fail("Expected IllegalArgumentException for audioCtx < 0")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("audioCtx"))
+        }
     }
 
     @Test
@@ -375,6 +383,8 @@ class TranscriptionBenchmarkTest {
         assertEquals(original.config.modelId, parsed.config.modelId)
         assertEquals(original.config.quantization, parsed.config.quantization)
         assertEquals(original.config.threadCount, parsed.config.threadCount)
+        assertEquals(original.config.promptMode, parsed.config.promptMode)
+        assertEquals(original.config.audioCtx, parsed.config.audioCtx)
         assertEquals(original.audioDurationMs, parsed.audioDurationMs)
         assertEquals(original.recordingDurationMs, parsed.recordingDurationMs)
         assertEquals(original.modelLoadMs, parsed.modelLoadMs)

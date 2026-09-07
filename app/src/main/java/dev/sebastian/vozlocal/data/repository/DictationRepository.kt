@@ -13,6 +13,7 @@ import dev.sebastian.vozlocal.data.model.DictionaryWord
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.polish.TextPolishEngine
 import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
+import dev.sebastian.vozlocal.whisper.PromptMode
 import dev.sebastian.vozlocal.whisper.WhisperEngine
 import dev.sebastian.vozlocal.whisper.WhisperParams
 import dev.sebastian.vozlocal.whisper.CpuBackendManager
@@ -373,6 +374,19 @@ class DictationRepository(
 
     fun saveInitialPrompt(value: String?) {
         prefs.edit { putString("initial_prompt", value?.ifBlank { null }) }
+    }
+
+    fun getPromptMode(): PromptMode {
+        val raw = prefs.getString("prompt_mode", PromptMode.AUTOMATIC.name) ?: PromptMode.AUTOMATIC.name
+        return try {
+            PromptMode.valueOf(raw)
+        } catch (_: IllegalArgumentException) {
+            PromptMode.AUTOMATIC
+        }
+    }
+
+    fun savePromptMode(mode: PromptMode) {
+        prefs.edit { putString("prompt_mode", mode.name) }
     }
 
     fun getUseVad(): Boolean = prefs.getBoolean("use_vad", true)
@@ -997,6 +1011,7 @@ class DictationRepository(
         return WhisperParams(
             language = getLanguage(),
             initialPrompt = getInitialPrompt(),
+            promptMode = getPromptMode(),
             noSpeechThold = getNoSpeechThold(),
             logprobThold = getLogprobThold(),
             entropyThold = getEntropyThold()
