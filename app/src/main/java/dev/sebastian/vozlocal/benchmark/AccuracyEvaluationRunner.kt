@@ -324,8 +324,9 @@ object AccuracyEvaluationRunner {
         polishEngine: TextPolishEngine = TextPolishEngine(),
         cleanupMode: TextPolishEngine.CleanupMode = TextPolishEngine.CleanupMode.BALANCED,
     ): AccuracyEvaluationReport {
-        val results = manifest.samples.mapNotNull { sample ->
-            val rawHypothesis = rawHypotheses[sample.sampleId] ?: return@mapNotNull null
+        requireCompleteCoverage(manifest, rawHypotheses.keys)
+        val results = manifest.samples.map { sample ->
+            val rawHypothesis = rawHypotheses.getValue(sample.sampleId)
             evaluateSampleWithPolisher(sample, rawHypothesis, polishEngine, cleanupMode)
         }
         return buildReport(results)
@@ -336,11 +337,21 @@ object AccuracyEvaluationRunner {
         manifest: CorpusManifest,
         hypotheses: Map<String, Pair<String, String>>,
     ): AccuracyEvaluationReport {
-        val results = manifest.samples.mapNotNull { sample ->
-            val pair = hypotheses[sample.sampleId] ?: return@mapNotNull null
+        requireCompleteCoverage(manifest, hypotheses.keys)
+        val results = manifest.samples.map { sample ->
+            val pair = hypotheses.getValue(sample.sampleId)
             evaluateSample(sample, pair.first, pair.second)
         }
         return buildReport(results)
+    }
+
+    private fun requireCompleteCoverage(manifest: CorpusManifest, ids: Set<String>) {
+        require(manifest.samples.isNotEmpty()) { "Accuracy corpus must not be empty" }
+        val expected = manifest.samples.map { it.sampleId }
+        require(expected.distinct().size == expected.size) { "Duplicate corpus sample IDs" }
+        require(ids == expected.toSet()) {
+            "Incomplete accuracy run: missing=${expected.toSet() - ids}, unexpected=${ids - expected.toSet()}"
+        }
     }
 
     /** Aggregates sample results into a comprehensive report with breakdowns. */
