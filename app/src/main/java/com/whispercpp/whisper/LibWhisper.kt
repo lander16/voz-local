@@ -17,6 +17,18 @@ class WhisperNativeException(val status: Int) : IllegalStateException(
     "whisper_full failed with native status $status"
 )
 
+/**
+ * Performance metrics captured by whisper.cpp during inference.
+ * Values are in milliseconds.
+ */
+data class WhisperNativeTimings(
+    val sampleMs: Float = 0f,
+    val encodeMs: Float = 0f,
+    val decodeMs: Float = 0f,
+    val batchdMs: Float = 0f,
+    val promptMs: Float = 0f,
+)
+
 class WhisperContext private constructor(private var ptr: Long) {
     // Meet Whisper C++ constraint: Don't access from more than one thread at a time.
     private val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
@@ -43,7 +55,7 @@ class WhisperContext private constructor(private var ptr: Long) {
             return withContext(dispatcher) {
                 currentCoroutineContext().ensureActive()
                 runCatching {
-                    Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY)
+                    Process.setThreadPriority(WhisperCpuConfig.threadPriority)
                 }
                 val numThreads = WhisperCpuConfig.threadCountFor(params)
                 Log.d(LOG_TAG, "Selecting $numThreads threads, language=${params.language}")
@@ -125,6 +137,25 @@ class WhisperContext private constructor(private var ptr: Long) {
             }
         } finally {
             cancellationHandler?.dispose()
+        }
+    }
+
+    suspend fun getNativeTimings(): WhisperNativeTimings = withContext(dispatcher) {
+        val contextPtr = ptr
+        if (contextPtr == 0L) {
+            return@withContext WhisperNativeTimings(0f, 0f, 0f, 0f, 0f)
+        }
+        val raw = WhisperLib.getNativeTimings(contextPtr)
+        if (raw.size >= 5) {
+            WhisperNativeTimings(
+                sampleMs = raw[0],
+                encodeMs = raw[1],
+                decodeMs = raw[2],
+                batchdMs = raw[3],
+                promptMs = raw[4]
+            )
+        } else {
+            WhisperNativeTimings(0f, 0f, 0f, 0f, 0f)
         }
     }
 
@@ -242,6 +273,7 @@ private class WhisperLib {
         external fun getSystemInfo(): String
         external fun benchMemcpy(nthread: Int): String
         external fun benchGgmlMulMat(nthread: Int): String
+        external fun getNativeTimings(contextPtr: Long): FloatArray
     }
 }
 

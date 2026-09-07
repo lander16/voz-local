@@ -226,6 +226,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_warmupContext(
     if (abort_state == NULL) return JNI_FALSE;
     params.abort_callback = vozlocal_abort_callback;
     params.abort_callback_user_data = abort_state;
+    whisper_reset_timings(context);
     return whisper_full(context, params, silence, 3200) == 0 ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -343,6 +344,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithLang(
     LOGI("whisper_full: language=%s, threads=%d, samples=%d",
          lang_chars, num_threads, audio_data_length);
 
+    whisper_reset_timings(context);
     if (whisper_full(context, params, audio_data_arr, audio_data_length) != 0) {
         LOGE("whisper_full failed");
     }
@@ -465,6 +467,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
          (int) params.vad, beam_size, params.temperature_inc,
          params.audio_ctx);
 
+    whisper_reset_timings(context);
     const int result = whisper_full(context, params, audio_data_arr, audio_data_length);
     const bool was_aborted = abort_state != NULL &&
             atomic_load_explicit(&abort_state->requested, memory_order_relaxed);
@@ -478,4 +481,28 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
     if (vad_model_path != NULL) (*env)->ReleaseStringUTFChars(env, vad_model_path, vad_chars);
     // Keep native errors distinct from cooperative cancellation for Kotlin.
     return was_aborted ? -2 : result;
+}
+
+JNIEXPORT jfloatArray JNICALL
+Java_com_whispercpp_whisper_WhisperLib_00024Companion_getNativeTimings(
+        JNIEnv *env, jobject thiz, jlong context_ptr) {
+    UNUSED(thiz);
+    jfloat values[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    struct whisper_context *context = (struct whisper_context *) context_ptr;
+    if (context != NULL) {
+        struct whisper_timings *timings = whisper_get_timings(context);
+        if (timings != NULL) {
+            values[0] = timings->sample_ms;
+            values[1] = timings->encode_ms;
+            values[2] = timings->decode_ms;
+            values[3] = timings->batchd_ms;
+            values[4] = timings->prompt_ms;
+            free(timings);
+        }
+    }
+    jfloatArray result = (*env)->NewFloatArray(env, 5);
+    if (result != NULL) {
+        (*env)->SetFloatArrayRegion(env, result, 0, 5, values);
+    }
+    return result;
 }
