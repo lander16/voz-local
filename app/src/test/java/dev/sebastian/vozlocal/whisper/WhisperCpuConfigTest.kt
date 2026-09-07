@@ -1,18 +1,33 @@
 package dev.sebastian.vozlocal.whisper
 
+import com.whispercpp.whisper.CpuInfoProvider
+import com.whispercpp.whisper.CpuTopology
+import com.whispercpp.whisper.DefaultCpuInfoProvider
+import com.whispercpp.whisper.FileThreadProfileStore
+import com.whispercpp.whisper.ThreadCalibrationProfile
+import com.whispercpp.whisper.ThreadProfileManager
 import com.whispercpp.whisper.WhisperCpuConfig
+import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WhisperCpuConfigTest {
 
     private val threadProperty = "vozlocal.whisper.threads"
+    private val priorityProperty = "vozlocal.whisper.thread_priority"
 
     @After
     fun tearDown() {
         System.clearProperty(threadProperty)
+        System.clearProperty(priorityProperty)
+        WhisperCpuConfig.resetCpuInfoProvider()
+        WhisperCpuConfig.resetThreadPriority()
+        WhisperCpuConfig.profileManager = ThreadProfileManager()
+        WhisperCpuConfig.deviceId = "default_device"
     }
 
     @Test
@@ -148,5 +163,240 @@ class WhisperCpuConfigTest {
         val baseParams = WhisperParams(modelIdHint = "whisper_base")
         val count = WhisperCpuConfig.threadCountFor(baseParams)
         assertTrue("Thread count should be >= 1", count >= 1)
+    }
+
+    @Test
+    fun topologyDetection_2_cluster_2_plus_6_architecture() {
+        // 2 efficiency cores @ 1.8 GHz, 6 performance cores @ 2.4 GHz
+        val freqs = listOf(1800000, 1800000, 2400000, 2400000, 2400000, 2400000, 2400000, 2400000)
+        val topology = DefaultCpuInfoProvider.computeTopology(availableProcessors = 8, frequencies = freqs)
+
+        assertEquals(8, topology.totalCores)
+        assertEquals(2, topology.efficiencyCores)
+        assertEquals(6, topology.performanceCores)
+        assertEquals(0, topology.primeCores)
+        assertEquals(6, topology.highPerfCores)
+
+        WhisperCpuConfig.cpuInfoProvider = object : CpuInfoProvider {
+            override fun getAvailableProcessors(): Int = 8
+            override fun getCoreFrequencies(): List<Int> = freqs
+            override fun getCpuTopology(): CpuTopology = topology
+        }
+
+        // On 2+6, 6 performance cores are recognized as performance cores (not dropped)
+        assertEquals(5, WhisperCpuConfig.adaptiveThreadCount())
+        assertEquals(5, WhisperCpuConfig.preferredThreadCount)
+        val largeParams = WhisperParams(modelIdHint = "whisper_large_v3_turbo")
+        assertEquals(5, WhisperCpuConfig.threadCountFor(largeParams))
+    }
+
+    @Test
+    fun topologyDetection_3_cluster_tensor_g3_architecture() {
+        // 1 prime @ 2.91 GHz, 4 performance @ 2.37 GHz, 4 efficiency @ 1.70 GHz
+        val freqs = listOf(
+            1700000, 1700000, 1700000, 1700000,
+            2370000, 2370000, 2370000, 2370000,
+            2910000
+        )
+        val topology = DefaultCpuInfoProvider.computeTopology(availableProcessors = 9, frequencies = freqs)
+
+        assertEquals(9, topology.totalCores)
+        assertEquals(4, topology.efficiencyCores)
+        assertEquals(4, topology.performanceCores)
+        assertEquals(1, topology.primeCores)
+        assertEquals(5, topology.highPerfCores)
+
+        WhisperCpuConfig.cpuInfoProvider = object : CpuInfoProvider {
+            override fun getAvailableProcessors(): Int = 9
+            override fun getCoreFrequencies(): List<Int> = freqs
+            override fun getCpuTopology(): CpuTopology = topology
+        }
+
+        assertEquals(5, WhisperCpuConfig.adaptiveThreadCount())
+        assertEquals(5, WhisperCpuConfig.preferredThreadCount)
+        val largeParams = WhisperParams(modelIdHint = "whisper_large_v3_turbo")
+        assertEquals(6, WhisperCpuConfig.threadCountFor(largeParams))
+    }
+
+    @Test
+    fun topologyDetection_3_cluster_snapdragon_architecture() {
+        // 1 prime @ 3.2 GHz, 3 performance @ 2.8 GHz, 4 efficiency @ 1.8 GHz
+        val freqs = listOf(
+            1800000, 1800000, 1800000, 1800000,
+            2800000, 2800000, 2800000,
+            3200000
+        )
+        val topology = DefaultCpuInfoProvider.computeTopology(availableProcessors = 8, frequencies = freqs)
+
+        assertEquals(8, topology.totalCores)
+        assertEquals(4, topology.efficiencyCores)
+        assertEquals(3, topology.performanceCores)
+        assertEquals(1, topology.primeCores)
+        assertEquals(4, topology.highPerfCores)
+
+        WhisperCpuConfig.cpuInfoProvider = object : CpuInfoProvider {
+            override fun getAvailableProcessors(): Int = 8
+            override fun getCoreFrequencies(): List<Int> = freqs
+            override fun getCpuTopology(): CpuTopology = topology
+        }
+
+        assertEquals(4, WhisperCpuConfig.adaptiveThreadCount())
+        val largeParams = WhisperParams(modelIdHint = "whisper_large_v3_turbo")
+        assertEquals(5, WhisperCpuConfig.threadCountFor(largeParams))
+    }
+
+    @Test
+    fun topologyDetection_and_clamping_for_small_machines() {
+        // 4-core homogeneous machine
+        val freqs4 = listOf(2400000, 2400000, 2400000, 2400000)
+        val top4 = DefaultCpuInfoProvider.computeTopology(availableProcessors = 4, frequencies = freqs4)
+        assertEquals(4, top4.totalCores)
+        assertEquals(0, top4.efficiencyCores)
+        assertEquals(4, top4.performanceCores)
+        assertEquals(0, top4.primeCores)
+
+        WhisperCpuConfig.cpuInfoProvider = object : CpuInfoProvider {
+            override fun getAvailableProcessors(): Int = 4
+            override fun getCoreFrequencies(): List<Int> = freqs4
+            override fun getCpuTopology(): CpuTopology = top4
+        }
+        assertEquals(2, WhisperCpuConfig.adaptiveThreadCount())
+        assertEquals(3, WhisperCpuConfig.threadCountFor(WhisperParams(modelIdHint = "whisper_large")))
+
+        // 2-core machine: threads must be clamped to availableProcessors = 2
+        val freqs2 = listOf(2000000, 2000000)
+        val top2 = DefaultCpuInfoProvider.computeTopology(availableProcessors = 2, frequencies = freqs2)
+        assertEquals(2, top2.totalCores)
+        assertEquals(0, top2.efficiencyCores)
+        assertEquals(2, top2.performanceCores)
+
+        WhisperCpuConfig.cpuInfoProvider = object : CpuInfoProvider {
+            override fun getAvailableProcessors(): Int = 2
+            override fun getCoreFrequencies(): List<Int> = freqs2
+            override fun getCpuTopology(): CpuTopology = top2
+        }
+        assertEquals(1, WhisperCpuConfig.adaptiveThreadCount())
+        assertEquals(2, WhisperCpuConfig.threadCountFor(WhisperParams(modelIdHint = "whisper_large")))
+
+        // Single-core machine: threads must be clamped to availableProcessors = 1
+        val freqs1 = listOf(1600000)
+        val top1 = DefaultCpuInfoProvider.computeTopology(availableProcessors = 1, frequencies = freqs1)
+        assertEquals(1, top1.totalCores)
+        assertEquals(0, top1.efficiencyCores)
+        assertEquals(1, top1.performanceCores)
+
+        WhisperCpuConfig.cpuInfoProvider = object : CpuInfoProvider {
+            override fun getAvailableProcessors(): Int = 1
+            override fun getCoreFrequencies(): List<Int> = freqs1
+            override fun getCpuTopology(): CpuTopology = top1
+        }
+        assertEquals(1, WhisperCpuConfig.adaptiveThreadCount())
+        // Even with large model hint (which attempts base + 1), must never exceed availableProcessors
+        assertEquals(1, WhisperCpuConfig.threadCountFor(WhisperParams(modelIdHint = "whisper_large")))
+    }
+
+    @Test
+    fun fallback_when_sysfs_is_denied() {
+        val nonExistentSysfs = File("/non/existent/sysfs/cpu")
+        val nonExistentProc = File("/non/existent/proc/cpuinfo")
+        val provider = DefaultCpuInfoProvider(nonExistentSysfs, nonExistentProc)
+
+        assertTrue(provider.getCoreFrequencies().isEmpty())
+        val topology = provider.getCpuTopology()
+        assertTrue(topology.totalCores >= 1)
+        assertTrue(topology.performanceCores >= 1)
+
+        // Test fallback topology logic directly for 8-core
+        val top8Fallback = DefaultCpuInfoProvider.computeTopology(availableProcessors = 8, frequencies = emptyList())
+        assertEquals(8, top8Fallback.totalCores)
+        assertEquals(4, top8Fallback.efficiencyCores)
+        assertEquals(4, top8Fallback.performanceCores)
+        assertEquals(0, top8Fallback.primeCores)
+
+        // Test fallback topology logic for 6-core
+        val top6Fallback = DefaultCpuInfoProvider.computeTopology(availableProcessors = 6, frequencies = emptyList())
+        assertEquals(6, top6Fallback.totalCores)
+        assertEquals(2, top6Fallback.efficiencyCores)
+        assertEquals(4, top6Fallback.performanceCores)
+
+        // Test fallback topology logic for 4-core
+        val top4Fallback = DefaultCpuInfoProvider.computeTopology(availableProcessors = 4, frequencies = emptyList())
+        assertEquals(4, top4Fallback.totalCores)
+        assertEquals(0, top4Fallback.efficiencyCores)
+        assertEquals(4, top4Fallback.performanceCores)
+    }
+
+    @Test
+    fun threadCalibrationProfile_lookup_and_invalidation() {
+        val tempFile = File.createTempFile("whisper_profiles_", ".tsv")
+        tempFile.deleteOnExit()
+        val store = FileThreadProfileStore(tempFile)
+        val manager = ThreadProfileManager(store = store, currentNativeBuildId = "build_v1")
+
+        val profile = ThreadCalibrationProfile(
+            deviceId = "pixel8",
+            modelId = "whisper_base",
+            optimalThreads = 4,
+            calibratedAtMs = 1700000000000L,
+            nativeBuildId = "build_v1"
+        )
+        manager.saveProfile(profile)
+
+        // Lookup profile and optimal threads
+        val loaded = manager.getProfile("pixel8", "whisper_base")
+        assertNotNull(loaded)
+        assertEquals(4, loaded?.optimalThreads)
+        assertEquals(4, manager.getOptimalThreads("pixel8", "whisper_base"))
+
+        // Lookup with WhisperCpuConfig
+        WhisperCpuConfig.profileManager = manager
+        WhisperCpuConfig.deviceId = "pixel8"
+        val params = WhisperParams(modelIdHint = "whisper_base")
+        assertEquals(4, WhisperCpuConfig.threadCountFor(params))
+
+        // Invalidate by model
+        manager.invalidateModel("whisper_base")
+        assertNull(manager.getOptimalThreads("pixel8", "whisper_base"))
+        assertNull(manager.getProfile("pixel8", "whisper_base"))
+
+        // Re-save profile
+        manager.saveProfile(profile)
+        assertEquals(4, manager.getOptimalThreads("pixel8", "whisper_base"))
+
+        // Invalidate when native build changes
+        manager.invalidateNativeBuild("build_v2")
+        assertNull(manager.getOptimalThreads("pixel8", "whisper_base"))
+
+        // Re-loading from file store with the new build ID discards stale profile
+        val managerNewBuild = ThreadProfileManager(store = store, currentNativeBuildId = "build_v2")
+        assertNull(managerNewBuild.getOptimalThreads("pixel8", "whisper_base"))
+
+        // Saving under new build ID succeeds
+        val profileV2 = ThreadCalibrationProfile(
+            deviceId = "pixel8",
+            modelId = "whisper_base",
+            optimalThreads = 3,
+            calibratedAtMs = 1700000100000L,
+            nativeBuildId = "build_v2"
+        )
+        managerNewBuild.saveProfile(profileV2)
+        assertEquals(3, managerNewBuild.getOptimalThreads("pixel8", "whisper_base"))
+    }
+
+    @Test
+    fun threadPriority_configuration_and_override() {
+        WhisperCpuConfig.resetThreadPriority()
+        assertEquals(WhisperCpuConfig.DEFAULT_THREAD_PRIORITY, WhisperCpuConfig.threadPriority)
+
+        WhisperCpuConfig.threadPriority = -4
+        assertEquals(-4, WhisperCpuConfig.threadPriority)
+
+        System.setProperty(priorityProperty, "-2")
+        WhisperCpuConfig.resetThreadPriority()
+        assertEquals(-2, WhisperCpuConfig.threadPriority)
+
+        System.clearProperty(priorityProperty)
+        WhisperCpuConfig.resetThreadPriority()
+        assertEquals(WhisperCpuConfig.DEFAULT_THREAD_PRIORITY, WhisperCpuConfig.threadPriority)
     }
 }
