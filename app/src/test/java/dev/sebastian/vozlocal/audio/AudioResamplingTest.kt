@@ -10,6 +10,17 @@ import org.junit.Test
 
 class AudioResamplingTest {
 
+    @Test fun transitionBandRejectionAcrossCommonRates() {
+        for (rate in listOf(32000, 44100, 48000, 96000)) {
+            for (frequency in listOf(8050, 8500, 9000, 10000)) {
+                val input = FloatArray(rate / 4) { sin(2 * PI * frequency * it / rate).toFloat() }
+                val output = BandlimitedResamplingSink.resample(input, rate)
+                val attenuation = 20 * log10(rms(output) / rms(input))
+                assertTrue("$rate Hz / $frequency Hz: $attenuation dB", attenuation < -45)
+            }
+        }
+    }
+
     private fun rms(samples: FloatArray, startFraction: Double = 0.25, endFraction: Double = 0.75): Double {
         val start = (samples.size * startFraction).toInt()
         val end = (samples.size * endFraction).toInt().coerceAtLeast(start + 1)

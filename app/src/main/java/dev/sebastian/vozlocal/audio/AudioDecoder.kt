@@ -86,7 +86,7 @@ internal class ListFloatSink(initialCapacity: Int) : FloatSink {
  * targetRate / 2 (8000 Hz). Frequencies above 8000 Hz must be low-pass filtered to prevent
  * aliasing into the target 0-8 kHz speech spectrum.
  *
- * Employs a 31-tap windowed-sinc FIR low-pass filter with Hann window. Filter coefficients
+ * Employs a rate-scaled windowed-sinc FIR low-pass filter with Hann window. Filter coefficients
  * are normalized to guarantee exact unity DC gain, ensuring output scaling stays within [-1.0, 1.0]
  * without clipping or DC offset. Filter history is maintained across input chunks to prevent
  * phase clicks or seams at buffer boundaries.
@@ -104,7 +104,10 @@ internal class BandlimitedResamplingSink(
     private val output = PrimitiveFloatList(initialCapacity, MAX_SHARED_AUDIO_SAMPLES)
     private val step = srcRate.toDouble() / targetRate.toDouble()
 
-    private val numTaps = 31
+    // Four source-rate periods across the transition band give >45 dB rejection
+    // at target Nyquist. A fixed 31 taps was insufficient at common input rates.
+    private val transitionHz = minOf(800.0, minOf(targetRate, srcRate) * 0.05)
+    private val numTaps = (kotlin.math.ceil(4.0 * srcRate / transitionHz).toInt() or 1)
     private val filterCoeffs: FloatArray
 
     init {
@@ -132,21 +135,19 @@ internal class BandlimitedResamplingSink(
         }
     }
 
-    private val history = FloatArray(numTaps)
+    private val history = FloatArray(numTaps + 1)
     private var historyPos = 0
     private var hasPrevious = false
-    private var prevFiltered = 0f
-    private var currFiltered = 0f
     private var sourceIndex = 0L
     private var nextOutputPos = 0.0
 
-    private fun filterCurrent(): Float {
+    private fun filterCurrent(offset: Int = 0): Float {
         var sum = 0f
-        var idx = (historyPos - 1 + numTaps) % numTaps
+        var idx = (historyPos - 1 - offset + history.size) % history.size
         for (i in 0 until numTaps) {
             sum += filterCoeffs[i] * history[idx]
             idx--
-            if (idx < 0) idx += numTaps
+            if (idx < 0) idx += history.size
         }
         return sum
     }
@@ -160,8 +161,6 @@ internal class BandlimitedResamplingSink(
         if (!hasPrevious) {
             history.fill(value)
             hasPrevious = true
-            prevFiltered = value
-            currFiltered = value
             output.add(value.coerceIn(-1f, 1f))
             nextOutputPos = step
             sourceIndex = 1L
@@ -169,15 +168,14 @@ internal class BandlimitedResamplingSink(
         }
 
         history[historyPos] = value
-        historyPos = (historyPos + 1) % numTaps
-
-        val filtered = filterCurrent()
-        prevFiltered = currFiltered
-        currFiltered = filtered
+        historyPos = (historyPos + 1) % history.size
 
         while (nextOutputPos <= sourceIndex.toDouble()) {
             val frac = (nextOutputPos - (sourceIndex - 1)).toFloat().coerceIn(0f, 1f)
-            val interpolated = prevFiltered * (1f - frac) + currFiltered * frac
+            // Evaluate only samples used by the decimator. At integer ratios
+            // (48k -> 16k) this avoids filtering two discarded frames out of three.
+            val interpolated = if (frac >= 1f) filterCurrent()
+                else filterCurrent(1) * (1f - frac) + filterCurrent() * frac
             output.add(interpolated.coerceIn(-1f, 1f))
             nextOutputPos += step
         }
