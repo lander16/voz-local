@@ -101,6 +101,7 @@ android {
       isIncludeAndroidResources = true
       all {
         it.maxHeapSize = "2g"
+        it.forkEvery = 1
       }
     }
   }

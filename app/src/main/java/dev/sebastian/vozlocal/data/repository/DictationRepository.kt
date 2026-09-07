@@ -142,7 +142,13 @@ internal object DictionaryReplacementProcessor {
     }
 }
 
-class DictationRepository(private val context: Context) {
+class DictationRepository(
+    private val context: Context,
+    val whisperEngine: WhisperEngine = WhisperEngine(context),
+    val modelDownloader: ModelDownloader = ModelDownloader(context),
+    val audioDecoder: AudioDecoder = AudioDecoder(context),
+    val textPolishEngine: TextPolishEngine = TextPolishEngine(),
+) {
     private val database = AppDatabase.getDatabase(context)
     private val modelDao = database.modelDao()
     private val historyDao = database.historyDao()
@@ -158,12 +164,18 @@ class DictationRepository(private val context: Context) {
     private fun modelOperationLock(modelId: String): Mutex =
         modelOperationLocks.computeIfAbsent(modelId) { Mutex() }
 
+    // Preload deduplication state
+    private val noArgPreloadMutex = Mutex()
+    private var inFlightNoArgPreload: CompletableDeferred<Unit>? = null
+
+    private val selectedPreloadMutex = Mutex()
+    private var inFlightSelectedPreload: CompletableDeferred<Boolean>? = null
+
+    private val modelPreloadMutex = Mutex()
+    private val inFlightModelPreloads = ConcurrentHashMap<String, CompletableDeferred<Boolean>>()
+
     private val prefs = context.getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
 
-    val whisperEngine = WhisperEngine(context)
-    val modelDownloader = ModelDownloader(context)
-    val audioDecoder = AudioDecoder(context)
-    val textPolishEngine = TextPolishEngine()
     val qwenEngine: TextPolishEngine get() = textPolishEngine
 
     /**
@@ -430,8 +442,29 @@ class DictationRepository(private val context: Context) {
     /**
      * Waits until the model table has a selected model (initializeModels seeds it)
      * and preloads it into the engine so the first dictation has zero load latency.
+     * Concurrent calls are deduplicated so only one startup preload executes.
      */
     suspend fun preloadModel() = withContext(Dispatchers.IO) {
+        val deferredToWait: CompletableDeferred<Unit>?
+        val myDeferred: CompletableDeferred<Unit>?
+        noArgPreloadMutex.withLock {
+            val existing = inFlightNoArgPreload
+            if (existing != null && !existing.isCompleted) {
+                deferredToWait = existing
+                myDeferred = null
+            } else {
+                val created = CompletableDeferred<Unit>()
+                inFlightNoArgPreload = created
+                deferredToWait = null
+                myDeferred = created
+            }
+        }
+
+        if (deferredToWait != null) {
+            deferredToWait.await()
+            return@withContext
+        }
+
         try {
             ensureModelCatalogInitialized()
             val models = modelDao.getModelsList()
@@ -441,26 +474,65 @@ class DictationRepository(private val context: Context) {
             val ok = loaded != null
             Log.i(TAG, "Preload of selected downloaded model '${loaded?.id}' -> loaded=$ok")
             _modelLoaded.value = ok
+            myDeferred?.complete(Unit)
         } catch (e: Exception) {
             Log.e(TAG, "Error preloading model", e)
             _modelLoaded.value = false
+            myDeferred?.completeExceptionally(e)
+        } finally {
+            noArgPreloadMutex.withLock {
+                if (inFlightNoArgPreload === myDeferred) {
+                    inFlightNoArgPreload = null
+                }
+            }
         }
     }
 
     suspend fun preloadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
-        val ok = modelOperationLock(modelId).withLock {
-            // Do not create a native context from a path until this exact file
-            // identity has passed validation and the pinned digest check.
-            val verified = modelDownloader.verifiedModelFile(modelId)
-            if (verified == null) {
-                Log.w(TAG, "Refusing to load unverified model $modelId")
-                false
+        val deferredToWait: CompletableDeferred<Boolean>?
+        val myDeferred: CompletableDeferred<Boolean>?
+        modelPreloadMutex.withLock {
+            val existing = inFlightModelPreloads[modelId]
+            if (existing != null && !existing.isCompleted) {
+                deferredToWait = existing
+                myDeferred = null
             } else {
-                whisperEngine.loadModel(verified.modelId)
+                val created = CompletableDeferred<Boolean>()
+                inFlightModelPreloads[modelId] = created
+                deferredToWait = null
+                myDeferred = created
             }
         }
-        _modelLoaded.value = ok
-        ok
+
+        if (deferredToWait != null) {
+            return@withContext deferredToWait.await()
+        }
+
+        try {
+            val ok = modelOperationLock(modelId).withLock {
+                // Do not create a native context from a path until this exact file
+                // identity has passed validation and the pinned digest check.
+                val verified = modelDownloader.verifiedModelFile(modelId)
+                if (verified == null) {
+                    Log.w(TAG, "Refusing to load unverified model $modelId")
+                    false
+                } else {
+                    whisperEngine.loadModel(verified.modelId)
+                }
+            }
+            _modelLoaded.value = ok
+            myDeferred?.complete(ok)
+            ok
+        } catch (e: Throwable) {
+            myDeferred?.completeExceptionally(e)
+            throw e
+        } finally {
+            modelPreloadMutex.withLock {
+                if (inFlightModelPreloads[modelId] === myDeferred) {
+                    inFlightModelPreloads.remove(modelId)
+                }
+            }
+        }
     }
 
     fun updateModelLoadedState(loaded: Boolean) {
@@ -468,11 +540,43 @@ class DictationRepository(private val context: Context) {
     }
 
     suspend fun preloadSelectedDownloadedModel(): Boolean = withContext(Dispatchers.IO) {
-        ensureModelCatalogInitialized()
-        val models = modelDao.getModelsList()
-        val selected = models.find { it.isSelected && it.isDownloaded }
-            ?: models.firstOrNull { it.isDownloaded }
-        selected?.let { preloadModel(it.id) } ?: false
+        val deferredToWait: CompletableDeferred<Boolean>?
+        val myDeferred: CompletableDeferred<Boolean>?
+        selectedPreloadMutex.withLock {
+            val existing = inFlightSelectedPreload
+            if (existing != null && !existing.isCompleted) {
+                deferredToWait = existing
+                myDeferred = null
+            } else {
+                val created = CompletableDeferred<Boolean>()
+                inFlightSelectedPreload = created
+                deferredToWait = null
+                myDeferred = created
+            }
+        }
+
+        if (deferredToWait != null) {
+            return@withContext deferredToWait.await()
+        }
+
+        try {
+            ensureModelCatalogInitialized()
+            val models = modelDao.getModelsList()
+            val selected = models.find { it.isSelected && it.isDownloaded }
+                ?: models.firstOrNull { it.isDownloaded }
+            val result = selected?.let { preloadModel(it.id) } ?: false
+            myDeferred?.complete(result)
+            result
+        } catch (e: Throwable) {
+            myDeferred?.completeExceptionally(e)
+            throw e
+        } finally {
+            selectedPreloadMutex.withLock {
+                if (inFlightSelectedPreload === myDeferred) {
+                    inFlightSelectedPreload = null
+                }
+            }
+        }
     }
 
     suspend fun pruneHistory(limit: Int) = withContext(Dispatchers.IO) {
@@ -645,7 +749,7 @@ class DictationRepository(private val context: Context) {
         }
     }
 
-    private suspend fun ensureModelCatalogInitialized() {
+    suspend fun ensureModelCatalogInitialized() {
         if (!modelCatalogReady.isCompleted) initializeModels()
         modelCatalogReady.await()
     }
@@ -723,7 +827,10 @@ class DictationRepository(private val context: Context) {
             }
             // The lifecycle lock is intentionally released before preloadModel
             // reacquires it for verification + native context creation.
-            if (shouldPreload) preloadModel(modelId)
+            // Only preload if the downloaded model is currently selected so an
+            // unselected download does not evict or replace the active model.
+            val isSelected = modelDao.getModelsList().find { it.id == modelId }?.isSelected == true
+            if (shouldPreload && isSelected) preloadModel(modelId)
         }
     }
 

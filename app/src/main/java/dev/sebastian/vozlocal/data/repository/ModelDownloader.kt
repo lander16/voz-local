@@ -88,7 +88,7 @@ object ModelUrls {
     fun minimumValidBytes(modelId: String): Long? = MIN_VALID_BYTES[modelId]
 }
 
-class ModelDownloader(private val context: Context) {
+open class ModelDownloader(private val context: Context) {
     private val client = OkHttpClient.Builder().build()
 
     // SHA-256 verification map: pinned checksums for model security & integrity
@@ -101,7 +101,7 @@ class ModelDownloader(private val context: Context) {
         "Verified (SHA-256)"
     }
 
-    suspend fun downloadModel(
+    open suspend fun downloadModel(
         modelId: String,
         onProgress: suspend (Float) -> Unit,
         beforePromote: suspend () -> Unit = {}
@@ -277,7 +277,7 @@ class ModelDownloader(private val context: Context) {
      * Returns a verified identity rather than an unchecked pathname. Every caller
      * that creates a native Whisper context must obtain its file through here.
      */
-    fun verifiedModelFile(modelId: String): VerifiedModelFile? {
+    open fun verifiedModelFile(modelId: String): VerifiedModelFile? {
         val file = ModelUrls.getModelFile(context, modelId)
         return verifyExistingFile(file, modelId)?.let {
             VerifiedModelFile(modelId, file, file.length(), file.lastModified())
