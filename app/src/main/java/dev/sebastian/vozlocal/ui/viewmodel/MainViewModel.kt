@@ -29,6 +29,7 @@ import kotlin.time.Duration.Companion.seconds
 import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "MainViewModel"
+private const val WAVEFORM_THROTTLE_MS = 33L
 
 private data class DictationSettingsSnapshot(
     val smartPunctuation: Boolean,
@@ -167,15 +168,25 @@ class MainViewModel(
     private val _downloadUiStateMap = MutableStateFlow<Map<String, ModelDownloadUiState>>(emptyMap())
     private val downloadStartedAtMs = ConcurrentHashMap<String, Long>()
 
+    val downloadProgressMap: StateFlow<Map<String, Float>> = _downloadProgressMap.asStateFlow()
+    val downloadUiStateMap: StateFlow<Map<String, ModelDownloadUiState>> = _downloadUiStateMap.asStateFlow()
+
+    private val downloadProgressFlows = ConcurrentHashMap<String, StateFlow<Float>>()
+    private val downloadStatusFlows = ConcurrentHashMap<String, StateFlow<ModelDownloadUiState?>>()
+
     fun downloadProgressFor(modelId: String): StateFlow<Float> =
-        _downloadProgressMap
-            .map { map -> map[modelId] ?: 0f }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
+        downloadProgressFlows.computeIfAbsent(modelId) { id ->
+            _downloadProgressMap
+                .map { it[id] ?: 0f }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
+        }
 
     fun downloadStatusFor(modelId: String): StateFlow<ModelDownloadUiState?> =
-        _downloadUiStateMap
-            .map { map -> map[modelId] }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        downloadStatusFlows.computeIfAbsent(modelId) { id ->
+            _downloadUiStateMap
+                .map { it[id] }
+                .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+        }
 
     // Settings State
     val smartPunctuation = MutableStateFlow(repository.getSmartPunctuation())
@@ -585,6 +596,7 @@ class MainViewModel(
         timerJob?.cancel()
         timerJob = null
         _isRecording.value = false
+        pushFinalWaveformSnapshot()
 
         viewModelScope.launch {
             val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
@@ -845,18 +857,35 @@ class MainViewModel(
         return String.format(Locale.US, "%.1f %s", bytes / 1024.0.pow(digitGroups.toDouble()), units[digitGroups])
     }
 
-    private fun resetWaveform() {
-        waveformBuffer.fill(0.05f)
-        waveformSize = 25
-        waveformWrite = 0
-        _liveWaveform.value = snapshotWaveform()
+    private var lastWaveformEmitTimeMs = 0L
+
+    internal fun resetWaveform(currentTimeMs: Long = System.currentTimeMillis()) {
+        synchronized(waveformBuffer) {
+            waveformBuffer.fill(0.05f)
+            waveformSize = 25
+            waveformWrite = 0
+            lastWaveformEmitTimeMs = currentTimeMs
+            _liveWaveform.value = snapshotWaveform()
+        }
     }
 
-    private fun pushWaveform(amplitude: Float) {
-        waveformBuffer[waveformWrite] = amplitude
-        waveformWrite = (waveformWrite + 1) % waveformBuffer.size
-        if (waveformSize < waveformBuffer.size) waveformSize++
-        _liveWaveform.value = snapshotWaveform()
+    internal fun pushWaveform(amplitude: Float, currentTimeMs: Long = System.currentTimeMillis()) {
+        synchronized(waveformBuffer) {
+            waveformBuffer[waveformWrite] = amplitude
+            waveformWrite = (waveformWrite + 1) % waveformBuffer.size
+            if (waveformSize < waveformBuffer.size) waveformSize++
+            if (currentTimeMs - lastWaveformEmitTimeMs >= WAVEFORM_THROTTLE_MS) {
+                lastWaveformEmitTimeMs = currentTimeMs
+                _liveWaveform.value = snapshotWaveform()
+            }
+        }
+    }
+
+    internal fun pushFinalWaveformSnapshot(currentTimeMs: Long = System.currentTimeMillis()) {
+        synchronized(waveformBuffer) {
+            lastWaveformEmitTimeMs = currentTimeMs
+            _liveWaveform.value = snapshotWaveform()
+        }
     }
 
     private fun snapshotWaveform(): List<Float> {

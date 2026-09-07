@@ -48,6 +48,9 @@ interface HistoryDao {
     @Query("DELETE FROM transcription_history WHERE id = :id")
     suspend fun deleteHistoryById(id: Int)
 
+    @Query("DELETE FROM transcription_history WHERE id NOT IN (SELECT id FROM transcription_history ORDER BY timestamp DESC LIMIT :limit)")
+    suspend fun pruneHistoryToLimit(limit: Int): Int
+
     @Query("DELETE FROM transcription_history")
     suspend fun clearHistory()
 }

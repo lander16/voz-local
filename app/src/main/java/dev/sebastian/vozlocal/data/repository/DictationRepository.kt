@@ -581,13 +581,7 @@ class DictationRepository(
 
     suspend fun pruneHistory(limit: Int) = withContext(Dispatchers.IO) {
         if (limit > 0) {
-            val currentHistory = historyDao.getAllHistory().first()
-            if (currentHistory.size > limit) {
-                val itemsToDelete = currentHistory.drop(limit)
-                for (item in itemsToDelete) {
-                    historyDao.deleteHistoryById(item.id)
-                }
-            }
+            historyDao.pruneHistoryToLimit(limit)
         }
     }
 
