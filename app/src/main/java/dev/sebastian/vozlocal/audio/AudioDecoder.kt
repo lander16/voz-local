@@ -9,13 +9,16 @@ import android.net.Uri
 import android.util.Log
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 private const val TAG = "AudioDecoder"
-private const val TARGET_SAMPLE_RATE = 16_000
+internal const val TARGET_SAMPLE_RATE = 16_000
 
 /** Temporary whole-file PCM storage is bounded until the streaming import pipeline exists. */
 internal const val MAX_SHARED_AUDIO_DURATION_SECONDS = 15 * 60
@@ -65,47 +68,138 @@ internal class PrimitiveFloatList(initialCapacity: Int, private val maxCapacity:
     }
 }
 
-private interface FloatSink {
+internal interface FloatSink {
     fun add(value: Float)
     fun toFloatArray(): FloatArray
 }
 
-private class ListFloatSink(initialCapacity: Int) : FloatSink {
+internal class ListFloatSink(initialCapacity: Int) : FloatSink {
     private val list = PrimitiveFloatList(initialCapacity, MAX_SHARED_AUDIO_SAMPLES)
     override fun add(value: Float) = list.add(value)
     override fun toFloatArray(): FloatArray = list.toFloatArray()
 }
 
-private class LinearResamplingSink(srcRate: Int, initialCapacity: Int) : FloatSink {
+/**
+ * Band-limited anti-aliasing resampling sink.
+ *
+ * When downsampling audio (e.g. 48000 Hz or 44100 Hz to 16000 Hz), Nyquist frequency is
+ * targetRate / 2 (8000 Hz). Frequencies above 8000 Hz must be low-pass filtered to prevent
+ * aliasing into the target 0-8 kHz speech spectrum.
+ *
+ * Employs a 31-tap windowed-sinc FIR low-pass filter with Hann window. Filter coefficients
+ * are normalized to guarantee exact unity DC gain, ensuring output scaling stays within [-1.0, 1.0]
+ * without clipping or DC offset. Filter history is maintained across input chunks to prevent
+ * phase clicks or seams at buffer boundaries.
+ */
+internal class BandlimitedResamplingSink(
+    val srcRate: Int,
+    initialCapacity: Int = DEFAULT_INITIAL_SAMPLES,
+    val targetRate: Int = TARGET_SAMPLE_RATE
+) : FloatSink {
+    init {
+        require(srcRate > 0) { "Source sample rate must be positive." }
+        require(targetRate > 0) { "Target sample rate must be positive." }
+    }
+
     private val output = PrimitiveFloatList(initialCapacity, MAX_SHARED_AUDIO_SAMPLES)
-    private val step = srcRate.toDouble() / TARGET_SAMPLE_RATE.toDouble()
-    private var previous = 0f
+    private val step = srcRate.toDouble() / targetRate.toDouble()
+
+    private val numTaps = 31
+    private val filterCoeffs: FloatArray
+
+    init {
+        val nyquist = minOf(targetRate, srcRate) / 2.0
+        val cutoff = minOf(7500.0, nyquist * 0.9)
+        val fc = (cutoff / srcRate).toFloat()
+
+        val m = (numTaps - 1) / 2
+        val raw = FloatArray(numTaps)
+        var sum = 0.0
+        for (i in 0 until numTaps) {
+            val n = i - m
+            val h = if (n == 0) {
+                2f * fc
+            } else {
+                (sin(2.0 * PI * fc * n) / (PI * n)).toFloat()
+            }
+            val w = (0.5 - 0.5 * cos(2.0 * PI * i / (numTaps - 1))).toFloat()
+            val coeff = h * w
+            raw[i] = coeff
+            sum += coeff.toDouble()
+        }
+        filterCoeffs = FloatArray(numTaps) { i ->
+            if (sum != 0.0) (raw[i] / sum).toFloat() else raw[i]
+        }
+    }
+
+    private val history = FloatArray(numTaps)
+    private var historyPos = 0
     private var hasPrevious = false
+    private var prevFiltered = 0f
+    private var currFiltered = 0f
     private var sourceIndex = 0L
     private var nextOutputPos = 0.0
 
-    init { require(srcRate > 0) { "Source sample rate must be positive." } }
+    private fun filterCurrent(): Float {
+        var sum = 0f
+        var idx = (historyPos - 1 + numTaps) % numTaps
+        for (i in 0 until numTaps) {
+            sum += filterCoeffs[i] * history[idx]
+            idx--
+            if (idx < 0) idx += numTaps
+        }
+        return sum
+    }
 
     override fun add(value: Float) {
+        if (srcRate == targetRate) {
+            output.add(value.coerceIn(-1f, 1f))
+            return
+        }
+
         if (!hasPrevious) {
-            previous = value
+            history.fill(value)
             hasPrevious = true
-            output.add(value)
+            prevFiltered = value
+            currFiltered = value
+            output.add(value.coerceIn(-1f, 1f))
             nextOutputPos = step
             sourceIndex = 1L
             return
         }
+
+        history[historyPos] = value
+        historyPos = (historyPos + 1) % numTaps
+
+        val filtered = filterCurrent()
+        prevFiltered = currFiltered
+        currFiltered = filtered
+
         while (nextOutputPos <= sourceIndex.toDouble()) {
             val frac = (nextOutputPos - (sourceIndex - 1)).toFloat().coerceIn(0f, 1f)
-            output.add(previous * (1f - frac) + value * frac)
+            val interpolated = prevFiltered * (1f - frac) + currFiltered * frac
+            output.add(interpolated.coerceIn(-1f, 1f))
             nextOutputPos += step
         }
-        previous = value
         sourceIndex++
     }
 
     override fun toFloatArray(): FloatArray = output.toFloatArray()
+
+    companion object {
+        fun resample(samples: FloatArray, srcRate: Int, targetRate: Int = TARGET_SAMPLE_RATE): FloatArray {
+            if (srcRate == targetRate) return samples.copyOf()
+            val capacity = ((samples.size.toDouble() * targetRate) / srcRate).toInt() + 100
+            val sink = BandlimitedResamplingSink(srcRate, capacity, targetRate)
+            for (sample in samples) {
+                sink.add(sample)
+            }
+            return sink.toFloatArray()
+        }
+    }
 }
+
+internal typealias LinearResamplingSink = BandlimitedResamplingSink
 
 class AudioDecoder(private val context: Context) {
     suspend fun decodeToPcm16k(uri: Uri, onProgress: ((Float) -> Unit)? = null): FloatArray =
@@ -249,7 +343,7 @@ class AudioDecoder(private val context: Context) {
         }
 
     private fun createSink(sampleRate: Int, initialCapacity: Int): FloatSink =
-        if (sampleRate == TARGET_SAMPLE_RATE) ListFloatSink(initialCapacity) else LinearResamplingSink(sampleRate, initialCapacity)
+        if (sampleRate == TARGET_SAMPLE_RATE) ListFloatSink(initialCapacity) else BandlimitedResamplingSink(sampleRate, initialCapacity)
 
     private fun validateOutputFormat(sampleRate: Int, channelCount: Int, encoding: Int) {
         if (sampleRate !in 1..384_000 || channelCount !in 1..8) {

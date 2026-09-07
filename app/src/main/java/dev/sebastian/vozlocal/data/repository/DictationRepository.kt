@@ -862,6 +862,10 @@ class DictationRepository(
 
         // Trim leading and trailing silence to avoid processing dead audio frames
         val trimmed = AudioSilenceTrimmer.trim(samples)
+        if (trimmed.isEmpty() && samples.isNotEmpty()) {
+            Log.i(TAG, "Audio is complete silence; skipping Whisper inference.")
+            return@withContext ""
+        }
         val activeSamples = if (trimmed.isNotEmpty()) trimmed else samples
 
         modelOperationLock(modelId).withLock {
@@ -902,6 +906,10 @@ class DictationRepository(
         }
 
         val trimmedSamples = AudioSilenceTrimmer.trim(decodedSamples)
+        if (trimmedSamples.isEmpty() && decodedSamples.isNotEmpty()) {
+            Log.i(TAG, "Shared audio file is complete silence; skipping Whisper inference.")
+            return@withContext ""
+        }
         val samples = if (trimmedSamples.isNotEmpty()) trimmedSamples else decodedSamples
         val audioDurationSec = samples.size / 16000f
 

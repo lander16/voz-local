@@ -17,10 +17,11 @@ object AudioSilenceTrimmer {
     private const val MIN_DURATION_MS = 500
     private const val ABSOLUTE_FLOOR_RMS = 0.0035f
     private const val MIN_TRIM_MS = 150
+    private const val CONSERVATIVE_NOISE_PEAK_THRESHOLD = 0.015f
 
     fun trim(samples: FloatArray, sampleRate: Int = SAMPLE_RATE): FloatArray {
         if (samples.isEmpty() || sampleRate <= 0) return samples
-        if (samples.size < sampleRate * MIN_DURATION_MS / 1000) return samples
+        if (samples.size <= sampleRate * MIN_DURATION_MS / 1000) return samples
 
         val frameSize = (sampleRate * FRAME_MS / 1000).coerceAtLeast(1)
         val frameCount = samples.size / frameSize
@@ -50,7 +51,18 @@ object AudioSilenceTrimmer {
 
         var first = 0
         while (first < frameCount && rms[first] < threshold) first++
-        if (first >= frameCount) return samples
+        if (first >= frameCount) {
+            var maxPeak = 0f
+            for (s in samples) {
+                val abs = kotlin.math.abs(s)
+                if (abs > maxPeak) maxPeak = abs
+            }
+            return if (maxPeak < CONSERVATIVE_NOISE_PEAK_THRESHOLD) {
+                floatArrayOf()
+            } else {
+                samples
+            }
+        }
 
         var last = frameCount - 1
         while (last >= first && rms[last] < threshold) last--
@@ -65,7 +77,11 @@ object AudioSilenceTrimmer {
 
         val paddingFrames = sampleRate * PADDING_MS / 1000 / frameSize
         val startSample = ((first - paddingFrames).coerceAtLeast(0)) * frameSize
-        val endSample = (((safeLast + paddingFrames + 1).coerceAtMost(frameCount)) * frameSize).coerceAtMost(samples.size)
+        val endSample = if (safeLast + paddingFrames + 1 >= frameCount) {
+            samples.size
+        } else {
+            ((safeLast + paddingFrames + 1) * frameSize).coerceAtMost(samples.size)
+        }
 
         val minTrimSamples = sampleRate * MIN_TRIM_MS / 1000
         val leadingTrim = startSample
