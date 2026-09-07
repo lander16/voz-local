@@ -46,6 +46,9 @@ private class PlatformAudioRecord(private val delegate: AudioRecord) : AudioReco
     override fun release() = delegate.release()
 }
 
+// Construction is reached only through startRecording(), which checks the
+// caller-supplied permission state and catches a revoked-permission exception.
+@SuppressLint("MissingPermission")
 private val platformAudioRecordFactory = AudioRecordFactory { source, bufferSize ->
     PlatformAudioRecord(
         AudioRecord(
