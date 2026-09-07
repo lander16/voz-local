@@ -56,13 +56,13 @@ data class SensitiveApp(
     val label: String,
 )
 
-private data class DictionaryReplacement(
+internal data class DictionaryReplacement(
     val pattern: Regex,
     val replacement: String,
     val order: Int,
 )
 
-private data class DictionaryReplacementSnapshot(
+internal data class DictionaryReplacementSnapshot(
     val replacements: List<DictionaryReplacement>,
 ) {
     companion object {
@@ -76,6 +76,71 @@ private data class DictionaryMatch(
     val replacement: String,
     val order: Int,
 )
+
+internal object DictionaryReplacementProcessor {
+    /**
+     * Dictionary replacement is deliberately non-cascading: every match is found in
+     * the original text, so a canonical value cannot become input for another entry.
+     * When entries overlap, the longest match wins; equal-length matches use the
+     * deterministic dictionary order (canonical word, then database id).
+     */
+    fun buildSnapshot(words: List<DictionaryWord>): DictionaryReplacementSnapshot {
+        val replacements = buildList {
+            var order = 0
+            words.sortedWith(
+                compareBy<DictionaryWord>({ it.word.lowercase(Locale.ROOT) }, { it.word }, { it.id })
+            ).forEach { dictionaryWord ->
+                fun addPattern(source: String) {
+                    add(
+                        DictionaryReplacement(
+                            pattern = Regex("\\b${Regex.escape(source)}\\b", RegexOption.IGNORE_CASE),
+                            replacement = dictionaryWord.word,
+                            order = order++
+                        )
+                    )
+                }
+
+                dictionaryWord.replacement
+                    .split(",")
+                    .map(String::trim)
+                    .filter(String::isNotEmpty)
+                    .forEach(::addPattern)
+                addPattern(dictionaryWord.word)
+            }
+        }
+        return DictionaryReplacementSnapshot(replacements)
+    }
+
+    fun replace(text: String, snapshot: DictionaryReplacementSnapshot): String {
+        val matches = snapshot.replacements.flatMap { replacement ->
+            replacement.pattern.findAll(text).map { match ->
+                DictionaryMatch(
+                    start = match.range.first,
+                    endExclusive = match.range.last + 1,
+                    replacement = replacement.replacement,
+                    order = replacement.order
+                )
+            }.toList()
+        }.sortedWith(
+            compareBy<DictionaryMatch> { it.start }
+                .thenByDescending { it.endExclusive - it.start }
+                .thenBy { it.order }
+        )
+
+        if (matches.isEmpty()) return text
+
+        val output = StringBuilder(text.length)
+        var consumedUntil = 0
+        for (match in matches) {
+            if (match.start < consumedUntil) continue
+            output.append(text, consumedUntil, match.start)
+            output.append(match.replacement)
+            consumedUntil = match.endExclusive
+        }
+        output.append(text, consumedUntil, text.length)
+        return output.toString()
+    }
+}
 
 class DictationRepository(private val context: Context) {
     private val database = AppDatabase.getDatabase(context)
@@ -875,73 +940,7 @@ class DictationRepository(private val context: Context) {
 
     private suspend fun refreshDictionarySnapshot() {
         val words = dictionaryDao.getWordsList()
-        dictionaryReplacementSnapshot.set(buildDictionaryReplacementSnapshot(words))
-    }
-
-    /**
-     * Dictionary replacement is deliberately non-cascading: every match is found in
-     * the original text, so a canonical value cannot become input for another entry.
-     * When entries overlap, the longest match wins; equal-length matches use the
-     * deterministic dictionary order (canonical word, then database id).
-     */
-    private fun buildDictionaryReplacementSnapshot(words: List<DictionaryWord>): DictionaryReplacementSnapshot {
-        val replacements = buildList {
-            var order = 0
-            words.sortedWith(
-                compareBy<DictionaryWord>({ it.word.lowercase(Locale.ROOT) }, { it.word }, { it.id })
-            ).forEach { dictionaryWord ->
-                fun addPattern(source: String) {
-                    add(
-                        DictionaryReplacement(
-                            pattern = Regex("\\b${Regex.escape(source)}\\b", RegexOption.IGNORE_CASE),
-                            replacement = dictionaryWord.word,
-                            order = order++
-                        )
-                    )
-                }
-
-                dictionaryWord.replacement
-                    .split(",")
-                    .map(String::trim)
-                    .filter(String::isNotEmpty)
-                    .forEach(::addPattern)
-                addPattern(dictionaryWord.word)
-            }
-        }
-        return DictionaryReplacementSnapshot(replacements)
-    }
-
-    private fun applyDictionaryReplacements(
-        text: String,
-        snapshot: DictionaryReplacementSnapshot
-    ): String {
-        val matches = snapshot.replacements.flatMap { replacement ->
-            replacement.pattern.findAll(text).map { match ->
-                DictionaryMatch(
-                    start = match.range.first,
-                    endExclusive = match.range.last + 1,
-                    replacement = replacement.replacement,
-                    order = replacement.order
-                )
-            }.toList()
-        }.sortedWith(
-            compareBy<DictionaryMatch> { it.start }
-                .thenByDescending { it.endExclusive - it.start }
-                .thenBy { it.order }
-        )
-
-        if (matches.isEmpty()) return text
-
-        val output = StringBuilder(text.length)
-        var consumedUntil = 0
-        for (match in matches) {
-            if (match.start < consumedUntil) continue
-            output.append(text, consumedUntil, match.start)
-            output.append(match.replacement)
-            consumedUntil = match.endExclusive
-        }
-        output.append(text, consumedUntil, text.length)
-        return output.toString()
+        dictionaryReplacementSnapshot.set(DictionaryReplacementProcessor.buildSnapshot(words))
     }
 
     // Advanced Local Post-Processing Pipeline
@@ -961,7 +960,7 @@ class DictationRepository(private val context: Context) {
         // 2. Dictionary Replacements & Misheard Vocabulary Biasing
         if (applyDict) {
             val snapshot = dictionaryReplacementSnapshot.get()
-            result = applyDictionaryReplacements(result, snapshot)
+            result = DictionaryReplacementProcessor.replace(result, snapshot)
         }
 
         // 3. Smart Punctuation. Spoken punctuation commands are opt-in because
