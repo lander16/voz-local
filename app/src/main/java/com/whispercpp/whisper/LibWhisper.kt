@@ -46,10 +46,8 @@ class WhisperContext private constructor(private var ptr: Long) {
         val contextPtr = ptr
         require(contextPtr != 0L)
         check(WhisperLib.prepareAbort(contextPtr)) { "Couldn't prepare Whisper cancellation state" }
-        val cancellationHandler = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
-            if (cause is CancellationException) {
-                WhisperLib.requestAbort(contextPtr)
-            }
+        val cancellationHandler = currentCoroutineContext()[Job]?.abortNativeOnCancellation {
+            WhisperLib.requestAbort(contextPtr)
         }
         try {
             return withContext(dispatcher) {
@@ -125,8 +123,8 @@ class WhisperContext private constructor(private var ptr: Long) {
         val contextPtr = ptr
         require(contextPtr != 0L)
         check(WhisperLib.prepareAbort(contextPtr)) { "Couldn't prepare Whisper cancellation state" }
-        val cancellationHandler = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
-            if (cause is CancellationException) WhisperLib.requestAbort(contextPtr)
+        val cancellationHandler = currentCoroutineContext()[Job]?.abortNativeOnCancellation {
+            WhisperLib.requestAbort(contextPtr)
         }
         try {
             return withContext(dispatcher) {
@@ -159,7 +157,7 @@ class WhisperContext private constructor(private var ptr: Long) {
         }
     }
 
-    suspend fun release() = withContext(Dispatchers.IO) {
+    suspend fun release() = withContext(NonCancellable + dispatcher) {
         if (ptr != 0L) {
             WhisperLib.requestAbort(ptr)
             WhisperLib.forgetAbortState(ptr)
