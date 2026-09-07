@@ -8,6 +8,8 @@ data class AccessibilityTarget(
     val enabled: Boolean,
     val password: Boolean,
     val accessibilityDataSensitive: Boolean,
+    /** Framework-supplied identity used to prevent a result moving to another field. */
+    val stableId: String? = null,
 )
 
 /** Security boundary for the global dictation overlay. */
@@ -23,10 +25,15 @@ object AccessibilityTargetPolicy {
             !node.password &&
             !node.accessibilityDataSensitive
 
+    fun hasStableIdentity(target: AccessibilityTarget?): Boolean =
+        !target?.stableId.isNullOrBlank()
+
     fun matchesRecordingTarget(recordingTarget: AccessibilityTarget?, currentTarget: AccessibilityTarget?): Boolean =
         recordingTarget != null && currentTarget != null &&
             recordingTarget.packageName == currentTarget.packageName &&
-            recordingTarget.windowId == currentTarget.windowId
+            recordingTarget.windowId == currentTarget.windowId &&
+            hasStableIdentity(recordingTarget) &&
+            recordingTarget.stableId == currentTarget.stableId
 
     fun isPlaceholderText(
         text: String,

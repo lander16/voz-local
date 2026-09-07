@@ -30,6 +30,29 @@ import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "MainViewModel"
 
+private data class DictationSettingsSnapshot(
+    val smartPunctuation: Boolean,
+    val autoCapitalize: Boolean,
+    val applyDictionary: Boolean,
+    val useAiPolisher: Boolean,
+    val cleanupMode: CleanupMode
+)
+
+private data class MainDictationSession(
+    val id: Long,
+    val model: DictationModel,
+    val startedAtMs: Long,
+    val settings: DictationSettingsSnapshot
+)
+
+private data class SharedTranscriptionSession(
+    val id: Long,
+    val uri: Uri,
+    val fileName: String,
+    val model: DictationModel,
+    val settings: DictationSettingsSnapshot
+)
+
 data class ModelDownloadUiState(
     val progress: Float = 0f,
     val downloadedMb: Float = 0f,
@@ -55,6 +78,27 @@ class MainViewModel(
     private val repository: DictationRepository,
     private val audioRecorder: AudioRecorder
 ) : ViewModel() {
+
+    private var nextSessionId = 0L
+    private var activeDictationSession: MainDictationSession? = null
+    private var dictationJob: Job? = null
+    private var activeSharedSession: SharedTranscriptionSession? = null
+
+    private fun newSessionId(): Long = ++nextSessionId
+
+    private fun settingsSnapshot() = DictationSettingsSnapshot(
+        smartPunctuation = smartPunctuation.value,
+        autoCapitalize = autoCapitalization.value,
+        applyDictionary = applyDictionary.value,
+        useAiPolisher = useAiPolisher.value,
+        cleanupMode = cleanupMode.value
+    )
+
+    private fun isCurrentDictation(session: MainDictationSession): Boolean =
+        activeDictationSession?.id == session.id
+
+    private fun isCurrentShared(session: SharedTranscriptionSession): Boolean =
+        activeSharedSession?.id == session.id
 
     // Models & Data Flows
     val modelsList: StateFlow<List<DictationModel>> = repository.allModels
@@ -456,11 +500,23 @@ class MainViewModel(
 
     private fun startRecording() {
         viewModelScope.launch {
+            if (dictationJob?.isActive == true || activeDictationSession != null) {
+                _currentLiveTranscription.value = "A transcription is still being processed. Please wait."
+                return@launch
+            }
             val model = getActiveDownloadedModel()
             if (model == null) {
                 _currentLiveTranscription.value = "⚠️ Speech model not downloaded yet. Please download a model from the Models tab to start dictating."
                 return@launch
             }
+
+            val session = MainDictationSession(
+                id = newSessionId(),
+                model = model,
+                startedAtMs = System.currentTimeMillis(),
+                settings = settingsSnapshot()
+            )
+            activeDictationSession = session
 
             _isRecording.value = true
             _recordDurationSec.value = 0
@@ -487,13 +543,14 @@ class MainViewModel(
                     onRmsChanged = { amplitude -> pushWaveform(amplitude) },
                     onRecordingError = { error ->
                         viewModelScope.launch {
-                            if (ownsRecorderSession) {
+                            if (ownsRecorderSession && isCurrentDictation(session)) {
                                 ownsRecorderSession = false
                                 timerJob?.cancel()
                                 timerJob = null
                                 _isRecording.value = false
                                 _currentLiveTranscription.value = error.message ?: "Microphone capture failed."
                                 _liveWaveform.value = emptyList()
+                                activeDictationSession = null
                             }
                         }
                     }
@@ -505,6 +562,7 @@ class MainViewModel(
                     _isRecording.value = false
                     _currentLiveTranscription.value = "Microphone is unavailable or already in use."
                     _liveWaveform.value = emptyList()
+                    if (isCurrentDictation(session)) activeDictationSession = null
                     return@launch
                 }
             } catch (e: SecurityException) {
@@ -514,12 +572,15 @@ class MainViewModel(
                 _isRecording.value = false
                 _currentLiveTranscription.value = e.message ?: "Microphone permission not granted."
                 _liveWaveform.value = emptyList()
+                if (isCurrentDictation(session)) activeDictationSession = null
             }
         }
     }
 
     private fun stopRecordingAndTranscribe() {
         if (!_isRecording.value) return
+
+        val session = activeDictationSession ?: return
 
         timerJob?.cancel()
         timerJob = null
@@ -528,44 +589,60 @@ class MainViewModel(
         viewModelScope.launch {
             val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
             ownsRecorderSession = false
-            val finalDuration = _recordDurationSec.value
+            val finalDuration = ((System.currentTimeMillis() - session.startedAtMs) / 1000)
+                .toInt().coerceAtLeast(1)
 
             if (samples.isEmpty()) {
-                _currentLiveTranscription.value = "No mic audio captured."
-                _liveWaveform.value = emptyList()
+                if (isCurrentDictation(session)) {
+                    _currentLiveTranscription.value = "No mic audio captured."
+                    _liveWaveform.value = emptyList()
+                    activeDictationSession = null
+                }
                 return@launch
             }
 
             _currentLiveTranscription.value = "Running local Whisper model inference..."
 
-            launch(Dispatchers.Default) {
-            val model = getActiveDownloadedModel()
-            if (model == null) {
+            dictationJob = launch(Dispatchers.Default) {
+            try {
+            if (!isCurrentDictation(session)) return@launch
+            val model = session.model
+            if (!model.isDownloaded) {
                 withContext(Dispatchers.Main) {
-                    _currentLiveTranscription.value = "Please download a speech model in the Models tab first."
-                    _liveWaveform.value = emptyList()
+                    if (isCurrentDictation(session)) {
+                        _currentLiveTranscription.value = "The selected speech model is no longer available."
+                        _liveWaveform.value = emptyList()
+                        activeDictationSession = null
+                    }
                 }
                 return@launch
             }
 
             val rawOutput = repository.transcribeAudio(samples, model.id)
 
+            if (!isCurrentDictation(session)) return@launch
+
             if (rawOutput.isEmpty()) {
                 withContext(Dispatchers.Main) {
-                    _currentLiveTranscription.value = "No speech detected in recorded audio."
-                    _liveWaveform.value = emptyList()
+                    if (isCurrentDictation(session)) {
+                        _currentLiveTranscription.value = "No speech detected in recorded audio."
+                        _liveWaveform.value = emptyList()
+                        activeDictationSession = null
+                    }
                 }
                 return@launch
             }
 
             val processedText = repository.postProcessText(
                 text = rawOutput,
-                smartPunctuation = smartPunctuation.value,
-                autoCapitalize = autoCapitalization.value,
-                applyDict = applyDictionary.value,
-                useAiPolisher = useAiPolisher.value,
-                cleanupMode = cleanupMode.value
+                smartPunctuation = session.settings.smartPunctuation,
+                autoCapitalize = session.settings.autoCapitalize,
+                applyDict = session.settings.applyDictionary,
+                useAiPolisher = session.settings.useAiPolisher,
+                cleanupMode = session.settings.cleanupMode
             )
+
+            if (!isCurrentDictation(session)) return@launch
 
             val wordCount = processedText.split(REGEX_WORD_SPLIT).count { it.isNotBlank() }
             val calcDuration = if (finalDuration > 0) finalDuration else 1
@@ -589,8 +666,23 @@ class MainViewModel(
             )
 
             withContext(Dispatchers.Main) {
-                _currentLiveTranscription.value = processedText
-                _liveWaveform.value = emptyList()
+                if (isCurrentDictation(session)) {
+                    _currentLiveTranscription.value = processedText
+                    _liveWaveform.value = emptyList()
+                    activeDictationSession = null
+                }
+            }
+            } catch (e: CancellationException) {
+                // A cancelled session is intentionally silent: a newer session owns the UI.
+            } catch (e: Exception) {
+                Log.e(TAG, "Dictation failed", e)
+                withContext(Dispatchers.Main) {
+                    if (isCurrentDictation(session)) {
+                        _currentLiveTranscription.value = "Transcription failed. Please try again."
+                        _liveWaveform.value = emptyList()
+                        activeDictationSession = null
+                    }
+                }
             }
             }
         }
@@ -598,6 +690,8 @@ class MainViewModel(
 
     // Shared Audio Intake & Asynchronous Local Transcription
     fun setSharedAudio(context: Context, uri: Uri) {
+        // A newly shared file invalidates all callbacks from the prior file.
+        stopSharedTranscription()
         _sharedAudioUri.value = uri
         _sharedResultText.value = ""
         _sharedProgress.value = 0f
@@ -624,6 +718,14 @@ class MainViewModel(
     fun startSharedTranscription() {
         val uri = _sharedAudioUri.value ?: return
         val model = selectedModel.value ?: return
+        if (!model.isDownloaded) return
+        val session = SharedTranscriptionSession(
+            id = newSessionId(),
+            uri = uri,
+            fileName = _sharedAudioName.value,
+            model = model,
+            settings = settingsSnapshot()
+        )
 
         _isSharedTranscribing.value = true
         _sharedProgress.value = 0.05f
@@ -631,59 +733,86 @@ class MainViewModel(
         _sharedStatusText.value = "Preparing local decoder..."
 
         sharedTranscriptionJob?.cancel()
+        activeSharedSession = session
         sharedTranscriptionJob = viewModelScope.launch(Dispatchers.Default) {
             try {
-                val result = repository.transcribeSharedFile(uri, model.id) { prog, status ->
-                    _sharedProgress.value = prog.coerceIn(0f, 1f)
-                    _sharedStatusText.value = status
+                val result = repository.transcribeSharedFile(session.uri, session.model.id) { prog, status ->
+                    if (isCurrentShared(session)) {
+                        _sharedProgress.value = prog.coerceIn(0f, 1f)
+                        _sharedStatusText.value = status
+                    }
                 }
+
+                if (!isCurrentShared(session)) return@launch
 
                 if (result.startsWith("Error:")) {
                     withContext(Dispatchers.Main) {
-                        _sharedProgress.value = 0f
-                        _sharedStatusText.value = result
-                        _sharedResultText.value = result
-                        _isSharedTranscribing.value = false
+                        if (isCurrentShared(session)) {
+                            _sharedProgress.value = 0f
+                            _sharedStatusText.value = result
+                            _sharedResultText.value = result
+                            _isSharedTranscribing.value = false
+                            activeSharedSession = null
+                        }
                     }
                     return@launch
                 }
 
                 val processedResult = repository.postProcessText(
                     text = result,
-                    smartPunctuation = smartPunctuation.value,
-                    autoCapitalize = autoCapitalization.value,
-                    applyDict = applyDictionary.value,
-                    useAiPolisher = useAiPolisher.value,
-                    cleanupMode = cleanupMode.value
+                    smartPunctuation = session.settings.smartPunctuation,
+                    autoCapitalize = session.settings.autoCapitalize,
+                    applyDict = session.settings.applyDictionary,
+                    useAiPolisher = session.settings.useAiPolisher,
+                    cleanupMode = session.settings.cleanupMode
                 )
+
+                if (!isCurrentShared(session)) return@launch
 
                 repository.insertHistory(
                     TranscriptionHistory(
                         text = processedResult,
                         durationSec = 0,
-                        modelUsed = model.name,
+                        modelUsed = session.model.name,
                         type = "shared_file",
-                        fileName = _sharedAudioName.value
+                        fileName = session.fileName
                     )
                 )
 
                 withContext(Dispatchers.Main) {
-                    _sharedProgress.value = 1.0f
-                    _sharedStatusText.value = "Transcription Completed!"
-                    _sharedResultText.value = processedResult
-                    _isSharedTranscribing.value = false
+                    if (isCurrentShared(session)) {
+                        _sharedProgress.value = 1.0f
+                        _sharedStatusText.value = "Transcription Completed!"
+                        _sharedResultText.value = processedResult
+                        _isSharedTranscribing.value = false
+                        activeSharedSession = null
+                    }
                 }
             } catch (e: CancellationException) {
                 withContext(Dispatchers.Main) {
-                    _isSharedTranscribing.value = false
-                    _sharedProgress.value = 0f
-                    _sharedStatusText.value = "Transcription stopped."
+                    if (isCurrentShared(session)) {
+                        _isSharedTranscribing.value = false
+                        _sharedProgress.value = 0f
+                        _sharedStatusText.value = "Transcription stopped."
+                        activeSharedSession = null
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Shared transcription failed", e)
+                withContext(Dispatchers.Main) {
+                    if (isCurrentShared(session)) {
+                        _isSharedTranscribing.value = false
+                        _sharedProgress.value = 0f
+                        _sharedStatusText.value = "Transcription failed."
+                        activeSharedSession = null
+                    }
                 }
             }
         }
     }
 
     fun stopSharedTranscription() {
+        activeSharedSession = null
         sharedTranscriptionJob?.cancel()
         sharedTranscriptionJob = null
         _isSharedTranscribing.value = false
@@ -692,6 +821,7 @@ class MainViewModel(
     }
 
     fun clearSharedFile() {
+        stopSharedTranscription()
         _sharedAudioUri.value = null
         _sharedAudioName.value = ""
         _sharedAudioSize.value = ""

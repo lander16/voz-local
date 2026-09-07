@@ -12,6 +12,7 @@ class AccessibilityTargetPolicyTest {
         enabled = true,
         password = false,
         accessibilityDataSensitive = false,
+        stableId = "view:com.example.notes:id/editor",
     )
 
     @Test
@@ -38,6 +39,14 @@ class AccessibilityTargetPolicyTest {
         assertTrue(AccessibilityTargetPolicy.matchesRecordingTarget(allowed, allowed.copy(editable = false)))
         assertFalse(AccessibilityTargetPolicy.matchesRecordingTarget(allowed, allowed.copy(windowId = 8)))
         assertFalse(AccessibilityTargetPolicy.matchesRecordingTarget(allowed, allowed.copy(packageName = "com.example.other")))
+        assertFalse(AccessibilityTargetPolicy.matchesRecordingTarget(allowed, allowed.copy(stableId = "view:com.example.notes:id/other")))
+        assertFalse(AccessibilityTargetPolicy.matchesRecordingTarget(allowed, allowed.copy(stableId = null)))
+    }
+
+    @Test
+    fun insertionFailsClosedWithoutFrameworkIdentity() {
+        assertFalse(AccessibilityTargetPolicy.hasStableIdentity(allowed.copy(stableId = null)))
+        assertTrue(AccessibilityTargetPolicy.hasStableIdentity(allowed))
     }
 
     @Test

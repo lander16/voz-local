@@ -42,6 +42,13 @@ import kotlin.time.Duration.Companion.seconds
 
 private const val TAG = "DictationService"
 
+private data class AccessibilityDictationSession(
+    val id: Long,
+    val target: AccessibilityTarget,
+    val startedAtMs: Long,
+    val useAiPolisher: Boolean,
+)
+
 class DictationAccessibilityService : AccessibilityService() {
 
     private lateinit var windowManager: WindowManager
@@ -51,8 +58,9 @@ class DictationAccessibilityService : AccessibilityService() {
     private var ownsRecorderSession = false
     private var currentPackageName: String? = null
     private var currentTarget: AccessibilityTarget? = null
-    private var recordingTarget: AccessibilityTarget? = null
-    private var startTimestamp: Long = 0
+    private var nextSessionId = 0L
+    private var activeSession: AccessibilityDictationSession? = null
+    private var processingJob: Job? = null
     private var timerJob: Job? = null
     internal var lastWarmedModelId: String? = null
     private var warmupJob: Job? = null
@@ -187,7 +195,14 @@ class DictationAccessibilityService : AccessibilityService() {
             enabled = node.isEnabled,
             password = node.isPassword,
             accessibilityDataSensitive = sensitive,
+            stableId = nodeStableId(node),
         )
+    }
+
+    private fun nodeStableId(node: AccessibilityNodeInfo): String? {
+        val uniqueId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) node.uniqueId else null
+        return uniqueId?.takeIf { it.isNotBlank() }?.let { "unique:$it" }
+            ?: node.viewIdResourceName?.takeIf { it.isNotBlank() }?.let { "view:$it" }
     }
 
     private fun focusedAllowedTarget(): AccessibilityTarget? {
@@ -197,7 +212,15 @@ class DictationAccessibilityService : AccessibilityService() {
 
     private fun clearTarget() {
         currentTarget = null
-        recordingTarget = null
+    }
+
+    private fun isCurrentSession(session: AccessibilityDictationSession): Boolean =
+        activeSession?.id == session.id
+
+    private fun cancelActiveSession() {
+        activeSession = null
+        processingJob?.cancel()
+        processingJob = null
     }
 
     private fun updateFloatingViewVisibility() {
@@ -510,7 +533,6 @@ class DictationAccessibilityService : AccessibilityService() {
 
     private fun stopRecordingUI() {
         isRecording = false
-        recordingTarget = null
         timerJob?.cancel()
         timerJob = null
         stopWaveformAnimation()
@@ -557,15 +579,26 @@ class DictationAccessibilityService : AccessibilityService() {
         }
 
         if (!isRecording) {
+            if (processingJob?.isActive == true || activeSession != null) {
+                // Do not let a second tap retarget a result that is still decoding.
+                statusText.visibility = View.VISIBLE
+                statusText.text = "Processing…"
+                return
+            }
             val target = focusedAllowedTarget()
-            if (target == null) {
+            if (target == null || !AccessibilityTargetPolicy.hasStableIdentity(target)) {
                 // Never start a global recording without a current, safe insertion target.
                 updateFloatingViewVisibility()
                 return
             }
+            val session = AccessibilityDictationSession(
+                id = ++nextSessionId,
+                target = target,
+                startedAtMs = System.currentTimeMillis(),
+                useAiPolisher = repository.getUseAiPolisher()
+            )
+            activeSession = session
             isRecording = true
-            recordingTarget = target
-            startTimestamp = System.currentTimeMillis()
             micIcon.setColorFilter(Color.WHITE)
             micIcon.setImageResource(android.R.drawable.ic_media_pause)
             bgDrawable?.setColor("#D9EF4444".toColorInt())
@@ -584,7 +617,7 @@ class DictationAccessibilityService : AccessibilityService() {
             var seconds = 0
             timerJob?.cancel()
             timerJob = serviceScope.launch {
-                while (isRecording) {
+                while (isRecording && isCurrentSession(session)) {
                     val m = seconds / 60
                     val s = seconds % 60
                     statusText.text = "%02d:%02d".format(m, s)
@@ -609,13 +642,14 @@ class DictationAccessibilityService : AccessibilityService() {
                     },
                     onRecordingError = { error ->
                         mainHandler.post {
-                            if (ownsRecorderSession) {
+                            if (ownsRecorderSession && isCurrentSession(session)) {
                                 Log.w(TAG, "Microphone capture failed", error)
                                 ownsRecorderSession = false
                                 isRecording = false
                                 timerJob?.cancel()
                                 timerJob = null
                                 stopRecordingUI()
+                                activeSession = null
                             }
                         }
                     }
@@ -630,9 +664,11 @@ class DictationAccessibilityService : AccessibilityService() {
                 timerJob = null
                 isRecording = false
                 stopRecordingUI()
+                if (isCurrentSession(session)) activeSession = null
                 return
             }
         } else {
+            val session = activeSession ?: return
             timerJob?.cancel()
             timerJob = null
             isRecording = false
@@ -652,22 +688,31 @@ class DictationAccessibilityService : AccessibilityService() {
             serviceScope.launch {
                 val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
                 ownsRecorderSession = false
-                launch(Dispatchers.Default) {
+                if (!isCurrentSession(session)) return@launch
+                processingJob = launch(Dispatchers.Default) {
                 val models = repository.allModels.first()
                 val selected = models.find { it.isSelected && it.isDownloaded }
                     ?: models.firstOrNull { it.isDownloaded }
                 if (selected == null) {
-                    withContext(Dispatchers.Main) { stopRecordingUI() }
+                    withContext(Dispatchers.Main) {
+                        if (isCurrentSession(session)) {
+                            stopRecordingUI()
+                            activeSession = null
+                        }
+                    }
                     return@launch
                 }
                 val modelId = selected.id
 
                 val rawText = repository.transcribeAudio(samples, modelId)
+                if (!isCurrentSession(session)) return@launch
                 withContext(Dispatchers.Main) {
+                    if (!isCurrentSession(session)) return@withContext
                     if (rawText.isNotEmpty()) {
-                        processAndPaste(rawText, selected?.name ?: "Whisper Local")
+                        processAndPaste(session, rawText, selected.name)
                     } else {
                         stopRecordingUI()
+                        activeSession = null
                     }
                 }
                 }
@@ -708,16 +753,23 @@ class DictationAccessibilityService : AccessibilityService() {
         }
     }
 
-    private suspend fun processAndPaste(rawText: String, modelName: String) {
-        val durationSec = ((System.currentTimeMillis() - startTimestamp) / 1000).toInt().coerceAtLeast(1)
+    private suspend fun processAndPaste(
+        session: AccessibilityDictationSession,
+        rawText: String,
+        modelName: String
+    ) {
+        if (!isCurrentSession(session)) return
+        val durationSec = ((System.currentTimeMillis() - session.startedAtMs) / 1000).toInt().coerceAtLeast(1)
 
         val processed = repository.postProcessText(
             text = rawText,
             smartPunctuation = true,
             autoCapitalize = true,
             applyDict = true,
-            useAiPolisher = repository.getUseAiPolisher()
+            useAiPolisher = session.useAiPolisher
         )
+
+        if (!isCurrentSession(session)) return
 
         repository.insertHistory(
             dev.sebastian.vozlocal.data.model.TranscriptionHistory(
@@ -729,12 +781,15 @@ class DictationAccessibilityService : AccessibilityService() {
         )
 
         withContext(Dispatchers.Main) {
-            pasteTextToActiveInput(processed)
+            if (!isCurrentSession(session)) return@withContext
+            // Keep history as a recoverable result even when the original field vanished.
+            pasteTextToActiveInput(session.target, processed)
             stopRecordingUI()
+            activeSession = null
         }
     }
 
-    private fun pasteTextToActiveInput(text: String): Boolean {
+    private fun pasteTextToActiveInput(recordingTarget: AccessibilityTarget, text: String): Boolean {
         val targetNode = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         val target = nodeTarget(targetNode)
         if (!AccessibilityTargetPolicy.canTarget(target, deniedPackages()) ||
@@ -771,7 +826,7 @@ class DictationAccessibilityService : AccessibilityService() {
         if (!AccessibilityTargetPolicy.canObservePackage(packageName, deniedPackages())) {
             currentPackageName = packageName
             clearTarget()
-            if (isRecording) {
+            if (isRecording || activeSession != null) {
                 stopAndDiscardForSensitiveApp()
             } else {
                 floatingView?.visibility = View.GONE
@@ -830,6 +885,7 @@ class DictationAccessibilityService : AccessibilityService() {
             ownsRecorderSession = false
             serviceScope.launch { audioRecorder.discardRecording() }
         }
+        cancelActiveSession()
         clearTarget()
         stopRecordingUI()
         floatingView?.visibility = View.GONE
@@ -842,6 +898,7 @@ class DictationAccessibilityService : AccessibilityService() {
             ownsRecorderSession = false
             serviceScope.launch { audioRecorder.discardRecording() }
         }
+        cancelActiveSession()
         clearTarget()
     }
 
@@ -855,6 +912,7 @@ class DictationAccessibilityService : AccessibilityService() {
             ownsRecorderSession = false
             serviceScope.launch(NonCancellable) { audioRecorder.discardRecording() }
         }
+        cancelActiveSession()
         serviceScope.cancel()
         clearTarget()
         val prefs = getSharedPreferences(FloatingButtonDockPolicy.PREFS_NAME, Context.MODE_PRIVATE)
