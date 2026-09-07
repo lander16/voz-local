@@ -1,9 +1,34 @@
 # Transcription performance: audit and implementation plan
 
 Baseline: `921f413f0be25537b87092daf90b8617cd542133`, audited 2026-09-06.
-Status: planning only; no new phone benchmarks or performance changes made.
+Status: P1 implementation completed on 2026-09-07 (P01–P05). Validated via
+unit test suites, lint, and on-device Pixel 8 Pro instrumentation.
 See [general issues plan](Issues-Implementation-Plan.md) for G01–G19 dependencies
 and [historical measurements](Performance.md) for the original experiment record.
+
+## P1 implementation record
+
+- **P01:** `b801d72` — Add reproducible transcription benchmarks and native stage metrics.
+  Upstream `whisper.cpp` timing counters exposed via JNI (`whisper_get_timings`),
+  10-stage monotonic nanosecond timings, cold/warm trials, device/build environment
+  metadata, and lossless RFC 4180 CSV / JSON benchmark runner.
+- **P02:** `47ec432` — Add Spanish and English accuracy corpus and evaluation manifests.
+  Curated 22-clip manifest across duration tiers (short, medium, long, extended)
+  and speech categories, plus `AccuracyEvaluationRunner` scoring raw vs cleaned
+  WER/CER preserving Spanish diacritics and numeric tokens.
+- **P03:** `5634b8c` — Implement topology-aware CPU calibration and thread profiles.
+  Extracted pluggable `CpuInfoProvider`, core cluster detection for 1, 2 (e.g. 2+6),
+  and 3 clusters (e.g. Tensor G3 1+4+4, Snapdragon 1+3+4), configurable thread priority,
+  and persistent `ThreadProfileManager` with model/build invalidation.
+- **P04:** `c1b6edf` — Bound audio storage and eliminate avoidable PCM copies.
+  Enforced 30-minute recording budget in `FastFloatBuffer`, buffer shrinking to
+  reclaim heap outside the recording hot path, clamped initial decoder allocation,
+  and overflow-safe doubling math.
+- **P05:** `10b26a1` — Coordinate demand-aware model residency and warmup.
+  Unselected downloads no longer preload or evict active models, deduplicated
+  concurrent preloads, model verification before releasing active contexts,
+  engine busy tracking (`isBusy()`) to guard active inferences from memory pressure
+  eviction, and model-specific thread count hints during warmup.
 
 ## Objective and audit corrections
 
