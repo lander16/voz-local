@@ -47,6 +47,10 @@ struct vozlocal_abort_state {
 static pthread_mutex_t abort_states_mutex = PTHREAD_MUTEX_INITIALIZER;
 static struct vozlocal_abort_state *abort_states = NULL;
 
+static struct vozlocal_abort_state *abort_state_for_context(
+        struct whisper_context *context, bool create);
+static bool vozlocal_abort_callback(void *data);
+
 // ggml's backend registry is process-global. Select exactly once, before the
 // first Whisper context is created, and keep a stable diagnostic snapshot.
 static pthread_mutex_t cpu_backend_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -218,6 +222,10 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_warmupContext(
     params.print_progress = false;
     params.print_timestamps = false;
     params.print_special = false;
+    struct vozlocal_abort_state *abort_state = abort_state_for_context(context, true);
+    if (abort_state == NULL) return JNI_FALSE;
+    params.abort_callback = vozlocal_abort_callback;
+    params.abort_callback_user_data = abort_state;
     return whisper_full(context, params, silence, 3200) == 0 ? JNI_TRUE : JNI_FALSE;
 }
 
@@ -261,6 +269,23 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_requestAbort(
         atomic_store_explicit(&state->requested, true, memory_order_relaxed);
     }
     pthread_mutex_unlock(&abort_states_mutex);
+}
+
+// Register and clear a request's abort state before Kotlin dispatches the
+// blocking whisper_full call.  Clearing it inside fullTranscribeWithParams
+// races with coroutine cancellation: a cancellation delivered just before JNI
+// entry would otherwise be silently discarded.
+JNIEXPORT jboolean JNICALL
+Java_com_whispercpp_whisper_WhisperLib_00024Companion_prepareAbort(
+        JNIEnv *env, jobject thiz, jlong context_ptr) {
+    UNUSED(env);
+    UNUSED(thiz);
+    struct whisper_context *context = (struct whisper_context *) context_ptr;
+    if (context == NULL) return JNI_FALSE;
+    struct vozlocal_abort_state *state = abort_state_for_context(context, true);
+    if (state == NULL) return JNI_FALSE;
+    atomic_store_explicit(&state->requested, false, memory_order_relaxed);
+    return JNI_TRUE;
 }
 
 JNIEXPORT void JNICALL
@@ -326,7 +351,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithLang(
     (*env)->ReleaseStringUTFChars(env, lang, lang_chars);
 }
 
-JNIEXPORT void JNICALL
+JNIEXPORT jint JNICALL
 Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
         JNIEnv *env, jobject thiz, jlong context_ptr, jint num_threads,
         jfloatArray audio_data,
@@ -340,7 +365,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
     struct whisper_context *context = (struct whisper_context *) context_ptr;
     if (context == NULL) {
         LOGE("fullTranscribeWithParams: null context");
-        return;
+        return -1;
     }
 
     const char *lang_chars = NULL;
@@ -348,7 +373,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
         lang_chars = (*env)->GetStringUTFChars(env, lang, NULL);
         if (lang_chars == NULL) {
             LOGE("fullTranscribeWithParams: failed to read lang string");
-            return;
+            return -1;
         }
     }
 
@@ -358,7 +383,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
         if (prompt_chars == NULL) {
             LOGE("fullTranscribeWithParams: failed to read initial_prompt string");
             if (lang != NULL) (*env)->ReleaseStringUTFChars(env, lang, lang_chars);
-            return;
+            return -1;
         }
     }
 
@@ -369,7 +394,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
             LOGE("fullTranscribeWithParams: failed to read vad_model_path string");
             if (lang != NULL) (*env)->ReleaseStringUTFChars(env, lang, lang_chars);
             if (initial_prompt != NULL) (*env)->ReleaseStringUTFChars(env, initial_prompt, prompt_chars);
-            return;
+            return -1;
         }
     }
 
@@ -380,7 +405,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
         if (lang != NULL) (*env)->ReleaseStringUTFChars(env, lang, lang_chars);
         if (initial_prompt != NULL) (*env)->ReleaseStringUTFChars(env, initial_prompt, prompt_chars);
         if (vad_model_path != NULL) (*env)->ReleaseStringUTFChars(env, vad_model_path, vad_chars);
-        return;
+        return -1;
     }
 
     // Sanity-clamp the caller-provided thresholds.
@@ -425,7 +450,6 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
     if (abort_state == NULL) {
         LOGE("fullTranscribeWithParams: could not allocate abort state");
     } else {
-        atomic_store_explicit(&abort_state->requested, false, memory_order_relaxed);
         params.abort_callback = vozlocal_abort_callback;
         params.abort_callback_user_data = abort_state;
     }
@@ -441,12 +465,17 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
          (int) params.vad, beam_size, params.temperature_inc,
          params.audio_ctx);
 
-    if (whisper_full(context, params, audio_data_arr, audio_data_length) != 0) {
-        LOGE("whisper_full failed");
+    const int result = whisper_full(context, params, audio_data_arr, audio_data_length);
+    const bool was_aborted = abort_state != NULL &&
+            atomic_load_explicit(&abort_state->requested, memory_order_relaxed);
+    if (result != 0) {
+        LOGE("whisper_full failed with status=%d, aborted=%d", result, (int) was_aborted);
     }
 
     (*env)->ReleaseFloatArrayElements(env, audio_data, audio_data_arr, JNI_ABORT);
     if (lang != NULL) (*env)->ReleaseStringUTFChars(env, lang, lang_chars);
     if (initial_prompt != NULL) (*env)->ReleaseStringUTFChars(env, initial_prompt, prompt_chars);
     if (vad_model_path != NULL) (*env)->ReleaseStringUTFChars(env, vad_model_path, vad_chars);
+    // Keep native errors distinct from cooperative cancellation for Kotlin.
+    return was_aborted ? -2 : result;
 }

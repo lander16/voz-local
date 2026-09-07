@@ -5,6 +5,7 @@ import android.util.Log
 import dev.sebastian.vozlocal.BuildConfig
 import dev.sebastian.vozlocal.data.repository.ModelUrls
 import com.whispercpp.whisper.WhisperContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -37,8 +38,13 @@ class WhisperEngine(private val context: Context) {
 
     suspend fun loadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
         lifecycleMutex.withLock {
+            loadModelLocked(modelId)
+        }
+    }
+
+    private suspend fun loadModelLocked(modelId: String): Boolean {
             if (currentModelId == modelId && whisperContext != null) {
-                return@withLock true
+                return true
             }
 
             releaseLocked()
@@ -46,10 +52,10 @@ class WhisperEngine(private val context: Context) {
             val modelFile = ModelUrls.getModelFile(context, modelId)
             if (!modelFile.exists()) {
                 Log.e(TAG, "Model file does not exist: ${modelFile.absolutePath}")
-                return@withLock false
+                return false
             }
 
-            try {
+            return try {
                 val backend = CpuBackendManager.ensureInitialized(context)
                 Log.i(TAG, "Using CPU tier=${backend.tier}, features=${backend.features.joinToString()}")
                 Log.i(TAG, "Loading Whisper model from ${modelFile.absolutePath}")
@@ -67,7 +73,6 @@ class WhisperEngine(private val context: Context) {
                 currentModelId = null
                 false
             }
-        }
     }
 
     suspend fun warmup(): Boolean = withContext(Dispatchers.Default) {
@@ -103,24 +108,52 @@ class WhisperEngine(private val context: Context) {
         params: WhisperParams = WhisperParams()
     ): String = withContext(Dispatchers.Default) {
         lifecycleMutex.withLock {
+            transcribeLoadedModelLocked(audioSamples, language, params)
+        }
+    }
+
+    /**
+     * Loads the requested model, if needed, and performs inference under one
+     * context lease. A later selection/preload cannot substitute another model
+     * between verification by the repository and native execution.
+     */
+    suspend fun transcribeWithModel(
+        modelId: String,
+        audioSamples: FloatArray,
+        language: String = "es",
+        params: WhisperParams = WhisperParams()
+    ): String = withContext(Dispatchers.Default) {
+        lifecycleMutex.withLock {
+            if (!loadModelLocked(modelId)) {
+                throw IllegalStateException("Couldn't load requested Whisper model $modelId")
+            }
+            transcribeLoadedModelLocked(audioSamples, language, params)
+        }
+    }
+
+    private suspend fun transcribeLoadedModelLocked(
+        audioSamples: FloatArray,
+        language: String,
+        params: WhisperParams
+    ): String {
             val wContext = whisperContext
             if (wContext == null) {
                 Log.e(TAG, "Whisper context not initialized!")
-                return@withLock ""
+                throw IllegalStateException("Whisper context not initialized")
             }
 
             if (audioSamples.size < 3200) { // < 200ms audio sample
-                return@withLock ""
+                return ""
             }
 
-            try {
+            return try {
                 // Backward-compat resolution: an explicitly-passed positional language
                 // (legacy callers) wins; otherwise params.language is used.
                 val effectiveLanguage = if (language == "es") params.language else language
                 val effectiveParams = params.copy(
                     language = effectiveLanguage,
                     initialPrompt = effectivePrompt(effectiveLanguage, params.initialPrompt)
-                )
+                ).forIndependentRequest()
 
                 val startMs = System.currentTimeMillis()
                 val durationSec = audioSamples.size / 16000f
@@ -130,16 +163,28 @@ class WhisperEngine(private val context: Context) {
                 Log.i(TAG, "Transcription completed in ${elapsedMs}ms (${String.format("%.1fx", durationSec * 1000 / elapsedMs)} realtime)")
                 if (BuildConfig.DEBUG) Log.d(TAG, "Raw transcription output: $result")
                 HallucinationFilter.filter(result).trim()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Error transcribing audio samples", e)
-                ""
+                throw e
             }
-        }
     }
 
     suspend fun release() = withContext(Dispatchers.IO) {
         lifecycleMutex.withLock {
             releaseLocked()
+        }
+    }
+
+    /**
+     * Coordinates filesystem replacement/deletion with native context ownership.
+     * Returns only after active inference has completed and the matching model is
+     * no longer held by the native context.
+     */
+    suspend fun releaseModelIfLoaded(modelId: String) = withContext(Dispatchers.IO) {
+        lifecycleMutex.withLock {
+            if (currentModelId == modelId) releaseLocked()
         }
     }
 

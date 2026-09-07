@@ -58,4 +58,10 @@ class WhisperParamsTest {
         assertEquals(0.2f, params.temperatureInc, 0.0001f)
         assertEquals(0, params.audioCtx)
     }
+
+    @Test
+    fun independent_requests_reset_decoder_history() {
+        assertTrue(WhisperParams(noContext = false).forIndependentRequest().noContext)
+        assertTrue(WhisperParams(noContext = true).forIndependentRequest().noContext)
+    }
 }

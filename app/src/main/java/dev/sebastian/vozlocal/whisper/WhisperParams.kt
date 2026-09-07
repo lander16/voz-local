@@ -47,3 +47,10 @@ internal fun WhisperParams.forLiveAudio(sampleCount: Int): WhisperParams {
         noContext = false
     )
 }
+
+/**
+ * Starts an independent transcription session on a reused native context.
+ * whisper.cpp retains decoder history unless this is enabled; a single
+ * whisper_full invocation still keeps its own multi-window continuity.
+ */
+internal fun WhisperParams.forIndependentRequest(): WhisperParams = copy(noContext = true)

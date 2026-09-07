@@ -12,6 +12,11 @@ import java.util.concurrent.Executors
 
 private const val LOG_TAG = "LibWhisper"
 
+/** Native inference failed before a transcript could be produced. */
+class WhisperNativeException(val status: Int) : IllegalStateException(
+    "whisper_full failed with native status $status"
+)
+
 class WhisperContext private constructor(private var ptr: Long) {
     // Meet Whisper C++ constraint: Don't access from more than one thread at a time.
     private val dispatcher = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
@@ -25,51 +30,55 @@ class WhisperContext private constructor(private var ptr: Long) {
     suspend fun transcribeData(
         data: FloatArray,
         params: WhisperParams
-    ): String = withContext(dispatcher) {
+    ): String {
         val contextPtr = ptr
         require(contextPtr != 0L)
-        currentCoroutineContext().ensureActive()
+        check(WhisperLib.prepareAbort(contextPtr)) { "Couldn't prepare Whisper cancellation state" }
         val cancellationHandler = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
             if (cause is CancellationException) {
                 WhisperLib.requestAbort(contextPtr)
             }
         }
         try {
-        runCatching {
-            Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY)
-        }
-        val numThreads = WhisperCpuConfig.threadCountFor(params)
-        Log.d(LOG_TAG, "Selecting $numThreads threads, language=${params.language}")
+            return withContext(dispatcher) {
+                currentCoroutineContext().ensureActive()
+                runCatching {
+                    Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY)
+                }
+                val numThreads = WhisperCpuConfig.threadCountFor(params)
+                Log.d(LOG_TAG, "Selecting $numThreads threads, language=${params.language}")
 
-        WhisperLib.fullTranscribeWithParams(
-            contextPtr,
-            numThreads,
-            data,
-            params.language,
-            params.initialPrompt,
-            params.singleSegment,
-            params.printTimestamps,
-            params.noSpeechThold,
-            params.logprobThold,
-            params.entropyThold,
-            params.vadModelPath,
-            params.beamSize,
-            params.noTimestamps,
-            params.temperatureInc,
-            params.noContext,
-            params.audioCtx
-        )
+                val status = WhisperLib.fullTranscribeWithParams(
+                    contextPtr,
+                    numThreads,
+                    data,
+                    params.language,
+                    params.initialPrompt,
+                    params.singleSegment,
+                    params.printTimestamps,
+                    params.noSpeechThold,
+                    params.logprobThold,
+                    params.entropyThold,
+                    params.vadModelPath,
+                    params.beamSize,
+                    params.noTimestamps,
+                    params.temperatureInc,
+                    params.noContext,
+                    params.audioCtx
+                )
 
-        currentCoroutineContext().ensureActive()
-        val textCount = WhisperLib.getTextSegmentCount(contextPtr)
-        buildString {
-            for (i in 0 until textCount) {
-                val segText = WhisperLib.getTextSegment(contextPtr, i).trim()
-                if (segText.isEmpty()) continue
-                if (isNotEmpty() && !endsWith(' ')) append(' ')
-                append(segText)
+                currentCoroutineContext().ensureActive()
+                if (status != 0) throw WhisperNativeException(status)
+                val textCount = WhisperLib.getTextSegmentCount(contextPtr)
+                buildString {
+                    for (i in 0 until textCount) {
+                        val segText = WhisperLib.getTextSegment(contextPtr, i).trim()
+                        if (segText.isEmpty()) continue
+                        if (isNotEmpty() && !endsWith(' ')) append(' ')
+                        append(segText)
+                    }
+                }
             }
-        }
         } finally {
             cancellationHandler?.dispose()
         }
@@ -100,8 +109,23 @@ class WhisperContext private constructor(private var ptr: Long) {
         return@withContext WhisperLib.benchGgmlMulMat(nthreads)
     }
 
-    suspend fun warmup(numThreads: Int): Boolean = withContext(dispatcher) {
-        WhisperLib.warmupContext(ptr, numThreads)
+    suspend fun warmup(numThreads: Int): Boolean {
+        val contextPtr = ptr
+        require(contextPtr != 0L)
+        check(WhisperLib.prepareAbort(contextPtr)) { "Couldn't prepare Whisper cancellation state" }
+        val cancellationHandler = currentCoroutineContext()[Job]?.invokeOnCompletion { cause ->
+            if (cause is CancellationException) WhisperLib.requestAbort(contextPtr)
+        }
+        try {
+            return withContext(dispatcher) {
+                currentCoroutineContext().ensureActive()
+                val warmed = WhisperLib.warmupContext(contextPtr, numThreads)
+                currentCoroutineContext().ensureActive()
+                warmed
+            }
+        } finally {
+            cancellationHandler?.dispose()
+        }
     }
 
     suspend fun release() = withContext(Dispatchers.IO) {
@@ -207,7 +231,8 @@ private class WhisperLib {
             temperatureInc: Float,
             noContext: Boolean,
             audioCtx: Int
-        )
+        ): Int
+        external fun prepareAbort(contextPtr: Long): Boolean
         external fun requestAbort(contextPtr: Long)
         external fun forgetAbortState(contextPtr: Long)
         external fun getTextSegmentCount(contextPtr: Long): Int

@@ -644,16 +644,17 @@ class DictationRepository(private val context: Context) {
         val trimmed = AudioSilenceTrimmer.trim(samples)
         val activeSamples = if (trimmed.isNotEmpty()) trimmed else samples
 
-        // Ensure Whisper engine is loaded with target model
-        val loaded = preloadModel(modelId)
-        _modelLoaded.value = loaded
-        if (!loaded) {
+        // Verification happens before the engine grants its single context
+        // lease. The lease then loads (if needed) and executes atomically.
+        if (!modelDownloader.verifyExistingModel(modelId)) {
+            _modelLoaded.value = false
             Log.e(TAG, "Could not load Whisper model $modelId for transcription")
             return@withContext ""
         }
-
-        whisperEngine.transcribe(
-            activeSamples,
+        _modelLoaded.value = true
+        whisperEngine.transcribeWithModel(
+            modelId = modelId,
+            audioSamples = activeSamples,
             language = getLanguage(),
             params = currentWhisperParams()
                 .forLiveAudio(activeSamples.size)
@@ -670,16 +671,11 @@ class DictationRepository(private val context: Context) {
         onProgress: (Float, String) -> Unit
     ): String = withContext(Dispatchers.Default) {
         onProgress(0.05f, "Decoding audio file...")
-        val loadJob = async(Dispatchers.IO) {
-            onProgress(0.28f, "Loading local Whisper model...")
-            preloadModel(modelId)
-        }
         val decodedSamples = audioDecoder.decodeToPcm16k(uri) { prog ->
             onProgress(0.05f + prog * 0.23f, "Decoding audio file...")
         }
 
         if (decodedSamples.isEmpty()) {
-            loadJob.cancel()
             return@withContext "Error: Failed to decode audio file."
         }
 
@@ -688,11 +684,11 @@ class DictationRepository(private val context: Context) {
         val audioDurationSec = samples.size / 16000f
 
         onProgress(0.30f, "Preparing local Whisper model...")
-        val loaded = loadJob.await()
-        _modelLoaded.value = loaded
-        if (!loaded) {
+        if (!modelDownloader.verifyExistingModel(modelId)) {
+            _modelLoaded.value = false
             return@withContext "Error: Local Whisper model $modelId is not downloaded yet. Please download it first."
         }
+        _modelLoaded.value = true
 
         // Multi-segment sliding window decoding for shared audio:
         // - singleSegment = false allows full multi-chunk transcription
@@ -745,8 +741,9 @@ class DictationRepository(private val context: Context) {
         }
 
         val rawResult = try {
-            whisperEngine.transcribe(
-                samples,
+            whisperEngine.transcribeWithModel(
+                modelId = modelId,
+                audioSamples = samples,
                 language = getLanguage(),
                 params = transcriptionParams
             )
