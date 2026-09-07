@@ -602,74 +602,92 @@ class DictationRepository(private val context: Context) {
     fun startModelDownload(
         modelId: String,
         scope: CoroutineScope,
+        replaceExisting: Boolean = false,
         onProgress: (Float) -> Unit = {}
     ) {
         scope.launch(Dispatchers.IO) {
-            try {
-                val models = allModels.first()
-                var model = models.find { it.id == modelId } ?: return@launch
-                if (model.isDownloaded || model.isDownloading) return@launch
+            var shouldPreload = false
+            modelOperationLock(modelId).withLock {
+                try {
+                    ensureModelCatalogInitialized()
+                    val model = modelDao.getModelsList().find { it.id == modelId } ?: return@withLock
+                    if (model.isDownloading || (model.isDownloaded && !replaceExisting)) return@withLock
 
-                model = model.copy(isDownloading = true, downloadProgress = 0.01f)
-                modelDao.updateModel(model)
-                onProgress(0.01f)
-
-                val success = modelDownloader.downloadModel(modelId) { progress ->
-                    // Keep frequent progress in memory only; Room is updated at
-                    // start and on final success/failure to avoid write storms.
-                    onProgress(progress)
-                }
-
-                if (success) {
-                    modelDao.updateModel(model.copy(
-                        isDownloading = false,
-                        isDownloaded = true,
-                        downloadProgress = 1.0f
-                    ))
-                    val currentSelected = allModels.first().find { it.isSelected }
-                    if (currentSelected == null || !currentSelected.isDownloaded) {
-                        modelDao.selectModel(modelId)
+                    database.withTransaction {
+                        modelDao.setDownloadState(modelId, downloaded = model.isDownloaded, downloading = true, progress = 0.01f)
                     }
-                    onProgress(1.0f)
-                    preloadModel(modelId)
-                } else {
-                    modelDao.updateModel(model.copy(
-                        isDownloading = false,
-                        isDownloaded = false,
-                        downloadProgress = 0.0f
-                    ))
+                    onProgress(0.01f)
+
+                    val success = modelDownloader.downloadModel(
+                        modelId = modelId,
+                        onProgress = onProgress,
+                        // Promotion is deliberately after verification and waits for
+                        // the native context so it cannot retain a deleted/replaced file.
+                        beforePromote = { whisperEngine.releaseModelIfLoaded(modelId) }
+                    )
+
+                    database.withTransaction {
+                        val current = modelDao.getModelsList().find { it.id == modelId }
+                        if (success) {
+                            modelDao.setDownloadState(modelId, downloaded = true, downloading = false, progress = 1f)
+                            val selected = modelDao.getModelsList().find { it.isSelected }
+                            if (selected == null || !selected.isDownloaded) modelDao.selectModel(modelId)
+                        } else {
+                            // A failed replacement retains its previously verified file
+                            // and its downloaded/selected state.
+                            modelDao.setDownloadState(
+                                modelId,
+                                downloaded = current?.isDownloaded == true,
+                                downloading = false,
+                                progress = if (current?.isDownloaded == true) 1f else 0f
+                            )
+                        }
+                    }
+                    onProgress(if (success) 1.0f else 0.0f)
+                    shouldPreload = success
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error downloading model $modelId", e)
+                    database.withTransaction {
+                        val current = modelDao.getModelsList().find { it.id == modelId }
+                        if (current != null) {
+                            modelDao.setDownloadState(modelId, current.isDownloaded, downloading = false, progress = if (current.isDownloaded) 1f else 0f)
+                        }
+                    }
                     onProgress(0.0f)
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error downloading model $modelId", e)
-                val models = allModels.first()
-                val model = models.find { it.id == modelId }
-                if (model != null) {
-                    modelDao.updateModel(model.copy(isDownloading = false, downloadProgress = 0.0f))
-                }
-                onProgress(0.0f)
             }
+            // The lifecycle lock is intentionally released before preloadModel
+            // reacquires it for verification + native context creation.
+            if (shouldPreload) preloadModel(modelId)
         }
     }
 
-    suspend fun deleteDownloadedModel(modelId: String) = withContext(Dispatchers.IO) {
-        val models = allModels.first()
-        val model = models.find { it.id == modelId } ?: return@withContext
+    suspend fun deleteDownloadedModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
+        modelOperationLock(modelId).withLock {
+            ensureModelCatalogInitialized()
+            val model = modelDao.getModelsList().find { it.id == modelId } ?: return@withLock false
+            val file = ModelUrls.getModelFile(context, modelId)
 
-        if (model.isSelected) {
-            modelDao.selectModel("whisper_tiny")
+            // Wait for active inference before unlinking a potentially mmap-backed model.
+            whisperEngine.releaseModelIfLoaded(modelId)
+            val deleted = !file.exists() || file.delete()
+            if (!deleted) {
+                Log.e(TAG, "Could not delete model file ${file.absolutePath}; keeping database state unchanged")
+                return@withLock false
+            }
+            modelDownloader.invalidateVerificationRecord(file)
+
+            database.withTransaction {
+                if (model.isSelected) {
+                    val fallback = modelDao.getModelsList()
+                        .firstOrNull { it.id != modelId && it.isDownloaded }
+                    if (fallback != null) modelDao.selectModel(fallback.id) else modelDao.clearSelection()
+                }
+                modelDao.setDownloadState(modelId, downloaded = false, downloading = false, progress = 0f)
+            }
+            _modelLoaded.value = false
+            true
         }
-
-        val file = ModelUrls.getModelFile(context, modelId)
-        if (file.exists()) {
-            file.delete()
-        }
-
-        modelDao.updateModel(model.copy(
-            isDownloaded = false,
-            downloadProgress = 0.0f,
-            isDownloading = false
-        ))
     }
 
     // Inference & Transcription Operations

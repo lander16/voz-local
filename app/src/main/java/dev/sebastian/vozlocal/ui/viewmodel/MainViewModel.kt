@@ -374,10 +374,11 @@ class MainViewModel(
 
     fun redownloadModel(modelId: String) {
         viewModelScope.launch {
-            repository.deleteDownloadedModel(modelId)
             val model = modelsList.value.find { it.id == modelId } ?: return@launch
             beginDownloadState(modelId, model.sizeMb)
-            repository.startModelDownload(modelId, viewModelScope) { progress ->
+            // Replacement is staged and verified before it supersedes the old
+            // model; never delete a usable model merely to retry a download.
+            repository.startModelDownload(modelId, viewModelScope, replaceExisting = true) { progress ->
                 updateDownloadState(modelId, model.sizeMb, progress, "Downloading")
                 _downloadProgressMap.update { it + (modelId to progress) }
             }
