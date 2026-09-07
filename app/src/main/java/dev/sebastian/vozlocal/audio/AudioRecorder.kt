@@ -61,15 +61,36 @@ private val platformAudioRecordFactory = AudioRecordFactory { source, bufferSize
     )
 }
 
+const val MAX_RECORDING_DURATION_SECONDS = FastFloatBuffer.MAX_RECORDING_DURATION_SECONDS
+const val MAX_RECORDING_SAMPLES = FastFloatBuffer.MAX_RECORDING_SAMPLES
+
 /** High-performance primitive buffer for raw PCM recording. */
-private class FastFloatBuffer(initialCapacity: Int = SAMPLE_RATE * 15) {
-    private var buffer = FloatArray(initialCapacity)
+internal class FastFloatBuffer(
+    val initialCapacity: Int = DEFAULT_INITIAL_CAPACITY,
+    private val maxCapacity: Int = MAX_RECORDING_SAMPLES
+) {
+    var buffer = FloatArray(initialCapacity.coerceIn(1, maxCapacity))
+        private set
     var size = 0
         private set
 
+    val capacity: Int get() = buffer.size
+
     fun appendPCM16(shorts: ShortArray, count: Int): Double {
-        val requiredCapacity = size + count
-        if (requiredCapacity > buffer.size) buffer = buffer.copyOf(max(buffer.size * 2, requiredCapacity))
+        require(count in 0..shorts.size) { "Invalid count: $count" }
+        val requiredCapacity = size.toLong() + count.toLong()
+        if (requiredCapacity > maxCapacity.toLong()) {
+            val budgetMinutes = maxCapacity / (SAMPLE_RATE * 60)
+            val budgetDescription = if (budgetMinutes > 0) "$budgetMinutes minutes" else "$maxCapacity samples"
+            throw AudioRecordingException("Recording exceeded maximum budget of $budgetDescription.")
+        }
+        if (requiredCapacity > buffer.size.toLong()) {
+            val newCapacity = (buffer.size.toLong() * 2L)
+                .coerceAtLeast(requiredCapacity)
+                .coerceAtMost(maxCapacity.toLong())
+                .toInt()
+            buffer = buffer.copyOf(newCapacity)
+        }
         var sumSquares = 0.0
         for (i in 0 until count) {
             val sample = shorts[i]
@@ -88,6 +109,19 @@ private class FastFloatBuffer(initialCapacity: Int = SAMPLE_RATE * 15) {
     }
 
     fun reset() { size = 0 }
+
+    fun shrinkIfOversized(initialCapacity: Int = DEFAULT_INITIAL_CAPACITY) {
+        if (buffer.size > initialCapacity * 4) {
+            buffer = FloatArray(initialCapacity)
+            size = minOf(size, initialCapacity)
+        }
+    }
+
+    companion object {
+        const val MAX_RECORDING_DURATION_SECONDS = 30 * 60
+        const val MAX_RECORDING_SAMPLES = SAMPLE_RATE * MAX_RECORDING_DURATION_SECONDS
+        const val DEFAULT_INITIAL_CAPACITY = SAMPLE_RATE * 15
+    }
 }
 
 /**
@@ -198,6 +232,8 @@ class AudioRecorder internal constructor(
             }
         } catch (error: CancellationException) {
             throw error
+        } catch (error: AudioRecordingException) {
+            failure = error
         } catch (error: Exception) {
             failure = AudioRecordingException(
                 "Microphone capture stopped unexpectedly: ${error.message ?: error.javaClass.simpleName}"
@@ -226,7 +262,10 @@ class AudioRecorder internal constructor(
 
         // The reader is already on Dispatchers.IO. Always release even if stop fails.
         stopAndRelease(recorder)
-        synchronized(floatBuffer) { floatBuffer.reset() }
+        synchronized(floatBuffer) {
+            floatBuffer.reset()
+            floatBuffer.shrinkIfOversized()
+        }
         synchronized(this) {
             if (id == sessionId && sessionState == SessionState.STOPPING) sessionState = SessionState.IDLE
         }
@@ -254,7 +293,10 @@ class AudioRecorder internal constructor(
             session.third?.join()
         }
         val samples = synchronized(floatBuffer) {
-            (if (keepSamples) floatBuffer.toFloatArray() else FloatArray(0)).also { floatBuffer.reset() }
+            val result = if (keepSamples) floatBuffer.toFloatArray() else FloatArray(0)
+            floatBuffer.reset()
+            floatBuffer.shrinkIfOversized()
+            result
         }
         synchronized(this) {
             if (session.first == sessionId && sessionState == SessionState.STOPPING) sessionState = SessionState.IDLE

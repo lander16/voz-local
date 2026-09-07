@@ -20,9 +20,9 @@ private const val TARGET_SAMPLE_RATE = 16_000
 /** Temporary whole-file PCM storage is bounded until the streaming import pipeline exists. */
 internal const val MAX_SHARED_AUDIO_DURATION_SECONDS = 15 * 60
 internal const val MAX_SHARED_AUDIO_SAMPLES = TARGET_SAMPLE_RATE * MAX_SHARED_AUDIO_DURATION_SECONDS
-private const val DEFAULT_INITIAL_SAMPLES = TARGET_SAMPLE_RATE * 30
-private const val MIN_INITIAL_SAMPLES = 1_024
-private const val MAX_INITIAL_SAMPLES = TARGET_SAMPLE_RATE * 60
+internal const val DEFAULT_INITIAL_SAMPLES = TARGET_SAMPLE_RATE * 30
+internal const val MIN_INITIAL_SAMPLES = 1_024
+internal const val MAX_INITIAL_SAMPLES = TARGET_SAMPLE_RATE * 60
 private const val DECODER_NO_PROGRESS_TIMEOUT_NANOS = 30_000_000_000L
 
 /** A recoverable error while decoding user-supplied shared audio. */
@@ -30,9 +30,15 @@ class AudioDecodingException(message: String, cause: Throwable? = null) : Illega
 
 /** A primitive float list that cannot grow past the shared-audio import budget. */
 internal class PrimitiveFloatList(initialCapacity: Int, private val maxCapacity: Int) {
+    init {
+        require(maxCapacity > 0) { "maxCapacity must be positive." }
+    }
+
     var array = FloatArray(initialCapacity.coerceIn(1, maxCapacity))
     var size = 0
         private set
+
+    val capacity: Int get() = array.size
 
     fun add(value: Float) {
         if (size == maxCapacity) {
@@ -41,12 +47,22 @@ internal class PrimitiveFloatList(initialCapacity: Int, private val maxCapacity:
             )
         }
         if (size == array.size) {
-            array = array.copyOf((array.size.toLong() * 2L).coerceAtMost(maxCapacity.toLong()).toInt())
+            val newCapacity = nextCapacity(array.size, maxCapacity)
+            array = array.copyOf(newCapacity)
         }
         array[size++] = value
     }
 
     fun toFloatArray(): FloatArray = array.copyOf(size)
+
+    internal companion object {
+        internal fun nextCapacity(currentCapacity: Int, maxCapacity: Int): Int {
+            return (currentCapacity.toLong() * 2L)
+                .coerceAtLeast(currentCapacity.toLong() + 1L)
+                .coerceAtMost(maxCapacity.toLong())
+                .toInt()
+        }
+    }
 }
 
 private interface FloatSink {
@@ -244,13 +260,6 @@ class AudioDecoder(private val context: Context) {
         }
     }
 
-    private fun initialCapacityForDuration(durationUs: Long): Int {
-        if (durationUs <= 0L) return DEFAULT_INITIAL_SAMPLES
-        val boundedDurationUs = durationUs.coerceAtMost(MAX_SHARED_AUDIO_DURATION_SECONDS * 1_000_000L)
-        return ((boundedDurationUs / 1_000_000L) * TARGET_SAMPLE_RATE).toInt()
-            .coerceIn(MIN_INITIAL_SAMPLES, MAX_INITIAL_SAMPLES)
-    }
-
     private fun MediaFormat.intOrDefault(key: String, default: Int): Int = if (containsKey(key)) getInteger(key) else default
     private fun MediaFormat.longOrDefault(key: String, default: Long): Long = if (containsKey(key)) getLong(key) else default
 
@@ -302,11 +311,22 @@ class AudioDecoder(private val context: Context) {
         }
     }
 
-    private companion object {
+    internal companion object {
         val SUPPORTED_PCM_ENCODINGS = setOf(
             AudioFormat.ENCODING_PCM_8BIT, AudioFormat.ENCODING_PCM_16BIT,
             AudioFormat.ENCODING_PCM_24BIT_PACKED, AudioFormat.ENCODING_PCM_32BIT,
             AudioFormat.ENCODING_PCM_FLOAT
         )
+
+        internal fun initialCapacityForDuration(durationUs: Long): Int {
+            if (durationUs <= 0L) return DEFAULT_INITIAL_SAMPLES
+            val estimatedSamples = (durationUs.toDouble() / 1_000_000.0) * TARGET_SAMPLE_RATE
+            if (estimatedSamples.isNaN() || estimatedSamples.isInfinite()) {
+                return DEFAULT_INITIAL_SAMPLES
+            }
+            return estimatedSamples.toLong()
+                .coerceIn(MIN_INITIAL_SAMPLES.toLong(), MAX_INITIAL_SAMPLES.toLong())
+                .toInt()
+        }
     }
 }
