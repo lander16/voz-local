@@ -35,6 +35,11 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicReference
 
 import androidx.core.content.edit
+import androidx.room.withTransaction
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "DictationRepository"
 
@@ -78,6 +83,15 @@ class DictationRepository(private val context: Context) {
     private val historyDao = database.historyDao()
     private val dictionaryDao = database.dictionaryDao()
     private val statsDao = database.statsDao()
+
+    // Catalog seeding, selection and each model's file lifecycle have explicit
+    // ownership. This prevents startup races and stale Room entity snapshots.
+    private val modelCatalogMutex = Mutex()
+    private val modelCatalogReady = CompletableDeferred<Unit>()
+    private val modelOperationLocks = ConcurrentHashMap<String, Mutex>()
+
+    private fun modelOperationLock(modelId: String): Mutex =
+        modelOperationLocks.computeIfAbsent(modelId) { Mutex() }
 
     private val prefs = context.getSharedPreferences("vozlocal_prefs", Context.MODE_PRIVATE)
 
@@ -354,11 +368,13 @@ class DictationRepository(private val context: Context) {
      */
     suspend fun preloadModel() = withContext(Dispatchers.IO) {
         try {
-            val models = allModels.first { it.isNotEmpty() }
-            val selectedDownloaded = models.find { it.isSelected && it.isDownloaded }
-                ?: models.firstOrNull { it.isDownloaded }
-            val ok = selectedDownloaded?.let { whisperEngine.loadModel(it.id) } == true
-            Log.i(TAG, "Preload of selected downloaded model '${selectedDownloaded?.id}' -> loaded=$ok")
+            ensureModelCatalogInitialized()
+            val models = modelDao.getModelsList()
+            val candidates = models.filter { it.isDownloaded && it.isSelected } +
+                models.filter { it.isDownloaded && !it.isSelected }
+            val loaded = candidates.firstOrNull { preloadModel(it.id) }
+            val ok = loaded != null
+            Log.i(TAG, "Preload of selected downloaded model '${loaded?.id}' -> loaded=$ok")
             _modelLoaded.value = ok
         } catch (e: Exception) {
             Log.e(TAG, "Error preloading model", e)
@@ -367,11 +383,16 @@ class DictationRepository(private val context: Context) {
     }
 
     suspend fun preloadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
-        val ok = if (modelDownloader.verifyExistingModel(modelId)) {
-            whisperEngine.loadModel(modelId)
-        } else {
-            Log.w(TAG, "Refusing to load unverified model $modelId")
-            false
+        val ok = modelOperationLock(modelId).withLock {
+            // Do not create a native context from a path until this exact file
+            // identity has passed validation and the pinned digest check.
+            val verified = modelDownloader.verifiedModelFile(modelId)
+            if (verified == null) {
+                Log.w(TAG, "Refusing to load unverified model $modelId")
+                false
+            } else {
+                whisperEngine.loadModel(verified.modelId)
+            }
         }
         _modelLoaded.value = ok
         ok
@@ -382,8 +403,10 @@ class DictationRepository(private val context: Context) {
     }
 
     suspend fun preloadSelectedDownloadedModel(): Boolean = withContext(Dispatchers.IO) {
-        val selected = allModels.first { it.isNotEmpty() }.find { it.isSelected && it.isDownloaded }
-            ?: allModels.first { it.isNotEmpty() }.firstOrNull { it.isDownloaded }
+        ensureModelCatalogInitialized()
+        val models = modelDao.getModelsList()
+        val selected = models.find { it.isSelected && it.isDownloaded }
+            ?: models.firstOrNull { it.isDownloaded }
         selected?.let { preloadModel(it.id) } ?: false
     }
 
@@ -422,7 +445,9 @@ class DictationRepository(private val context: Context) {
      * invoke from a long-lived application scope.
      */
     suspend fun initializeModels() = withContext(Dispatchers.IO) {
-        try {
+        modelCatalogMutex.withLock {
+            if (modelCatalogReady.isCompleted) return@withLock
+            try {
             val defaultModels = listOf(
                 DictationModel(
                     id = "whisper_base",
@@ -546,16 +571,27 @@ class DictationRepository(private val context: Context) {
                     finalList.find { it.isDownloaded }?.let { modelDao.selectModel(it.id) }
                 }
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error initializing default models", e)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error initializing default models", e)
+            } finally {
+                refreshDictionarySnapshot()
+                modelCatalogReady.complete(Unit)
+            }
         }
-        refreshDictionarySnapshot()
+    }
+
+    private suspend fun ensureModelCatalogInitialized() {
+        if (!modelCatalogReady.isCompleted) initializeModels()
+        modelCatalogReady.await()
     }
 
     // Models Operations
     suspend fun selectModel(modelId: String) = withContext(Dispatchers.IO) {
-        modelDao.selectModel(modelId)
-        allModels.first().find { it.id == modelId && it.isDownloaded }?.let { preloadModel(modelId) }
+        ensureModelCatalogInitialized()
+        val model = modelDao.getModelsList().find { it.id == modelId && it.isDownloaded }
+            ?: return@withContext
+        database.withTransaction { modelDao.selectModel(model.id) }
+        preloadModel(model.id)
     }
 
     @Suppress("unused")
@@ -644,25 +680,27 @@ class DictationRepository(private val context: Context) {
         val trimmed = AudioSilenceTrimmer.trim(samples)
         val activeSamples = if (trimmed.isNotEmpty()) trimmed else samples
 
-        // Verification happens before the engine grants its single context
-        // lease. The lease then loads (if needed) and executes atomically.
-        if (!modelDownloader.verifyExistingModel(modelId)) {
-            _modelLoaded.value = false
-            Log.e(TAG, "Could not load Whisper model $modelId for transcription")
-            return@withContext ""
-        }
-        _modelLoaded.value = true
-        whisperEngine.transcribeWithModel(
-            modelId = modelId,
-            audioSamples = activeSamples,
-            language = getLanguage(),
-            params = currentWhisperParams()
-                .forLiveAudio(activeSamples.size)
-                .copy(
-                    vadModelPath = vadPathFor(activeSamples.size, sharedFile = false),
-                    modelIdHint = modelId
+        modelOperationLock(modelId).withLock {
+            // Verification and native use share the file-lifecycle lock, so a
+            // delete/replacement cannot slip in between the two operations.
+            if (modelDownloader.verifiedModelFile(modelId) == null) {
+                _modelLoaded.value = false
+                Log.e(TAG, "Could not load Whisper model $modelId for transcription")
+                return@withLock ""
+            }
+            _modelLoaded.value = true
+            whisperEngine.transcribeWithModel(
+                modelId = modelId,
+                audioSamples = activeSamples,
+                language = getLanguage(),
+                params = currentWhisperParams()
+                    .forLiveAudio(activeSamples.size)
+                    .copy(
+                        vadModelPath = vadPathFor(activeSamples.size, sharedFile = false),
+                        modelIdHint = modelId
+                    )
                 )
-        )
+        }
     }
 
     suspend fun transcribeSharedFile(
@@ -684,9 +722,10 @@ class DictationRepository(private val context: Context) {
         val audioDurationSec = samples.size / 16000f
 
         onProgress(0.30f, "Preparing local Whisper model...")
-        if (!modelDownloader.verifyExistingModel(modelId)) {
+        modelOperationLock(modelId).withLock {
+        if (modelDownloader.verifiedModelFile(modelId) == null) {
             _modelLoaded.value = false
-            return@withContext "Error: Local Whisper model $modelId is not downloaded yet. Please download it first."
+            return@withLock "Error: Local Whisper model $modelId is not downloaded yet. Please download it first."
         }
         _modelLoaded.value = true
 
@@ -754,6 +793,7 @@ class DictationRepository(private val context: Context) {
         onProgress(0.95f, "Applying local post-processing...")
 
         rawResult
+        }
     }
 
     /**

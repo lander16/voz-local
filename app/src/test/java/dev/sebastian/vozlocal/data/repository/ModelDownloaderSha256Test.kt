@@ -59,15 +59,17 @@ class ModelDownloaderSha256Test {
     }
 
     @Test
-    fun mismatchedHash_deletesFileAndReturnsFalse() {
+    fun mismatchedHash_keepsCallerFileAndReturnsFalse() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val file = ModelUrls.getModelFile(context, "whisper_tiny")
         file.writeBytes("known model bytes for sha256 test".toByteArray())
         val wrongHash = sha256Hex("completely different content".toByteArray())
         try {
             assertFalse(ModelDownloader(context).verifySha256(file, wrongHash))
-            // Mismatched content must be deleted so a corrupt model is never left on disk.
-            assertFalse(file.exists())
+            // Verification must not delete an installed model as a side effect:
+            // callers may be checking a previously usable file while a replacement
+            // download is staged separately.
+            assertTrue(file.exists())
         } finally {
             file.delete()
         }

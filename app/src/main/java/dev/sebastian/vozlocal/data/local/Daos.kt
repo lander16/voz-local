@@ -12,6 +12,9 @@ interface ModelDao {
     @Query("SELECT * FROM dictation_models")
     fun getAllModels(): Flow<List<DictationModel>>
 
+    @Query("SELECT * FROM dictation_models")
+    suspend fun getModelsList(): List<DictationModel>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertModels(models: List<DictationModel>)
 
@@ -20,6 +23,12 @@ interface ModelDao {
 
     @Query("UPDATE dictation_models SET isSelected = (id = :modelId)")
     suspend fun selectModel(modelId: String)
+
+    @Query("UPDATE dictation_models SET isSelected = 0")
+    suspend fun clearSelection()
+
+    @Query("UPDATE dictation_models SET isDownloaded = :downloaded, isDownloading = :downloading, downloadProgress = :progress WHERE id = :modelId")
+    suspend fun setDownloadState(modelId: String, downloaded: Boolean, downloading: Boolean, progress: Float)
 
     @Query("DELETE FROM dictation_models WHERE id NOT IN (:validIds)")
     suspend fun pruneStaleModels(validIds: List<String>)
@@ -69,4 +78,3 @@ interface StatsDao {
     @Query("DELETE FROM dictation_stats")
     suspend fun clearStats()
 }
-
