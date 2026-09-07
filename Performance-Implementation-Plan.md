@@ -1,12 +1,12 @@
 # Transcription performance: audit and implementation plan
 
 Baseline: `921f413f0be25537b87092daf90b8617cd542133`, audited 2026-09-06.
-Status: P1 implementation completed on 2026-09-07 (P01–P05). Validated via
+Status: P1 and P2 implementation completed on 2026-09-07 (P01–P08). Validated via
 unit test suites, lint, and on-device Pixel 8 Pro instrumentation.
 See [general issues plan](Issues-Implementation-Plan.md) for G01–G19 dependencies
 and [historical measurements](Performance.md) for the original experiment record.
 
-## P1 implementation record
+## Implementation record (P01–P08)
 
 - **P01:** `b801d72` — Add reproducible transcription benchmarks and native stage metrics.
   Upstream `whisper.cpp` timing counters exposed via JNI (`whisper_get_timings`),
@@ -29,6 +29,23 @@ and [historical measurements](Performance.md) for the original experiment record
   concurrent preloads, model verification before releasing active contexts,
   engine busy tracking (`isBusy()`) to guard active inferences from memory pressure
   eviction, and model-specific thread count hints during warmup.
+- **P06:** `83fbef9` — Eliminate UI recomposition allocations and optimize history retention.
+  Memoized per-model `downloadProgressFor` and `downloadStatusFor` StateFlows in
+  `MainViewModel`, exposed underlying maps directly, throttled live waveform
+  emissions to ~30 FPS with forced boundary emissions, and implemented atomic Room
+  SQL history retention pruning in `HistoryDao` and `DictationRepository`.
+- **P07:** `cc7b541` — Add anti-aliasing resampling and fix silence trimmer boundary preservation.
+  Upgraded `AudioDecoder` with a 31-tap Hann windowed-sinc band-limited low-pass FIR
+  filter with exact unity DC gain (>45 dB suppression above Nyquist) preserving
+  inter-chunk filter history, preserved the final sub-frame audio tail in
+  `AudioSilenceTrimmer`, and implemented a conservative silence shortcut skipping
+  Whisper inference on dead audio without dropping quiet speech.
+- **P08:** `0fa0b9a` — Add explicit prompt mode configuration and short-context tuning support.
+  Introduced `PromptMode` enum (`AUTOMATIC`, `OFF`, `CUSTOM`) in `WhisperParams` and
+  `WhisperEngine` to allow disabling the default Spanish priming prompt cleanly,
+  plumbed prompt modes through `DictationRepository`, and added duration-binned
+  `audioCtx` and `promptMode` configuration with CSV/JSON roundtrip in
+  `TranscriptionBenchmarkConfig`.
 
 ## Objective and audit corrections
 
