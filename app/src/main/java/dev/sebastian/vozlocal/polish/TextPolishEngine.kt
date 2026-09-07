@@ -119,4 +119,20 @@ class TextPolishEngine {
 
         result
     }
+
+    suspend fun polishText(
+        text: String,
+        language: String = "auto",
+        cleanupMode: CleanupMode = CleanupMode.BALANCED
+    ): String = polish(text, language, cleanupMode)
+
+    companion object {
+        private val defaultInstance by lazy { TextPolishEngine() }
+
+        suspend fun polishText(
+            text: String,
+            language: String = "auto",
+            cleanupMode: CleanupMode = CleanupMode.BALANCED
+        ): String = defaultInstance.polish(text, language, cleanupMode)
+    }
 }
