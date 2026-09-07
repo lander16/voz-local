@@ -43,6 +43,9 @@ data class WhisperParams(
     val noContext: Boolean = false,
     val modelIdHint: String? = null,
     val audioCtx: Int = 0,
+    /** Per-request override; never changes process-wide thread policy. */
+    val threadCountOverride: Int? = null,
+    val calibrationKey: String? = null,
 )
 
 internal fun WhisperParams.forLiveAudio(sampleCount: Int): WhisperParams {

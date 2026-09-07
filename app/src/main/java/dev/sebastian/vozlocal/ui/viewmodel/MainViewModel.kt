@@ -199,6 +199,35 @@ class MainViewModel(
     val whisperLanguage = MutableStateFlow(repository.getLanguage())
     val cpuBackendMode = MutableStateFlow(repository.getCpuBackendMode())
     val cpuBackendDiagnostics = CpuBackendManager.diagnostics
+    val cpuCalibrationProgress = MutableStateFlow<String?>(null)
+    val cpuCalibrationRunning = MutableStateFlow(false)
+    private var cpuCalibrationJob: Job? = null
+
+    fun calibrateCpu(context: Context, uri: Uri) {
+        if (cpuCalibrationJob?.isActive == true || _isRecording.value || dictationJob?.isActive == true ||
+            sharedTranscriptionJob?.isActive == true) return
+        val appContext = context.applicationContext
+        cpuCalibrationRunning.value = true
+        cpuCalibrationJob = viewModelScope.launch {
+            try {
+                cpuCalibrationProgress.value = appContext.getString(dev.sebastian.vozlocal.R.string.cpu_calibration_loading)
+                val samples = dev.sebastian.vozlocal.audio.AudioDecoder(appContext).decodeToPcm16k(uri)
+                val threads = repository.calibrateCpu(samples) { done, total ->
+                    cpuCalibrationProgress.value = "$done / $total"
+                }
+                cpuCalibrationProgress.value = appContext.getString(dev.sebastian.vozlocal.R.string.cpu_calibration_saved, threads)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                cpuCalibrationProgress.value = appContext.getString(dev.sebastian.vozlocal.R.string.cpu_calibration_cancelled)
+                throw e
+            } catch (e: Exception) {
+                cpuCalibrationProgress.value = appContext.getString(dev.sebastian.vozlocal.R.string.cpu_calibration_failed, e.message ?: "")
+            } finally {
+                cpuCalibrationRunning.value = false
+            }
+        }
+    }
+
+    fun cancelCpuCalibration() { cpuCalibrationJob?.cancel() }
     val useAiPolisher = MutableStateFlow(repository.getUseAiPolisher())
     val cleanupMode = MutableStateFlow(CleanupMode.valueOf(repository.getCleanupMode().name))
 
@@ -510,6 +539,7 @@ class MainViewModel(
     }
 
     private fun startRecording() {
+        cancelCpuCalibration()
         viewModelScope.launch {
             if (dictationJob?.isActive == true || activeDictationSession != null) {
                 _currentLiveTranscription.value = "A transcription is still being processed. Please wait."
@@ -728,6 +758,7 @@ class MainViewModel(
     private var sharedTranscriptionJob: Job? = null
 
     fun startSharedTranscription() {
+        cancelCpuCalibration()
         val uri = _sharedAudioUri.value ?: return
         val model = selectedModel.value ?: return
         if (!model.isDownloaded) return

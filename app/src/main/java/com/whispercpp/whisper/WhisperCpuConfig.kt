@@ -44,6 +44,7 @@ class FileThreadProfileStore(private val file: File) : ThreadProfileStore {
         }
     }
 
+    @Synchronized
     override fun save(profiles: List<ThreadCalibrationProfile>) {
         try {
             file.parentFile?.mkdirs()
@@ -60,6 +61,7 @@ class FileThreadProfileStore(private val file: File) : ThreadProfileStore {
             }
         } catch (e: Throwable) {
             logDebug("Failed to save thread calibration profiles to file", e)
+            throw IllegalStateException("Could not persist CPU calibration", e)
         }
     }
 
@@ -113,14 +115,26 @@ class ThreadProfileManager(
     fun getOptimalThreads(deviceId: String, modelId: String): Int? =
         getProfile(deviceId, modelId)?.optimalThreads
 
+    @Synchronized
     fun saveProfile(profile: ThreadCalibrationProfile) {
+        require(profile.optimalThreads > 0)
         val effective = if (profile.nativeBuildId == null && currentNativeBuildId != null) {
             profile.copy(nativeBuildId = currentNativeBuildId)
         } else {
             profile
         }
+        val before = cache.toMap()
         cache[cacheKey(effective.deviceId, effective.modelId)] = effective
-        persist()
+        cache.values.sortedByDescending { it.calibratedAtMs }.drop(64).forEach {
+            cache.remove(cacheKey(it.deviceId, it.modelId))
+        }
+        try {
+            persist()
+        } catch (failure: Exception) {
+            cache.clear()
+            cache.putAll(before)
+            throw failure
+        }
     }
 
     fun invalidate(deviceId: String, modelId: String) {
@@ -192,9 +206,13 @@ object WhisperCpuConfig {
 
     fun threadCountFor(params: WhisperParams): Int {
         val available = cpuInfoProvider.getAvailableProcessors().coerceAtLeast(1)
+        params.threadCountOverride?.let {
+            require(it in 1..available) { "Requested thread count is unavailable" }
+            return it
+        }
         configuredThreadCount()?.let { return it.coerceIn(1, available) }
 
-        val modelHint = params.modelIdHint
+        val modelHint = params.calibrationKey
         if (modelHint != null) {
             val optimal = profileManager?.getOptimalThreads(deviceId, modelHint)
             if (optimal != null) {

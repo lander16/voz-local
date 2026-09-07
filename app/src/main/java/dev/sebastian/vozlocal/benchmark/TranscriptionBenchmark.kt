@@ -300,11 +300,10 @@ object BenchmarkRunner {
 
     /**
      * Executes a benchmark run according to [config] for [audioSamples].
-     * Handles cold vs warm runs:
-     * - In cold runs: unloads model first, disables speculative preload, waits for catalog readiness,
-     *   and measures model load and warmup times.
-     * - In warm runs: verifies model is already loaded and warmed up.
-     * Records monotonic stage timings and environment metadata.
+     * Batch PCM runner. Cold means a fresh native context (not a flushed OS file
+     * cache); warm requires the requested model already resident. File verification
+     * and native execution are leased. Unmeasured stages stay null. Unsupported
+     * modes fail explicitly instead of exporting misleading measurements.
      */
     suspend fun run(
         config: TranscriptionBenchmarkConfig,
@@ -318,52 +317,35 @@ object BenchmarkRunner {
         context: Context? = null,
         modelFile: File? = null,
     ): TranscriptionBenchmarkResult = withContext(Dispatchers.Default) {
-        val pcmSha256 = config.pcmSha256 ?: computePcmSha256(audioSamples)
-        val modelSha256 = config.modelSha256 ?: modelFile?.let { computeFileSha256(it) }
+        requireNotNull(repository) { "A real repository is required; simulated benchmarks are not supported" }
+        requireNotNull(context) { "Device context is required" }
+        require(!config.streaming) { "This runner measures batch inference, not streaming" }
+        require(!config.vadEnabled) { "Native VAD benchmarking requires a verified VAD model integration" }
+        require(config.repetitions == 1 && config.seed == null) { "Run repetitions explicitly; seed control is unsupported" }
+        require(config.promptMode != PromptMode.CUSTOM) { "Custom prompt text is not represented by this config" }
+        require(audioSamples.isNotEmpty())
+        val expectedQuantization = dev.sebastian.vozlocal.data.repository.ModelUrls.URL_MAP[config.modelId]
+            ?.let { Regex("q[0-9]+_[0-9]+").find(it)?.value }
+        require(expectedQuantization != null && config.quantization.equals(expectedQuantization, true)) {
+            "Quantization label does not match the catalog model"
+        }
+        val pcmSha256 = computePcmSha256(audioSamples)
+        require(config.pcmSha256 == null || config.pcmSha256 == pcmSha256) { "PCM checksum mismatch" }
+        val backend = dev.sebastian.vozlocal.whisper.CpuBackendManager.ensureInitialized(context)
+        require(config.backendMode.equals(backend.effectiveMode.name, ignoreCase = true)) {
+            "Backend differs from request; backend changes require a process restart"
+        }
+        require(config.backendTier == "unknown" || config.backendTier == backend.tier)
+        require(config.nativeBuildId == "unknown" || config.nativeBuildId == backend.nativeBuildId)
 
         var thermalBefore: Int? = null
-        if (context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             thermalBefore = runCatching {
                 (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.currentThermalStatus
             }.getOrNull()
         }
 
-        var modelLoadNanos: Long? = null
-        var warmupNanos: Long? = null
-
         val stopTimestampNanos = nowNanos()
-
-        if (config.coldStart) {
-            // Cold start: unload model first, disable speculative preload, wait for catalog readiness.
-            engine?.release()
-            repository?.ensureModelCatalogInitialized()
-
-            val loadStart = nowNanos()
-            val loadSuccess = engine?.loadModel(config.modelId) ?: true
-            check(loadSuccess) { "Failed to load model ${config.modelId} in cold benchmark run" }
-            modelLoadNanos = nowNanos() - loadStart
-
-            val warmupStart = nowNanos()
-            engine?.warmup()
-            warmupNanos = nowNanos() - warmupStart
-        } else {
-            // Warm start: ensure model is already loaded.
-            if (engine != null) {
-                val loadStart = nowNanos()
-                engine.loadModel(config.modelId)
-                modelLoadNanos = nowNanos() - loadStart
-            }
-        }
-
-        val queueStart = nowNanos()
-        val queueNanos = nowNanos() - queueStart
-
-        val verifyStart = nowNanos()
-        check(audioSamples.isNotEmpty()) { "Audio samples cannot be empty" }
-        val verifyNanos = nowNanos() - verifyStart
-
-        val trimVadStart = nowNanos()
-        val trimVadNanos = nowNanos() - trimVadStart
 
         val params = WhisperParams(
             language = config.language,
@@ -371,42 +353,48 @@ object BenchmarkRunner {
             printTimestamps = false,
             beamSize = config.beamSize,
             temperatureInc = config.temperatureIncrement,
-            vadModelPath = if (config.vadEnabled) "vad" else null,
+            vadModelPath = null,
             promptMode = config.promptMode,
             audioCtx = config.audioCtx,
+            threadCountOverride = config.threadCount,
+            modelIdHint = config.modelId,
         )
-
-        val inferenceStart = nowNanos()
-        val hypothesisRaw: String = if (engine != null) {
-            engine.transcribe(audioSamples, config.language, params)
-        } else {
-            reference
+        var modelSha256: String? = null
+        val pass = repository.withBenchmarkModelLease(config.modelId) { leasedEngine ->
+            require(engine == null || engine === leasedEngine) { "Engine must belong to the repository" }
+            val actualFile = dev.sebastian.vozlocal.data.repository.ModelUrls.getModelFile(context, config.modelId)
+            require(modelFile == null || modelFile.canonicalFile == actualFile.canonicalFile)
+            modelSha256 = computeFileSha256(actualFile)
+            require(config.modelSha256 == null || config.modelSha256 == modelSha256) { "Model checksum mismatch" }
+            leasedEngine.benchmarkPass(config.modelId, audioSamples, params, config.coldStart)
         }
-        val inferenceDurationNanos = nowNanos() - inferenceStart
+        val modelLoadNanos = pass.loadNanos
+        val warmupNanos = pass.warmupNanos
+        val inferenceDurationNanos = pass.inferenceNanos
         val inferenceMs = inferenceDurationNanos / 1_000_000L
 
         val cleanupStart = nowNanos()
-        val hypothesis = hypothesisRaw.trim()
+        val hypothesis = pass.text.trim()
         val cleanupNanos = nowNanos() - cleanupStart
 
         val stopToResultNanos = nowNanos() - stopTimestampNanos
 
         var thermalAfter: Int? = null
-        if (context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             thermalAfter = runCatching {
                 (context.getSystemService(Context.POWER_SERVICE) as? PowerManager)?.currentThermalStatus
             }.getOrNull()
         }
 
         val stageTimings = BenchmarkStageTimings(
-            queueNanos = queueNanos,
-            verifyNanos = verifyNanos,
+            queueNanos = pass.queueNanos,
+            verifyNanos = null, // Repository lease includes waiting; don't mislabel it as verification.
             modelLoadNanos = modelLoadNanos,
             warmupNanos = warmupNanos,
-            audioDecodeResampleNanos = 0L,
-            trimVadNanos = trimVadNanos,
-            nativeEncodeNanos = null,
-            nativeDecodeNanos = null,
+            audioDecodeResampleNanos = null, // Input is already decoded PCM.
+            trimVadNanos = null,
+            nativeEncodeNanos = pass.timings?.encodeMs?.let { (it * 1_000_000).toLong() },
+            nativeDecodeNanos = pass.timings?.decodeMs?.let { (it * 1_000_000).toLong() },
             cleanupNanos = cleanupNanos,
             stopToResultNanos = stopToResultNanos,
         )
@@ -417,7 +405,7 @@ object BenchmarkRunner {
             pcmSha256 = pcmSha256,
             thermalStatusBefore = thermalBefore,
             thermalStatusAfter = thermalAfter,
-            nativeBuild = config.nativeBuildId,
+            nativeBuild = backend.nativeBuildId,
         )
 
         val modelLoadMs = (modelLoadNanos ?: 0L) / 1_000_000L
@@ -425,7 +413,8 @@ object BenchmarkRunner {
 
         TranscriptionBenchmarkResult(
             sampleId = sampleId,
-            config = config.copy(modelSha256 = modelSha256, pcmSha256 = pcmSha256),
+            config = config.copy(modelSha256 = modelSha256, pcmSha256 = pcmSha256,
+                backendTier = backend.tier, nativeBuildId = backend.nativeBuildId),
             audioDurationMs = audioDurationMs,
             modelLoadMs = modelLoadMs,
             warmupMs = warmupMs,
@@ -435,7 +424,7 @@ object BenchmarkRunner {
             recordingDurationMs = recordingDurationMs,
             stageTimings = stageTimings,
             environment = environment,
-            nativeTimings = null,
+            nativeTimings = pass.timings,
         )
     }
 

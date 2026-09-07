@@ -7,6 +7,7 @@ import dev.sebastian.vozlocal.data.repository.ModelUrls
 import com.whispercpp.whisper.WhisperContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -47,12 +48,14 @@ internal fun effectivePrompt(
 }
 
 interface WhisperContextAdapter {
+    suspend fun nativeTimings(): com.whispercpp.whisper.WhisperNativeTimings? = null
     suspend fun warmup(threadCount: Int): Boolean
     suspend fun transcribeData(data: FloatArray, params: WhisperParams): String
     suspend fun release()
 }
 
 internal class RealWhisperContextAdapter(private val context: WhisperContext) : WhisperContextAdapter {
+    override suspend fun nativeTimings() = context.getNativeTimings()
     override suspend fun warmup(threadCount: Int): Boolean = context.warmup(threadCount)
     override suspend fun transcribeData(data: FloatArray, params: WhisperParams): String =
         context.transcribeData(data, params)
@@ -90,7 +93,7 @@ class WhisperEngine internal constructor(
         }
     }
 
-    private suspend fun loadModelLocked(modelId: String): Boolean {
+    private suspend fun loadModelLocked(modelId: String, warm: Boolean = true): Boolean {
         if (currentModelId == modelId && whisperContext != null) {
             return true
         }
@@ -101,6 +104,9 @@ class WhisperEngine internal constructor(
             return false
         }
 
+        // The repository verifies replacement files before taking this lease.
+        // Never keep two complete native models resident while switching.
+        releaseLocked()
         val newContext = try {
             try {
                 val backend = CpuBackendManager.ensureInitialized(context)
@@ -110,21 +116,17 @@ class WhisperEngine internal constructor(
             }
             Log.i(TAG, "Loading Whisper model from ${modelFile.absolutePath}")
             contextLoader(modelFile.absolutePath)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to load Whisper model $modelId", e)
             return false
         }
 
-        // Only release previous context AFTER confirming replacement model file
-        // exists and was successfully loaded into a valid native context.
-        val oldContext = whisperContext
         whisperContext = newContext
         currentModelId = modelId
-        try {
-            oldContext?.release()
-        } catch (e: Throwable) {
-            Log.e(TAG, "Error releasing previous whisper context", e)
-        }
+
+        if (!warm) return true
 
         Log.i(TAG, "Whisper model $modelId loaded successfully! Pre-warming GGML compute graphs...")
         val warmupSucceeded = warmupInternalLocked(newContext, modelId)
@@ -165,6 +167,8 @@ class WhisperEngine internal constructor(
             val elapsedMs = System.currentTimeMillis() - startMs
             Log.i(TAG, "Whisper GGML compute graph pre-warmed in ${elapsedMs}ms (threads=$threadCount)")
             true
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.w(TAG, "Non-fatal error during model pre-warm pass", e)
             false
@@ -180,6 +184,52 @@ class WhisperEngine internal constructor(
         try {
             lifecycleMutex.withLock {
                 transcribeLoadedModelLocked(audioSamples, language, params)
+            }
+        } finally {
+            activeInferenceCount.decrementAndGet()
+        }
+    }
+
+    internal data class BenchmarkPass(
+        val text: String,
+        val queueNanos: Long,
+        val loadNanos: Long?,
+        val warmupNanos: Long?,
+        val inferenceNanos: Long,
+        val timings: com.whispercpp.whisper.WhisperNativeTimings?,
+    )
+
+    /** Caller owns the verified model-file lease; this owns the native lease. */
+    internal suspend fun benchmarkPass(
+        modelId: String, samples: FloatArray, params: WhisperParams, cold: Boolean
+    ): BenchmarkPass = withContext(Dispatchers.Default) {
+        val queuedAt = System.nanoTime()
+        activeInferenceCount.incrementAndGet()
+        try {
+            lifecycleMutex.withLock {
+                val queue = System.nanoTime() - queuedAt
+                var load: Long? = null
+                var warmup: Long? = null
+                if (cold) {
+                    releaseLocked()
+                    val started = System.nanoTime()
+                    check(loadModelLocked(modelId, warm = false)) { "Benchmark model load failed" }
+                    load = System.nanoTime() - started
+                    val warming = System.nanoTime()
+                    check(whisperContext!!.warmup(com.whispercpp.whisper.WhisperCpuConfig.threadCountFor(params)))
+                    warmup = System.nanoTime() - warming
+                    CpuBackendManager.markWarmupSuccessful(context)
+                } else {
+                    check(isModelLoaded(modelId)) { "Warm benchmark requires the requested model already loaded" }
+                }
+                val effective = params.copy(
+                    modelIdHint = modelId,
+                    initialPrompt = effectivePrompt(params.language, params.initialPrompt, params.promptMode)
+                ).forIndependentRequest()
+                val started = System.nanoTime()
+                val raw = whisperContext!!.transcribeData(samples, effective)
+                val inference = System.nanoTime() - started
+                BenchmarkPass(raw, queue, load, warmup, inference, whisperContext!!.nativeTimings())
             }
         } finally {
             activeInferenceCount.decrementAndGet()
@@ -229,11 +279,14 @@ class WhisperEngine internal constructor(
             // Backward-compat resolution: an explicitly-passed positional language
             // (legacy callers) wins; otherwise params.language is used.
             val effectiveLanguage = if (language == "es") params.language else language
-            val effectiveParams = params.copy(
+            val requestParams = params.copy(
                 language = effectiveLanguage,
                 initialPrompt = effectivePrompt(effectiveLanguage, params.initialPrompt, params.promptMode),
                 modelIdHint = params.modelIdHint ?: currentModelId
             ).forIndependentRequest()
+            val effectiveParams = requestParams.copy(calibrationKey = currentModelId?.let {
+                CpuCalibration.key(it, requestParams, audioSamples.size)
+            })
 
             val startMs = System.currentTimeMillis()
             val durationSec = audioSamples.size / 16000f
@@ -281,7 +334,7 @@ class WhisperEngine internal constructor(
         }
     }
 
-    private suspend fun releaseLocked() {
+    private suspend fun releaseLocked() = withContext(NonCancellable) {
         try {
             whisperContext?.release()
         } catch (e: Throwable) {

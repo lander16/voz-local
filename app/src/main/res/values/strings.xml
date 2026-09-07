@@ -110,4 +110,11 @@
     <string name="model_unverified">Unverified</string>
     <string name="setup_model_downloaded">Model “%1$s” (%2$d MB) is stored locally and ready for offline transcription.</string>
     <string name="setup_model_download_prompt" formatted="false">VozLocal transcribes on-device without cloud servers. Download the default model (Whisper Base q8_0, approximately 78 MB) to enable speech recognition.</string>
+    <string name="cpu_calibration_description">Optional CPU calibration: choose a 3–30 second speech clip. Runs locally for up to 10 minutes. Turn battery saver off and let the phone cool first. Keep VozLocal open; do not record while calibrating. Saves a profile only if candidate transcripts match the baseline.</string>
+    <string name="cpu_calibration_start">Choose audio and calibrate CPU</string>
+    <string name="cpu_calibration_cancel">Cancel calibration</string>
+    <string name="cpu_calibration_loading">Reading calibration audio…</string>
+    <string name="cpu_calibration_saved">Calibration saved: %1$d CPU threads.</string>
+    <string name="cpu_calibration_cancelled">Calibration cancelled.</string>
+    <string name="cpu_calibration_failed">No profile saved: %1$s</string>
 </resources>

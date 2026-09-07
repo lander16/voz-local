@@ -19,6 +19,8 @@ import dev.sebastian.vozlocal.whisper.WhisperParams
 import dev.sebastian.vozlocal.whisper.CpuBackendManager
 import dev.sebastian.vozlocal.whisper.CpuBackendMode
 import dev.sebastian.vozlocal.whisper.forLiveAudio
+import dev.sebastian.vozlocal.whisper.forIndependentRequest
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -765,10 +767,16 @@ class DictationRepository(
     // Models Operations
     suspend fun selectModel(modelId: String) = withContext(Dispatchers.IO) {
         ensureModelCatalogInitialized()
-        val model = modelDao.getModelsList().find { it.id == modelId && it.isDownloaded }
-            ?: return@withContext
-        database.withTransaction { modelDao.selectModel(model.id) }
-        preloadModel(model.id)
+        val selected = modelOperationLock(modelId).withLock {
+            database.withTransaction {
+                val model = modelDao.getModelsList().find { it.id == modelId && it.isDownloaded }
+                if (model == null) false else {
+                    modelDao.selectModel(model.id)
+                    true
+                }
+            }
+        }
+        if (selected) preloadModel(modelId)
     }
 
     @Suppress("unused")
@@ -858,7 +866,7 @@ class DictationRepository(
             modelDownloader.invalidateVerificationRecord(file)
 
             database.withTransaction {
-                if (model.isSelected) {
+                if (modelDao.getModelsList().find { it.id == modelId }?.isSelected == true) {
                     val fallback = modelDao.getModelsList()
                         .firstOrNull { it.id != modelId && it.isDownloaded }
                     if (fallback != null) modelDao.selectModel(fallback.id) else modelDao.clearSelection()
@@ -871,6 +879,73 @@ class DictationRepository(
     }
 
     // Inference & Transcription Operations
+    /** Explicit user action only. No background/startup calibration. */
+    suspend fun calibrateCpu(samples: FloatArray, onProgress: (Int, Int) -> Unit): Int =
+        kotlinx.coroutines.withTimeout(10 * 60 * 1000L) {
+            require(samples.size in 3 * 16000..30 * 16000) { "Use a 3–30 second speech clip" }
+            val selected = modelDao.getModelsList().find { it.isSelected && it.isDownloaded }
+                ?: error("Select a downloaded model first")
+            withBenchmarkModelLease(selected.id) { engine ->
+                val power = context.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                fun checkEnvironment() {
+                    check(!power.isPowerSaveMode) { "Turn off battery saver before calibration" }
+                    if (android.os.Build.VERSION.SDK_INT >= 29) {
+                        check(power.currentThermalStatus < android.os.PowerManager.THERMAL_STATUS_MODERATE) {
+                            "Phone is too warm; let it cool before calibration"
+                        }
+                    }
+                }
+                checkEnvironment()
+                check(engine.loadModel(selected.id))
+                val base = currentWhisperParams().forLiveAudio(samples.size).copy(
+                    modelIdHint = selected.id, language = getLanguage(),
+                    vadModelPath = vadPathFor(samples.size, sharedFile = false)
+                )
+                val effective = base.copy(initialPrompt = dev.sebastian.vozlocal.whisper.effectivePrompt(
+                    base.language, base.initialPrompt, base.promptMode
+                )).forIndependentRequest()
+                val key = dev.sebastian.vozlocal.whisper.CpuCalibration.key(selected.id, effective, samples.size)
+                    ?: error("Native backend identity unavailable")
+                val cpu = com.whispercpp.whisper.WhisperCpuConfig
+                val candidates = (1..minOf(6, cpu.cpuInfoProvider.getAvailableProcessors())).toList()
+                val measurements = candidates.associateWith { mutableListOf<Long>() }
+                val baseline = engine.benchmarkPass(selected.id, samples, base, false).text.trim()
+                check(baseline.isNotBlank()) { "Calibration requires audible speech" }
+                val eligible = candidates.toMutableSet()
+                var completed = 0
+                // Rotate candidate order to reduce systematic heating/order bias.
+                repeat(3) { round ->
+                    val order = candidates.drop(round) + candidates.take(round)
+                    for (threads in order) {
+                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                        checkEnvironment()
+                        val pass = engine.benchmarkPass(selected.id, samples,
+                            base.copy(threadCountOverride = threads), false)
+                        if (pass.text.trim() != baseline) eligible.remove(threads)
+                        measurements.getValue(threads).add(pass.inferenceNanos)
+                        onProgress(++completed, candidates.size * 3)
+                    }
+                }
+                checkEnvironment()
+                val winner = eligible.minByOrNull { measurements.getValue(it).sorted()[1] }
+                    ?: error("Candidate transcripts differed; no profile saved")
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                cpu.profileManager?.saveProfile(com.whispercpp.whisper.ThreadCalibrationProfile(
+                    cpu.deviceId, key, winner, System.currentTimeMillis(),
+                    dev.sebastian.vozlocal.whisper.CpuBackendManager.diagnostics.value.nativeBuildId
+                )) ?: error("CPU profile storage unavailable")
+                winner
+            }
+        }
+
+    internal suspend fun <T> withBenchmarkModelLease(
+        modelId: String, action: suspend (WhisperEngine) -> T
+    ): T = modelOperationLock(modelId).withLock {
+        ensureModelCatalogInitialized()
+        check(modelDownloader.verifiedModelFile(modelId) != null) { "Benchmark requires a verified model" }
+        action(whisperEngine)
+    }
+
     suspend fun transcribeAudio(samples: FloatArray, modelId: String): String = withContext(Dispatchers.Default) {
         if (samples.isEmpty()) return@withContext ""
 

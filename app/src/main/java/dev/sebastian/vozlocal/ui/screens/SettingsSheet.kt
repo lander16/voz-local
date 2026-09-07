@@ -3,6 +3,8 @@ package dev.sebastian.vozlocal.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -54,6 +56,12 @@ fun SettingsSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val calibrationContext = LocalContext.current
+    val calibrationProgress by viewModel.cpuCalibrationProgress.collectAsStateWithLifecycle()
+    val calibrationRunning by viewModel.cpuCalibrationRunning.collectAsStateWithLifecycle()
+    val calibrationPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) viewModel.calibrateCpu(calibrationContext, uri)
+    }
     val historyLimit by viewModel.historyLimit.collectAsStateWithLifecycle()
     val saveHistory by viewModel.saveHistory.collectAsStateWithLifecycle()
     val smartPunctuation by viewModel.smartPunctuation.collectAsStateWithLifecycle()
@@ -791,6 +799,15 @@ fun SettingsSheet(
                     selected = cpuBackendMode == CpuBackendMode.AUTOMATIC,
                     onClick = { viewModel.setCpuBackendMode(CpuBackendMode.AUTOMATIC) }
                 )
+
+                Text(stringResource(R.string.cpu_calibration_description), fontSize = 13.sp)
+                OutlinedButton(onClick = {
+                    if (calibrationRunning) viewModel.cancelCpuCalibration()
+                    else calibrationPicker.launch("audio/*")
+                }) {
+                    Text(stringResource(if (calibrationRunning) R.string.cpu_calibration_cancel else R.string.cpu_calibration_start))
+                }
+                calibrationProgress?.let { Text(it, fontSize = 12.sp) }
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),

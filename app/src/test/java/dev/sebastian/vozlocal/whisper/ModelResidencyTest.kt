@@ -34,6 +34,7 @@ private class FakeWhisperContext(
     val modelPath: String,
     var isReleased: Boolean = false,
     var warmedUpWithThreads: Int? = null,
+    var onRelease: (suspend () -> Unit)? = null,
     var onTranscribe: (suspend (FloatArray, WhisperParams) -> String)? = null
 ) : WhisperContextAdapter {
     override suspend fun warmup(threadCount: Int): Boolean {
@@ -46,6 +47,7 @@ private class FakeWhisperContext(
     }
 
     override suspend fun release() {
+        onRelease?.invoke()
         isReleased = true
     }
 }
@@ -53,6 +55,74 @@ private class FakeWhisperContext(
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 class ModelResidencyTest {
+
+    @Test fun deletionDoesNotOverwriteANewerSelection() = runTest {
+        listOf("whisper_tiny", "whisper_base", "whisper_small").forEach { createDummyModelFile(it, 1024) }
+        val releasing = CompletableDeferred<Unit>()
+        val finishRelease = CompletableDeferred<Unit>()
+        val engine = WhisperEngine(context) { path ->
+            FakeWhisperContext(path).apply {
+                if (path.contains("tiny")) onRelease = {
+                    releasing.complete(Unit)
+                    finishRelease.await()
+                }
+            }
+        }
+        val downloader = object : ModelDownloader(context) {
+            override fun verifiedModelFile(modelId: String): VerifiedModelFile? {
+                val f = ModelUrls.getModelFile(context, modelId)
+                return if (f.exists()) VerifiedModelFile(modelId, f, f.length(), f.lastModified()) else null
+            }
+        }
+        val repo = DictationRepository(context, whisperEngine = engine, modelDownloader = downloader)
+        repo.initializeModels()
+        val dao = AppDatabase.getDatabase(context).modelDao()
+        listOf("whisper_tiny", "whisper_base", "whisper_small").forEach {
+            dao.setDownloadState(it, true, false, 1f)
+        }
+        dao.selectModel("whisper_tiny")
+        engine.loadModel("whisper_tiny")
+        val deletion = async(Dispatchers.IO) { repo.deleteDownloadedModel("whisper_tiny") }
+        releasing.await()
+        val selection = async(Dispatchers.IO) { repo.selectModel("whisper_small") }
+        try {
+            kotlinx.coroutines.withContext(Dispatchers.IO) {
+                kotlinx.coroutines.withTimeout(5000) {
+                    while (dao.getModelsList().none { it.id == "whisper_small" && it.isSelected }) delay(10)
+                }
+            }
+        } finally { finishRelease.complete(Unit) }
+        assertTrue(deletion.await())
+        selection.await()
+        assertEquals("whisper_small", dao.getModelsList().single { it.isSelected }.id)
+    }
+
+    @Test fun replacementReleasesBeforeAllocatingAndBenchmarkWarmsOnce() = runTest {
+        createDummyModelFile("whisper_tiny", 1024)
+        createDummyModelFile("whisper_base", 1024)
+        var previous: FakeWhisperContext? = null
+        var allocations = 0
+        val engine = WhisperEngine(context) { path ->
+            previous?.let { assertTrue("Old native allocation must be gone", it.isReleased) }
+            allocations++
+            FakeWhisperContext(path).also { previous = it }
+        }
+        assertTrue(engine.loadModel("whisper_tiny"))
+        assertTrue(engine.loadModel("whisper_base"))
+        val params = WhisperParams(threadCountOverride = 1)
+        val pass = engine.benchmarkPass("whisper_tiny", FloatArray(16000), params, cold = true)
+        assertEquals(3, allocations)
+        assertEquals(1, previous!!.warmedUpWithThreads)
+        assertTrue(pass.loadNanos!! >= 0)
+        assertTrue(pass.warmupNanos!! >= 0)
+        var observed: WhisperParams? = null
+        previous!!.onTranscribe = { _, p -> observed = p; "test" }
+        val warm = engine.benchmarkPass("whisper_tiny", FloatArray(16000), params, cold = false)
+        assertEquals(null, warm.loadNanos)
+        assertEquals(null, warm.warmupNanos)
+        assertEquals(1, observed!!.threadCountOverride)
+        assertEquals("test", warm.text)
+    }
 
     private lateinit var context: Context
     private val createdFiles = mutableListOf<File>()
@@ -127,9 +197,9 @@ class ModelResidencyTest {
         shouldThrowOnCreate = true
         val failedLoad = engine.loadModel("whisper_base")
         assertFalse("Loading throwing model must return false", failedLoad)
-        assertTrue("whisper_tiny must STILL remain loaded after thrown exception", engine.isModelLoaded("whisper_tiny"))
-        assertEquals("whisper_tiny", engine.getLoadedModelId())
-        assertFalse("Existing context must not be released after exception", loadedContexts[0].isReleased)
+        assertFalse("A failed replacement leaves a recoverable unloaded engine", engine.isModelLoaded())
+        assertEquals(null, engine.getLoadedModelId())
+        assertTrue("Release old allocation before attempting replacement", loadedContexts[0].isReleased)
 
         // 5. Successful replacement releases the previous context
         shouldThrowOnCreate = false

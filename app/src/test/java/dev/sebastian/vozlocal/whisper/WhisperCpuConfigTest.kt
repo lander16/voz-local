@@ -17,6 +17,30 @@ import org.junit.Test
 
 class WhisperCpuConfigTest {
 
+    @Test fun explicitThreadsWinAndProfilesRequireFullIdentity() {
+        WhisperCpuConfig.profileManager = ThreadProfileManager()
+        WhisperCpuConfig.profileManager!!.saveProfile(ThreadCalibrationProfile(
+            WhisperCpuConfig.deviceId, "full-runtime-identity", 1, 1L))
+        System.setProperty("vozlocal.whisper.threads", "2")
+        assertEquals(1, WhisperCpuConfig.threadCountFor(WhisperParams(threadCountOverride = 1)))
+        System.clearProperty("vozlocal.whisper.threads")
+        assertEquals(1, WhisperCpuConfig.threadCountFor(WhisperParams(calibrationKey = "full-runtime-identity")))
+        assertNull(WhisperCpuConfig.profileManager!!.getProfile(WhisperCpuConfig.deviceId, "different-runtime"))
+    }
+
+    @Test fun persistenceFailureDoesNotActivateUnsavedProfile() {
+        val store = object : com.whispercpp.whisper.ThreadProfileStore {
+            override fun load() = emptyList<ThreadCalibrationProfile>()
+            override fun clear() = Unit
+            override fun save(profiles: List<ThreadCalibrationProfile>) { error("disk full") }
+        }
+        val manager = ThreadProfileManager(store)
+        org.junit.Assert.assertThrows(IllegalStateException::class.java) {
+            manager.saveProfile(ThreadCalibrationProfile("device", "key", 1, 1L))
+        }
+        assertNull(manager.getProfile("device", "key"))
+    }
+
     private val threadProperty = "vozlocal.whisper.threads"
     private val priorityProperty = "vozlocal.whisper.thread_priority"
 

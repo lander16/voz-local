@@ -31,6 +31,7 @@ class VozLocalApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CpuBackendManager.startup(this)
+        dev.sebastian.vozlocal.whisper.CpuCalibration.initialize(this)
         repository = DictationRepository(this)
         applicationScope.launch {
             runCatching { repository.initializeModels() }

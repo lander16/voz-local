@@ -111,4 +111,11 @@
     <string name="model_unverified">Sin verificar</string>
     <string name="setup_model_downloaded">El modelo “%1$s” (%2$d MB) está guardado localmente y listo para transcribir sin conexión.</string>
     <string name="setup_model_download_prompt" formatted="false">VozLocal transcribe en el dispositivo sin servidores en la nube. Descarga el modelo predeterminado (Whisper Base q8_0, aproximadamente 78 MB) para activar el reconocimiento de voz.</string>
+    <string name="cpu_calibration_description">Calibración de CPU opcional: elige un audio de voz de 3–30 segundos. Se ejecuta localmente durante un máximo de 10 minutos. Desactiva el ahorro de batería y deja enfriar el teléfono. Mantén VozLocal abierto; no grabes durante la calibración. Solo guarda un perfil si las transcripciones coinciden con la referencia inicial.</string>
+    <string name="cpu_calibration_start">Elegir audio y calibrar CPU</string>
+    <string name="cpu_calibration_cancel">Cancelar calibración</string>
+    <string name="cpu_calibration_loading">Leyendo audio de calibración…</string>
+    <string name="cpu_calibration_saved">Calibración guardada: %1$d hilos de CPU.</string>
+    <string name="cpu_calibration_cancelled">Calibración cancelada.</string>
+    <string name="cpu_calibration_failed">No se guardó ningún perfil: %1$s</string>
 </resources>
