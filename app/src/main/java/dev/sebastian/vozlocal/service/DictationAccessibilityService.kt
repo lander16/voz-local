@@ -5,10 +5,13 @@ import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Color
 import androidx.core.graphics.toColorInt
 import android.graphics.PixelFormat
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -33,6 +36,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import dev.sebastian.vozlocal.VozLocalApp
 import dev.sebastian.vozlocal.data.repository.DictationRepository
 import kotlinx.coroutines.*
@@ -44,7 +48,7 @@ private const val TAG = "DictationService"
 
 private data class AccessibilityDictationSession(
     val id: Long,
-    val target: AccessibilityTarget,
+    val target: AccessibilityTarget?,
     val startedAtMs: Long,
     val useAiPolisher: Boolean,
 )
@@ -201,8 +205,12 @@ class DictationAccessibilityService : AccessibilityService() {
 
     private fun nodeStableId(node: AccessibilityNodeInfo): String? {
         val uniqueId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) node.uniqueId else null
-        return uniqueId?.takeIf { it.isNotBlank() }?.let { "unique:$it" }
-            ?: node.viewIdResourceName?.takeIf { it.isNotBlank() }?.let { "view:$it" }
+        if (!uniqueId.isNullOrBlank()) return "unique:$uniqueId"
+        val viewId = node.viewIdResourceName
+        if (!viewId.isNullOrBlank()) return "view:$viewId"
+        val rect = Rect()
+        node.getBoundsInScreen(rect)
+        return "bounds:${node.className}:${rect.flattenToString()}"
     }
 
     private fun focusedAllowedTarget(): AccessibilityTarget? {
@@ -585,12 +593,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 statusText.text = "Processing…"
                 return
             }
-            val target = focusedAllowedTarget()
-            if (target == null || !AccessibilityTargetPolicy.hasStableIdentity(target)) {
-                // Never start a global recording without a current, safe insertion target.
-                updateFloatingViewVisibility()
-                return
-            }
+            val target = focusedAllowedTarget()?.takeIf { AccessibilityTargetPolicy.hasStableIdentity(it) }
             val session = AccessibilityDictationSession(
                 id = ++nextSessionId,
                 target = target,
@@ -782,10 +785,34 @@ class DictationAccessibilityService : AccessibilityService() {
 
         withContext(Dispatchers.Main) {
             if (!isCurrentSession(session)) return@withContext
-            // Keep history as a recoverable result even when the original field vanished.
-            pasteTextToActiveInput(session.target, processed)
+            // If target field is present, try to paste into it. If absent or rejected, copy to clipboard.
+            val pasted = if (session.target != null) {
+                pasteTextToActiveInput(session.target, processed)
+            } else {
+                false
+            }
+            if (!pasted) {
+                copyToClipboard(processed)
+                Toast.makeText(
+                    this@DictationAccessibilityService,
+                    "Dictation copied to clipboard",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
             stopRecordingUI()
             activeSession = null
+        }
+    }
+
+    private fun copyToClipboard(text: String) {
+        try {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+            if (clipboard != null) {
+                val clip = ClipData.newPlainText("VozLocal Dictation", text)
+                clipboard.setPrimaryClip(clip)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to copy text to clipboard", e)
         }
     }
 
