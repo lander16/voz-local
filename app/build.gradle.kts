@@ -87,7 +87,15 @@ android {
       }
     }
     debug { }
+    // Side-by-side native/device checks never replace a user's signed package.
+    create("validation") {
+      initWith(getByName("debug"))
+      applicationIdSuffix = ".validation"
+      versionNameSuffix = "-validation"
+      matchingFallbacks += listOf("debug")
+    }
   }
+  testBuildType = providers.gradleProperty("deviceTestBuildType").orElse("debug").get()
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
