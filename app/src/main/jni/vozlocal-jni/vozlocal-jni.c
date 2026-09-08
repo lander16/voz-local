@@ -483,23 +483,17 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribeWithParams(
     return was_aborted ? -2 : result;
 }
 
+// Implemented in the generated app-owned C++ translation unit. The upstream
+// public API returns per-call averages allocated with new, not stage totals.
+extern void vozlocal_get_timing_totals(struct whisper_context *context, float *values);
+
 JNIEXPORT jfloatArray JNICALL
 Java_com_whispercpp_whisper_WhisperLib_00024Companion_getNativeTimings(
         JNIEnv *env, jobject thiz, jlong context_ptr) {
     UNUSED(thiz);
     jfloat values[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
     struct whisper_context *context = (struct whisper_context *) context_ptr;
-    if (context != NULL) {
-        struct whisper_timings *timings = whisper_get_timings(context);
-        if (timings != NULL) {
-            values[0] = timings->sample_ms;
-            values[1] = timings->encode_ms;
-            values[2] = timings->decode_ms;
-            values[3] = timings->batchd_ms;
-            values[4] = timings->prompt_ms;
-            free(timings);
-        }
-    }
+    vozlocal_get_timing_totals(context, values);
     jfloatArray result = (*env)->NewFloatArray(env, 5);
     if (result != NULL) {
         (*env)->SetFloatArrayRegion(env, result, 0, 5, values);

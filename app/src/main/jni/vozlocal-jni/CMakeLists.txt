@@ -21,12 +21,13 @@ else()
 endif()
 
 message(STATUS " VozLocal JNI: Whisper version ${WHISPER_VERSION}")
+include(${CMAKE_CURRENT_SOURCE_DIR}/WhisperCancellationPatch.cmake)
 
 # Source list: vendored whisper.cpp + vendored jni.c + project shim.
 # jni.c is read but not modified; vozlocal-jni.c is project-owned.
 set(
     SOURCE_FILES
-    ${WHISPER_LIB_DIR}/src/whisper.cpp
+    ${VOZLOCAL_WHISPER_CPP}
     ${WHISPER_LIB_DIR}/examples/whisper.android/lib/src/main/jni/whisper/jni.c
     ${CMAKE_CURRENT_SOURCE_DIR}/vozlocal-jni.c
     )

@@ -394,7 +394,9 @@ object BenchmarkRunner {
             audioDecodeResampleNanos = null, // Input is already decoded PCM.
             trimVadNanos = null,
             nativeEncodeNanos = pass.timings?.encodeMs?.let { (it * 1_000_000).toLong() },
-            nativeDecodeNanos = pass.timings?.decodeMs?.let { (it * 1_000_000).toLong() },
+            nativeDecodeNanos = pass.timings?.let {
+                ((it.decodeMs + it.batchdMs + it.promptMs + it.sampleMs) * 1_000_000).toLong()
+            },
             cleanupNanos = cleanupNanos,
             stopToResultNanos = stopToResultNanos,
         )

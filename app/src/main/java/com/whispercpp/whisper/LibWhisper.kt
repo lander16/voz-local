@@ -19,7 +19,8 @@ class WhisperNativeException(val status: Int) : IllegalStateException(
 
 /**
  * Performance metrics captured by whisper.cpp during inference.
- * Values are in milliseconds.
+ * Values are stage totals in milliseconds since the last native timing reset,
+ * not the per-call averages returned by whisper_get_timings.
  */
 data class WhisperNativeTimings(
     val sampleMs: Float = 0f,
