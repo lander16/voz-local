@@ -35,6 +35,31 @@ object AccessibilityTargetPolicy {
             hasStableIdentity(recordingTarget) &&
             recordingTarget.stableId == currentTarget.stableId
 
+    val COMMON_PLACEHOLDERS = setOf(
+        "ask google",
+        "search",
+        "search...",
+        "search google",
+        "search google or type url",
+        "search or type url",
+        "search or type web address",
+        "search or enter address",
+        "type a message",
+        "type a message...",
+        "send a message",
+        "write a message",
+        "message",
+        "mensaje",
+        "buscar",
+        "buscar...",
+        "buscar en google",
+        "pregúntale a google",
+        "escribe un mensaje",
+        "escribe un mensaje...",
+        "enviar un mensaje",
+        "enviar un mensaje..."
+    )
+
     fun isPlaceholderText(
         text: String,
         hintText: String? = null,
@@ -46,13 +71,20 @@ object AccessibilityTargetPolicy {
         if (text.isBlank()) return true
         if (isShowingHintText) return true
 
-        // Some messaging inputs expose their visual prompt as node text without setting
-        // isShowingHintText. A valid cursor/selection proves that the same string is real
-        // editable content, so only use matching metadata when no cursor is available.
-        val hasValidSelection = selectionStart >= 0 && selectionEnd >= 0
-        if (hasValidSelection) return false
-        return text == hintText?.takeIf { it.isNotBlank() } ||
-            text == contentDescription?.takeIf { it.isNotBlank() }
+        // When a user has actively typed text or positioned the cursor beyond index 0,
+        // or has an active range selection, treat it as real user content.
+        val hasCursorBeyondStart = selectionStart > 0 || selectionEnd > 0
+        if (hasCursorBeyondStart) return false
+
+        val trimmed = text.trim()
+        if (!hintText.isNullOrBlank() && trimmed.equals(hintText.trim(), ignoreCase = true)) {
+            return true
+        }
+        if (!contentDescription.isNullOrBlank() && trimmed.equals(contentDescription.trim(), ignoreCase = true)) {
+            return true
+        }
+
+        return trimmed.lowercase() in COMMON_PLACEHOLDERS
     }
 
     fun computeInsertionText(

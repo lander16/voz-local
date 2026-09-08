@@ -58,9 +58,10 @@ class AccessibilityTargetPolicyTest {
 
     @Test
     fun placeholderDetectionPreservesAmbiguousNonemptyText() {
-        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("message"))
-        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("buscar"))
-        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Ask Google"))
+        // Known placeholders are preserved when the cursor is positioned as user-entered text
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("message", selectionStart = 7, selectionEnd = 7))
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("buscar", selectionStart = 6, selectionEnd = 6))
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Ask Google", selectionStart = 10, selectionEnd = 10))
         assertFalse(
             AccessibilityTargetPolicy.isPlaceholderText(
                 "Enter your query here",
@@ -77,12 +78,41 @@ class AccessibilityTargetPolicyTest {
                 selectionEnd = 10,
             )
         )
-        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Hello world this is my dictation"))
-        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("My bank note"))
+        // Arbitrary user text is always preserved, even if unfocused or cursor at start
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Hello world this is my dictation", selectionStart = 0, selectionEnd = 0))
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Hello world this is my dictation", selectionStart = -1, selectionEnd = -1))
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("My bank note", selectionStart = 0, selectionEnd = 0))
+        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("My bank note", selectionStart = -1, selectionEnd = -1))
     }
 
     @Test
-    fun messagingPromptWithoutCursorIsTreatedAsPlaceholder() {
+    fun messagingPromptInWhatsAppAndOtherAppsIsTreatedAsPlaceholder() {
+        // WhatsApp on Android exposes text="Message" with null hint/contentDesc and selection at 0
+        assertTrue(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                text = "Message",
+                hintText = null,
+                contentDescription = null,
+                selectionStart = 0,
+                selectionEnd = 0,
+            )
+        )
+        assertTrue(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                text = "Mensaje",
+                hintText = null,
+                contentDescription = null,
+                selectionStart = 0,
+                selectionEnd = 0,
+            )
+        )
+        assertTrue(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                text = "Type a message",
+                selectionStart = 0,
+                selectionEnd = 0,
+            )
+        )
         assertTrue(
             AccessibilityTargetPolicy.isPlaceholderText(
                 text = "Message",
@@ -103,6 +133,8 @@ class AccessibilityTargetPolicyTest {
         val result = AccessibilityTargetPolicy.computeInsertionText(
             rawText = "Message",
             textToInsert = "this is my dictation",
+            selectionStart = 0,
+            selectionEnd = 0,
             isPlaceholder = true,
         )
         org.junit.Assert.assertEquals("this is my dictation", result)
@@ -114,6 +146,13 @@ class AccessibilityTargetPolicyTest {
             AccessibilityTargetPolicy.isPlaceholderText(
                 text = "Message",
                 contentDescription = "Message",
+                selectionStart = 7,
+                selectionEnd = 7,
+            )
+        )
+        assertFalse(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                text = "Message",
                 selectionStart = 7,
                 selectionEnd = 7,
             )
