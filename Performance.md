@@ -5,7 +5,21 @@ separates **measurements** from code inspection, user observations, and future
 hypotheses. A result is not a general model ranking unless it identifies the
 device, software configuration, audio, and test conditions used to obtain it.
 
-Last updated: 2026-09-06.
+Last updated: 2026-09-07.
+
+## September 7 device-validation follow-up
+
+See [Pixel validation procedure and raw results](Pixel-Validation.md). The isolated
+Pixel 8 Pro tests found a missing CPU-graph abort propagation path: cancellation
+initially took 7.510 seconds, then measured 45–467 ms over six attempts after the
+native fix, with successful subsequent transcription. This is measured Small q5_1
+behavior, not a guarantee for every model/backend.
+
+For one 11-second English fixture, four threads had the best median: 15.397 s in
+Compatibility and 12.830 s in Automatic/I8MM. These are preliminary batch-native
+measurements on Android 17, not new global defaults or a Spanish accuracy result.
+The report distinguishes legacy averaged timing fields from corrected native
+stage totals, and records the successful 18-trial Tiny calibration/reload check.
 
 ## Current inference path
 

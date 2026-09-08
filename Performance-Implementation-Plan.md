@@ -2,9 +2,10 @@
 
 Baseline: `921f413f0be25537b87092daf90b8617cd542133`, audited 2026-09-06.
 Status: P01–P08 have implementation work, but are **not all acceptance-complete**.
-The September 7 follow-up fixes below have host regression coverage. Real native
-cancellation, calibration benefit, corpus accuracy, and device latency remain
-release gates; the package-name instrumentation test does not validate these.
+The September 7 follow-up fixes below have host regression coverage and scoped
+Pixel evidence linked below. Cross-model cancellation, calibration benefit,
+corpus accuracy, and signed-release UI latency remain release gates; the original
+package-name instrumentation test alone does not validate these.
 See [general issues plan](Issues-Implementation-Plan.md) for G01–G19 dependencies
 and [historical measurements](Performance.md) for the original experiment record.
 
@@ -14,7 +15,16 @@ and [historical measurements](Performance.md) for the original experiment record
 
 Host validation: `:app:testDebugUnitTest :app:lintDebug --offline` completed
 successfully after these fixes: 199 tests, zero failures/errors/skips; lint zero
-errors and 62 warnings. No new device timing or release-validation claim is made.
+errors and 62 warnings. Subsequent isolated Pixel tests are recorded in
+[Pixel-Validation.md](Pixel-Validation.md): real native cancellation/recovery,
+Small q5_1 thread measurements, and Tiny calibration persistence now have device
+evidence. Multilingual accuracy and production-signed UI/accessibility remain gates.
+
+The device run also corrected native timing export: upstream's getter returns
+per-call averages and allocates with C++ `new`. The project-owned native accessor
+now returns resettable totals without cross-language allocation/deallocation.
+Compatibility's archived early rows retain the old fields and are labelled as
+such; Automatic's final rows use totals. Native source hashes distinguish builds.
 
 - P01: real repository/native leases are mandatory. Thread overrides are per
   request; backend/build/tier, PCM/model hashes, and quantization are checked.

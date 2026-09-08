@@ -9,12 +9,17 @@ Historical measurements: [Performance.md](Performance.md).
 ## September 7 review follow-up
 
 Validation: 199 host tests passed and Android debug lint completed with zero
-errors (62 warnings). No phone installation or native device stress run was made.
+errors (62 warnings). Follow-up [Pixel validation](Pixel-Validation.md) used a
+separate package with no accessibility service. It exposed the upstream scheduled
+CPU graph's missing abort forwarding: the app-owned native build patch reduced
+observed Small q5_1 cancellation from 7.510 seconds to 45–467 ms and passed repeated
+cancel/reuse checks. Signed production UI/accessibility validation remains open.
 
 - G01: native abort is now registered on job cancellation, not final completion.
   A blocking-worker regression test checks that abort fires before the worker
   exits. Context destruction is non-cancellable and serialized on its worker.
-  Real JNI cancellation latency and repeated cancel/restart remain device gates.
+  Real Small q5_1 JNI cancellation and repeated cancel/restart now pass on the
+  Pixel; other models/backends and production UI cancellation remain gates.
 - G06: selection acquires the target model-operation lock and rechecks downloaded
   state transactionally. Deletion rereads current selection inside its final
   transaction so it cannot overwrite a newer selection using a stale snapshot.

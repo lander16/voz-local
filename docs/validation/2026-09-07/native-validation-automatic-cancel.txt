@@ -1,0 +1,6 @@
+model=whisper_small_q5_1
+backend=CpuBackendDiagnostics(status=ready, requestedMode=AUTOMATIC, effectiveMode=AUTOMATIC, tier=i8mm, features=[NEON, ARM_FMA, FP16_VA, MATMUL_INT8, DOTPROD, OPENMP, REPACK], nativeBuildId=1.9.2-vozlocal-bf0afa647cbf, fallbackReason=null, recoveredFromInterruptedProbe=false)
+cancel_1_ms=151
+cancel_2_ms=467
+cancel_3_ms=150
+recovery_transcript=And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.

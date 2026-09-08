@@ -33,6 +33,8 @@ accuracy across languages or guarantee a speedup. No calibration runs at startup
 See [performance implementation and validation status](Performance-Implementation-Plan.md)
 for remaining device experiments. Benchmark infrastructure and passing unit tests
 must not be confused with measured Pixel performance improvements.
+The [Pixel validation guide](Pixel-Validation.md) includes reproducible isolated
+tests, measured cancellation latency, thread-count results, and their limitations.
 
 ## 📱 Application Screenshots
 

@@ -1,0 +1,5 @@
+completed=18/18
+model=whisper_tiny
+winner=3
+elapsed_ms=20150
+reload_verified=true
