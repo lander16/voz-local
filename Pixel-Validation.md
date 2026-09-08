@@ -144,9 +144,13 @@ or replacement command was issued during this session.
 - Check model selection/deletion/replacement while native work is active.
 - Validate Settings, microphone recording, shared audio, recovery, and English/
   Spanish labels manually on a signed release built from the same commit.
-- Test accessibility separately with explicit user approval; this isolated package
-  deliberately cannot validate it. Never open or operate the bank app as part of
-  automated performance tests.
+- Repeat the signed-release accessibility and banking compatibility check after
+  relevant manifest, signing, Android, or bank-app changes. On September 8, 2026,
+  Nu worked on the Pixel 8 Pro with the upload-certificate release while the
+  VozLocal service was both disabled and enabled; the earlier warning reproduced
+  only with the Android debug certificate. This remains a manual compatibility
+  observation, not an automated bank-app test or a cross-bank guarantee. Never
+  open or operate a bank app as part of automated performance tests.
 
 Leave the validation app installed for follow-up only with the user's knowledge.
 Removing it discards only its disposable test data, not production VozLocal data.

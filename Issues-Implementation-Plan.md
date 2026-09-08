@@ -13,7 +13,10 @@ errors (62 warnings). Follow-up [Pixel validation](Pixel-Validation.md) used a
 separate package with no accessibility service. It exposed the upstream scheduled
 CPU graph's missing abort forwarding: the app-owned native build patch reduced
 observed Small q5_1 cancellation from 7.510 seconds to 45–467 ms and passed repeated
-cancel/reuse checks. Signed production UI/accessibility validation remains open.
+cancel/reuse checks. A later upload-certificate release check validated that Nu
+opened while the VozLocal accessibility service was both disabled and enabled;
+the earlier warning tracked the Android debug certificate. Broader signed-release
+UI validation remains open, and the bank result is not a cross-device guarantee.
 
 - G01: native abort is now registered on job cancellation, not final completion.
   A blocking-worker regression test checks that abort fires before the worker
