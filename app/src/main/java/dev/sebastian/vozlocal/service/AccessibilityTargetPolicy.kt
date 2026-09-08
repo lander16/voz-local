@@ -39,12 +39,20 @@ object AccessibilityTargetPolicy {
         text: String,
         hintText: String? = null,
         contentDescription: String? = null,
-        isShowingHintText: Boolean = false
+        isShowingHintText: Boolean = false,
+        selectionStart: Int = -1,
+        selectionEnd: Int = -1,
     ): Boolean {
         if (text.isBlank()) return true
-        // Framework state is the only trustworthy evidence that a nonempty value is a hint.
-        // Matching hint or content-description strings can also be deliberate user text.
-        return isShowingHintText
+        if (isShowingHintText) return true
+
+        // Some messaging inputs expose their visual prompt as node text without setting
+        // isShowingHintText. A valid cursor/selection proves that the same string is real
+        // editable content, so only use matching metadata when no cursor is available.
+        val hasValidSelection = selectionStart >= 0 && selectionEnd >= 0
+        if (hasValidSelection) return false
+        return text == hintText?.takeIf { it.isNotBlank() } ||
+            text == contentDescription?.takeIf { it.isNotBlank() }
     }
 
     fun computeInsertionText(

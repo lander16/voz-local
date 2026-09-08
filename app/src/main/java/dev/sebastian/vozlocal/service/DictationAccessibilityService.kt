@@ -830,7 +830,9 @@ class DictationAccessibilityService : AccessibilityService() {
                 text = rawText,
                 hintText = targetNode.hintText?.toString(),
                 contentDescription = targetNode.contentDescription?.toString(),
-                isShowingHintText = isHintShowing
+                isShowingHintText = isHintShowing,
+                selectionStart = targetNode.textSelectionStart,
+                selectionEnd = targetNode.textSelectionEnd,
             )
             val newText = AccessibilityTargetPolicy.computeInsertionText(
                 rawText = rawText,

@@ -61,10 +61,72 @@ class AccessibilityTargetPolicyTest {
         assertFalse(AccessibilityTargetPolicy.isPlaceholderText("message"))
         assertFalse(AccessibilityTargetPolicy.isPlaceholderText("buscar"))
         assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Ask Google"))
-        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Enter your query here", hintText = "Enter your query here"))
-        assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Search web", contentDescription = "Search web"))
+        assertFalse(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                "Enter your query here",
+                hintText = "Enter your query here",
+                selectionStart = 21,
+                selectionEnd = 21,
+            )
+        )
+        assertFalse(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                "Search web",
+                contentDescription = "Search web",
+                selectionStart = 10,
+                selectionEnd = 10,
+            )
+        )
         assertFalse(AccessibilityTargetPolicy.isPlaceholderText("Hello world this is my dictation"))
         assertFalse(AccessibilityTargetPolicy.isPlaceholderText("My bank note"))
+    }
+
+    @Test
+    fun messagingPromptWithoutCursorIsTreatedAsPlaceholder() {
+        assertTrue(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                text = "Message",
+                hintText = "Message",
+                selectionStart = -1,
+                selectionEnd = -1,
+            )
+        )
+        assertTrue(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                text = "Message",
+                contentDescription = "Message",
+                selectionStart = -1,
+                selectionEnd = -1,
+            )
+        )
+
+        val result = AccessibilityTargetPolicy.computeInsertionText(
+            rawText = "Message",
+            textToInsert = "this is my dictation",
+            isPlaceholder = true,
+        )
+        org.junit.Assert.assertEquals("this is my dictation", result)
+    }
+
+    @Test
+    fun matchingPromptWithCursorIsPreservedAsUserText() {
+        assertFalse(
+            AccessibilityTargetPolicy.isPlaceholderText(
+                text = "Message",
+                contentDescription = "Message",
+                selectionStart = 7,
+                selectionEnd = 7,
+            )
+        )
+
+        val result = AccessibilityTargetPolicy.computeInsertionText(
+            rawText = "Message",
+            textToInsert = " received",
+            selectionStart = 7,
+            selectionEnd = 7,
+            isPlaceholder = false,
+        )
+        org.junit.Assert.assertEquals("Message received", result)
     }
 
     @Test
