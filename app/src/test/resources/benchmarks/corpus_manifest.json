@@ -1,6 +1,7 @@
 {
-  "version": 1,
-  "description": "Curated Spanish and English speech recognition accuracy corpus for on-device benchmark and evaluation",
+  "version": 2,
+  "status": "planning_only",
+  "description": "Text-only scenario plan. It has no associated audio and must not be used as accuracy or licensing evidence.",
   "samples": [
     {
       "sampleId": "es_short_001",
@@ -8,7 +9,7 @@
       "durationMs": 1800,
       "category": "immediate_onset",
       "referenceText": "¡Hola! Buenas tardes.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Curated immediate speech onset test with exclamation marks"
     },
     {
@@ -17,7 +18,7 @@
       "durationMs": 2400,
       "category": "accents_and_diacritics",
       "referenceText": "¿Cuándo llegará el camión?",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Interrogative accents and oxytone tildes"
     },
     {
@@ -26,7 +27,7 @@
       "durationMs": 2200,
       "category": "numbers_and_dates",
       "referenceText": "Son las 3:15 de la tarde.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Time notation with digits and colon"
     },
     {
@@ -35,7 +36,7 @@
       "durationMs": 2800,
       "category": "proper_names",
       "referenceText": "Doctor Álvarez, pase por favor.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Proparoxytone patronymic with acute accent"
     },
     {
@@ -44,7 +45,7 @@
       "durationMs": 2600,
       "category": "quiet_ending",
       "referenceText": "Entendido, muchas gracias...",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Trailing low-energy ending speech decay"
     },
     {
@@ -53,7 +54,7 @@
       "durationMs": 7500,
       "category": "accents_and_diacritics",
       "referenceText": "La canción sonaba cerca del malecón mientras mirábamos el atardecer sobre el océano.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Multiple acute accents on oxytones and proparoxytones: canción, malecón, mirábamos, océano"
     },
     {
@@ -62,7 +63,7 @@
       "durationMs": 9200,
       "category": "numbers_and_dates",
       "referenceText": "El vuelo 402 saldrá el 15 de marzo de 2026 a las 18:45 desde la puerta B12.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Complex numbers, calendar dates, 24-hour time, and alphanumeric codes"
     },
     {
@@ -71,7 +72,7 @@
       "durationMs": 6800,
       "category": "conversational",
       "referenceText": "Oye, ¿viste si dejaron las llaves del coche sobre la mesa del comedor?",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Colloquial conversational syntax with embedded query"
     },
     {
@@ -80,7 +81,7 @@
       "durationMs": 8400,
       "category": "noise_background",
       "referenceText": "Favor de confirmar la reservación para 4 personas en la terraza exterior.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Noisy restaurant background scenario with reservation details"
     },
     {
@@ -89,7 +90,7 @@
       "durationMs": 11200,
       "category": "proper_names",
       "referenceText": "Alejandro Gómez y María José Martínez viajaron hacia San Cristóbal de las Casas.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Latin American compound names and Mexican geographical entities"
     },
     {
@@ -98,7 +99,7 @@
       "durationMs": 12500,
       "category": "quiet_ending",
       "referenceText": "Revisamos todo el informe financiero y no encontramos ninguna discrepancia relevante.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Business report review with gradual volume reduction at clause boundary"
     },
     {
@@ -107,7 +108,7 @@
       "durationMs": 28000,
       "category": "conversational",
       "referenceText": "Buenas noches a todos. En la reunión de hoy discutimos el avance del proyecto, asignamos las nuevas tareas para el equipo de desarrollo móvil y acordamos revisar los resultados el próximo viernes a primera hora.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Long conversational meeting recap across several coordinate clauses"
     },
     {
@@ -116,7 +117,7 @@
       "durationMs": 27500,
       "category": "numbers_and_dates",
       "referenceText": "La cotización cerró en 1,245.50 pesos por unidad, lo que representa un incremento del 3.8% con respecto al trimestre anterior, alcanzando un volumen total negociado de más de 45 millones.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Financial report with decimals, percentages, and magnitude indicators"
     },
     {
@@ -125,7 +126,7 @@
       "durationMs": 31000,
       "category": "accents_and_diacritics",
       "referenceText": "El análisis histórico reveló que la insurrección en la península comenzó después de la publicación del manifiesto revolucionario, generando una rápida movilización en diversas regiones del país.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "High-density diacritic evaluation (análisis, histórico, reveló, insurrección, península, comenzó, después, publicación, rápida, movilización, país)"
     },
     {
@@ -134,7 +135,7 @@
       "durationMs": 33000,
       "category": "noise_background",
       "referenceText": "Atención a todos los pasajeros: el tren suburbano con destino a la terminal norte presenta un retraso estimado de 15 minutos debido a trabajos de mantenimiento en las vías principales. Agradecemos su comprensión.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Reverberant transit station PA announcement"
     },
     {
@@ -143,7 +144,7 @@
       "durationMs": 72000,
       "category": "conversational",
       "referenceText": "Estimados colegas, quiero compartir con ustedes el resumen de los puntos clave tratados en la conferencia anual de tecnología. En primer lugar, se destacó la creciente importancia del procesamiento local y privado en dispositivos móviles, eliminando la dependencia de servidores externos. En segundo lugar, diversos ponentes compartieron avances significativos en la optimización de modelos neuronales compactos capaces de operar en tiempo real sin agotar la batería ni degradar la experiencia de usuario. Finalmente, concluimos que la privacidad del usuario debe ser el pilar fundamental en cada nueva función que desarrollemos.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Extended speech from technical address on local device processing"
     },
     {
@@ -152,7 +153,7 @@
       "durationMs": 68000,
       "category": "numbers_and_dates",
       "referenceText": "El reporte anual de desempeño para el periodo fiscal 2025-2026 indica ingresos totales por 12,850,000 euros, superando la meta prevista en un 14.2%. Durante el primer semestre se abrieron 3 nuevas sucursales y se contrataron 48 colaboradores. Para el segundo semestre proyectamos invertir 2.5 millones en infraestructura tecnológica y reducir los tiempos de entrega promedio de 72 a 24 horas en todas las zonas metropolitanas.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Extended annual financial narrative with currencies, fiscal years, ranges, and percentages"
     },
     {
@@ -161,7 +162,7 @@
       "durationMs": 86000,
       "category": "accents_and_diacritics",
       "referenceText": "La conservación del patrimonio arqueológico en Mesoamérica requiere una estrecha colaboración entre antropólogos, historiadores y comunidades indígenas locales. Cada inscripción jeroglífica encontrada en los templos de Palenque y Calakmul aporta valiosos testimonios sobre la cosmogonía, las alianzas políticas y los rituales dinásticos. Preservar estos vestigios históricos frente al deterioro climático y la erosión constante es una responsabilidad compartida que no podemos postergar.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Extended academic discourse on cultural heritage and archaeological preservation"
     },
     {
@@ -170,7 +171,7 @@
       "durationMs": 2800,
       "category": "immediate_onset",
       "referenceText": "Quick update: the meeting has been rescheduled to tomorrow at 9 AM.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "Short English scheduling notice"
     },
     {
@@ -179,7 +180,7 @@
       "durationMs": 7800,
       "category": "numbers_and_dates",
       "referenceText": "Total sales for Q3 reached 4,250 units, up 12% from last quarter.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "English quarterly financial regression sample"
     },
     {
@@ -188,7 +189,7 @@
       "durationMs": 10500,
       "category": "conversational",
       "referenceText": "Could you please send over the latest revision of the architectural design document before the end of the day?",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "English polite workplace query"
     },
     {
@@ -197,7 +198,7 @@
       "durationMs": 12000,
       "category": "proper_names",
       "referenceText": "Dr. Alexander Smith and Professor Claire Dupont will be leading the research symposium in Boston.",
-      "licenseNotes": "CC0 1.0 Universal / Public Domain",
+      "licenseNotes": "PLANNING_ONLY: no audio source or redistribution permission is attached",
       "sourceNotes": "English academic titles, names, and geographic destinations"
     }
   ]

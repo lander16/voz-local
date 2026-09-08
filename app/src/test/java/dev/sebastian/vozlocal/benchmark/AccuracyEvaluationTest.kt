@@ -4,10 +4,95 @@ import dev.sebastian.vozlocal.polish.TextPolishEngine
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import java.security.MessageDigest
+import kotlin.io.path.createTempDirectory
 
 class AccuracyEvaluationTest {
+
+    @Test
+    fun planningManifest_isExplicitlyNotExecutableEvidence() {
+        val manifest = AccuracyEvaluationRunner.loadManifestFromResources(
+            resourcePath = "benchmarks/corpus_manifest.json",
+            classLoader = javaClass.classLoader!!
+        )
+
+        assertEquals(CorpusStatus.PLANNING_ONLY, manifest.status)
+        val root = createTempDirectory("accuracy-corpus-").toFile()
+        try {
+            assertThrows(IllegalArgumentException::class.java) {
+                AccuracyEvaluationRunner.requireExecutableCorpus(manifest, root)
+            }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun executableCorpus_requiresAndVerifiesPcmProvenance() {
+        val root = createTempDirectory("accuracy-corpus-").toFile()
+        try {
+            val audio = File(root, "es/sample.pcm").apply {
+                parentFile?.mkdirs()
+                writeBytes(ByteArray(32_000) { (it % 127).toByte() })
+            }
+            val hash = MessageDigest.getInstance("SHA-256")
+                .digest(audio.readBytes())
+                .joinToString("") { "%02x".format(it) }
+            val sample = CorpusSample(
+                sampleId = "verified",
+                language = "es",
+                durationMs = 1_000,
+                category = "conversational",
+                referenceText = "Texto verificado",
+                licenseNotes = "Redistribution terms recorded",
+                audioPath = "es/sample.pcm",
+                sourceUri = "https://example.invalid/source-record",
+                permissionEvidence = "consent-record-001",
+                normalizationProfile = "pcm_s16le_16000_mono_v1",
+                pcmSha256 = hash,
+            )
+            val manifest = CorpusManifest(status = CorpusStatus.EXECUTABLE, samples = listOf(sample))
+
+            AccuracyEvaluationRunner.requireExecutableCorpus(manifest, root)
+
+            val wrongHash = manifest.copy(samples = listOf(sample.copy(pcmSha256 = "0".repeat(64))))
+            val error = assertThrows(IllegalArgumentException::class.java) {
+                AccuracyEvaluationRunner.requireExecutableCorpus(wrongHash, root)
+            }
+            assertTrue(error.message.orEmpty().contains("PCM SHA-256 mismatch"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun executableCorpus_rejectsMissingProvenanceAndEscapingPaths() {
+        val root = createTempDirectory("accuracy-corpus-").toFile()
+        try {
+            val sample = CorpusSample(
+                sampleId = "unsafe",
+                language = "es",
+                durationMs = 1_000,
+                category = "conversational",
+                referenceText = "Texto",
+                audioPath = "../private.pcm",
+            )
+            val error = assertThrows(IllegalArgumentException::class.java) {
+                AccuracyEvaluationRunner.requireExecutableCorpus(
+                    CorpusManifest(status = CorpusStatus.EXECUTABLE, samples = listOf(sample)),
+                    root,
+                )
+            }
+            assertTrue(error.message.orEmpty().contains("sourceUri or permissionEvidence is required"))
+            assertTrue(error.message.orEmpty().contains("audioPath escapes corpus root"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
 
     @Test
     fun corpusManifest_loadsAndValidatesSuccessfully() {

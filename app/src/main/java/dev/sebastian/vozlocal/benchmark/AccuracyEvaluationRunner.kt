@@ -4,6 +4,20 @@ import dev.sebastian.vozlocal.polish.TextPolishEngine
 import java.io.File
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+
+enum class CorpusStatus {
+    PLANNING_ONLY,
+    EXECUTABLE;
+
+    companion object {
+        fun fromManifest(value: String): CorpusStatus = when (value.lowercase()) {
+            "planning_only" -> PLANNING_ONLY
+            "executable" -> EXECUTABLE
+            else -> throw IllegalArgumentException("Unsupported corpus status: '$value'")
+        }
+    }
+}
 
 /** Duration categorization buckets for evaluation corpus clips. */
 enum class DurationBucket {
@@ -31,6 +45,11 @@ data class CorpusSample(
     val referenceText: String,
     val licenseNotes: String = "",
     val sourceNotes: String = "",
+    val audioPath: String = "",
+    val sourceUri: String = "",
+    val permissionEvidence: String = "",
+    val normalizationProfile: String = "",
+    val pcmSha256: String = "",
 ) {
     init {
         require(sampleId.isNotBlank()) { "sampleId must not be blank" }
@@ -46,8 +65,9 @@ data class CorpusSample(
 
 /** Curated collection of accuracy corpus samples with versioning and query helpers. */
 data class CorpusManifest(
-    val version: Int = 1,
+    val version: Int = 2,
     val description: String = "",
+    val status: CorpusStatus = CorpusStatus.PLANNING_ONLY,
     val samples: List<CorpusSample>,
 ) {
     val size: Int get() = samples.size
@@ -201,10 +221,12 @@ object AccuracyEvaluationRunner {
         val samplesList = mutableListOf<CorpusSample>()
         var version = 1
         var description = ""
+        var status = CorpusStatus.PLANNING_ONLY
 
         if (parsed is Map<*, *>) {
             version = (parsed["version"] as? Number)?.toInt() ?: 1
             description = parsed["description"]?.toString() ?: ""
+            status = CorpusStatus.fromManifest(parsed["status"]?.toString() ?: "planning_only")
             val rawSamples = (parsed["samples"] as? List<*>)
                 ?: (parsed["entries"] as? List<*>)
                 ?: emptyList<Any?>()
@@ -226,6 +248,7 @@ object AccuracyEvaluationRunner {
         return CorpusManifest(
             version = version,
             description = description,
+            status = status,
             samples = samplesList,
         )
     }
@@ -274,7 +297,83 @@ object AccuracyEvaluationRunner {
             referenceText = referenceText,
             licenseNotes = licenseNotes,
             sourceNotes = sourceNotes,
+            audioPath = map["audioPath"]?.toString() ?: "",
+            sourceUri = map["sourceUri"]?.toString() ?: "",
+            permissionEvidence = map["permissionEvidence"]?.toString() ?: "",
+            normalizationProfile = map["normalizationProfile"]?.toString() ?: "",
+            pcmSha256 = map["pcmSha256"]?.toString() ?: "",
         )
+    }
+
+    /**
+     * Refuses to treat planning prompts or unverifiable audio as benchmark evidence.
+     * Audio paths must resolve below [corpusRoot], and hashes cover the normalized PCM
+     * bytes consumed by the evaluator rather than an arbitrary source container.
+     */
+    fun requireExecutableCorpus(manifest: CorpusManifest, corpusRoot: File) {
+        require(manifest.status == CorpusStatus.EXECUTABLE) {
+            "Corpus is ${manifest.status}; only an executable corpus may produce benchmark evidence"
+        }
+        require(manifest.samples.isNotEmpty()) { "Accuracy corpus must not be empty" }
+        val ids = manifest.samples.map { it.sampleId }
+        require(ids.distinct().size == ids.size) { "Duplicate corpus sample IDs" }
+
+        val canonicalRoot = corpusRoot.canonicalFile
+        val errors = manifest.samples.flatMap { sample ->
+            buildList {
+                if (sample.audioPath.isBlank()) add("audioPath is missing")
+                if (sample.sourceUri.isBlank() && sample.permissionEvidence.isBlank()) {
+                    add("sourceUri or permissionEvidence is required")
+                }
+                if (sample.licenseNotes.isBlank() && sample.permissionEvidence.isBlank()) {
+                    add("licenseNotes or permissionEvidence is required")
+                }
+                if (sample.normalizationProfile != NORMALIZATION_PROFILE) {
+                    add("normalizationProfile must be $NORMALIZATION_PROFILE")
+                }
+                if (!SHA256.matches(sample.pcmSha256)) add("pcmSha256 must be 64 hexadecimal characters")
+
+                if (sample.audioPath.isNotBlank()) {
+                    val audioFile = File(canonicalRoot, sample.audioPath).canonicalFile
+                    val withinRoot = audioFile.toPath().startsWith(canonicalRoot.toPath())
+                    if (!withinRoot) {
+                        add("audioPath escapes corpus root")
+                    } else if (!audioFile.isFile) {
+                        add("audio file does not exist")
+                    } else {
+                        if (sample.normalizationProfile == NORMALIZATION_PROFILE &&
+                            audioFile.length() != sample.durationMs * PCM_BYTES_PER_MILLISECOND
+                        ) {
+                            add("durationMs does not match normalized PCM byte length")
+                        }
+                        if (SHA256.matches(sample.pcmSha256)) {
+                            val actualHash = sha256(audioFile)
+                            if (!actualHash.equals(sample.pcmSha256, ignoreCase = true)) {
+                                add("PCM SHA-256 mismatch")
+                            }
+                        }
+                    }
+                }
+            }.map { "${sample.sampleId}: $it" }
+        }
+        require(errors.isEmpty()) { "Corpus provenance validation failed:\n${errors.joinToString("\n")}" }
+    }
+
+    private val SHA256 = Regex("^[0-9a-fA-F]{64}$")
+    private const val NORMALIZATION_PROFILE = "pcm_s16le_16000_mono_v1"
+    private const val PCM_BYTES_PER_MILLISECOND = 32L
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /** Evaluates a single sample when both raw and cleaned hypotheses are already available. */
