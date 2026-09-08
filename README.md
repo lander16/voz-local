@@ -234,6 +234,37 @@ cp .env.example .env          # optional, only if you override build config
 
 Release builds enable R8 minification + resource shrinking. The `proguard-rules.pro` keeps the JNI bridge, Room entities/DAOs, the `AccessibilityService`, and the Compose runtime intact. Release credentials are never stored in the repository: provide `KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_ALIAS` (optional; defaults to `upload`), and `KEY_PASSWORD` through CI or your local environment. Without them, Gradle builds an unsigned release for validation only.
 
+### Secure signed installation on a Pixel
+
+The macOS helper below builds and installs the production package without opening
+Android Studio or placing passwords in a file, command argument, shell history, or
+Git. It stores the two passwords in macOS Keychain through hidden prompts:
+
+```bash
+scripts/install-signed-release.sh --setup-keychain
+```
+
+After one-time setup, connect the Pixel through USB or wireless debugging and run:
+
+```bash
+scripts/install-signed-release.sh
+```
+
+The script runs unit tests, builds with Gradle's daemon and configuration cache
+disabled, verifies the APK signature, and compares its signer SHA-256 with the
+currently installed `dev.sebastian.vozlocal` package. Installation is refused if the
+certificates differ, protecting the signing identity already validated with protected
+apps. When no production package is installed, review the printed certificate and use
+`--allow-first-install` explicitly. Use `ANDROID_SERIAL` when multiple devices are
+connected; `KEYSTORE_PATH`, `KEY_ALIAS`, `ANDROID_SDK_ROOT`, and `JAVA_HOME` can be
+overridden locally.
+
+The canonical generated APK is
+`app/build/outputs/apk/release/app-release.apk`. Android Studio's optional
+`app/release/` export and all keystore formats are ignored. Generated artifacts are
+disposable, but keep an encrypted backup of the keystore: losing it means losing the
+ability to reproduce the trusted signing identity.
+
 ---
 
 ## 📱 How to Use
