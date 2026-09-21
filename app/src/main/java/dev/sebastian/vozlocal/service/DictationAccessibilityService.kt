@@ -11,13 +11,13 @@ import android.content.Context
 import android.graphics.Color
 import androidx.core.graphics.toColorInt
 import android.graphics.PixelFormat
-import android.graphics.Rect
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -60,7 +60,6 @@ class DictationAccessibilityService : AccessibilityService() {
     private var buttonView: FrameLayout? = null
     private var isRecording = false
     private var ownsRecorderSession = false
-    private var currentPackageName: String? = null
     private var currentTarget: AccessibilityTarget? = null
     private var nextSessionId = 0L
     private var activeSession: AccessibilityDictationSession? = null
@@ -68,6 +67,8 @@ class DictationAccessibilityService : AccessibilityService() {
     private var timerJob: Job? = null
     internal var lastWarmedModelId: String? = null
     private var warmupJob: Job? = null
+    private var recorderDiscardJob: Job? = null
+    private var recorderStopJob: Job? = null
 
     // Process-wide singleton recorder (has an internal Mutex); shared with the main app.
     private val audioRecorder get() = (applicationContext as VozLocalApp).audioRecorder
@@ -188,34 +189,38 @@ class DictationAccessibilityService : AccessibilityService() {
     private fun deniedPackages(): Set<String> = repository.getDeniedPackages()
 
     private fun nodeTarget(node: AccessibilityNodeInfo?): AccessibilityTarget? {
-        if (node == null) return null
-        val packageName = node.packageName?.toString() ?: return null
-        val sensitive = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
-            node.isAccessibilityDataSensitive
-        return AccessibilityTarget(
-            packageName = packageName,
-            windowId = node.windowId,
-            editable = node.isEditable,
-            enabled = node.isEnabled,
-            password = node.isPassword,
-            accessibilityDataSensitive = sensitive,
-            stableId = nodeStableId(node),
-        )
+        return AccessibilityNodeTargetSnapshot.from(node)
     }
 
-    private fun nodeStableId(node: AccessibilityNodeInfo): String? {
-        val uniqueId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) node.uniqueId else null
-        if (!uniqueId.isNullOrBlank()) return "unique:$uniqueId"
-        val viewId = node.viewIdResourceName
-        if (!viewId.isNullOrBlank()) return "view:$viewId"
-        val rect = Rect()
-        node.getBoundsInScreen(rect)
-        return "bounds:${node.className}:${rect.flattenToString()}"
+    private fun interactiveWindowsSnapshot(): List<AccessibilityWindowSnapshot> =
+        windows?.map {
+            AccessibilityWindowSnapshot(
+                id = it.id,
+                type = it.type,
+                active = it.isActive,
+                focused = it.isFocused,
+            )
+        }.orEmpty()
+
+    private fun deviceAllowsOverlay(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val keyguardManager = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+        return powerManager?.isInteractive == true && keyguardManager?.isKeyguardLocked != true
     }
 
-    private fun focusedAllowedTarget(): AccessibilityTarget? {
+    /**
+     * Read only framework focus after the window snapshot says there is one focused application
+     * and one IME window. The focused-node package is checked before any text, hint, or content
+     * description is accessed.
+     */
+    private fun focusedEligibleTarget(
+        windowSnapshot: List<AccessibilityWindowSnapshot> = interactiveWindowsSnapshot(),
+    ): AccessibilityTarget? {
+        if (!deviceAllowsOverlay() || !OverlayEligibilityPolicy.canReadFocusedTarget(windowSnapshot)) return null
         val target = nodeTarget(findFocus(AccessibilityNodeInfo.FOCUS_INPUT))
-        return target?.takeIf { AccessibilityTargetPolicy.canTarget(it, deniedPackages()) }
+        return target?.takeIf {
+            OverlayEligibilityPolicy.isEligibleTarget(windowSnapshot, it, deniedPackages())
+        }
     }
 
     private fun clearTarget() {
@@ -231,30 +236,36 @@ class DictationAccessibilityService : AccessibilityService() {
         processingJob = null
     }
 
+    /** Never cancel an in-flight recorder teardown: AudioRecorder must reach its idle state. */
+    private fun ensureRecorderDiscarded() {
+        if (recorderDiscardJob?.isActive == true) return
+        recorderDiscardJob = CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+            audioRecorder.discardRecording()
+        }
+    }
+
     private fun updateFloatingViewVisibility() {
-        if (!AccessibilityTargetPolicy.canObservePackage(currentPackageName, deniedPackages())) {
-            floatingView?.visibility = View.GONE
-            return
-        }
-
-        if (isRecording) {
-            floatingView?.visibility = View.VISIBLE
-            return
-        }
-
-        val showOnlyOnInput = repository.getShowOnlyOnInput()
-        if (!showOnlyOnInput) {
-            floatingView?.visibility = View.VISIBLE
-            return
-        }
-
-        currentTarget = focusedAllowedTarget()
+        // The legacy always-visible preference is intentionally ignored: visibility requires a
+        // current IME window and a current eligible focused target.
+        currentTarget = focusedEligibleTarget()
         floatingView?.visibility = if (currentTarget != null) View.VISIBLE else View.GONE
     }
 
+    private fun reevaluateEligibility() {
+        val target = focusedEligibleTarget()
+        currentTarget = target
+        val sessionTarget = activeSession?.target
+        if (sessionTarget != null && !AccessibilityTargetPolicy.matchesRecordingTarget(sessionTarget, target)) {
+            stopAndDiscardForIneligibleTarget()
+            return
+        }
+        floatingView?.visibility = if (target != null) View.VISIBLE else View.GONE
+        if (target != null && !isRecording) warmupModelIfNeeded()
+    }
+
     private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "show_only_on_input" || key == "denied_accessibility_packages") {
-            updateFloatingViewVisibility()
+        if (key == "denied_accessibility_packages") {
+            reevaluateEligibility()
         }
     }
 
@@ -587,13 +598,14 @@ class DictationAccessibilityService : AccessibilityService() {
         }
 
         if (!isRecording) {
+            if (recorderDiscardJob?.isActive == true || recorderStopJob?.isActive == true) return
             if (processingJob?.isActive == true || activeSession != null) {
                 // Do not let a second tap retarget a result that is still decoding.
                 statusText.visibility = View.VISIBLE
                 statusText.text = "Processing…"
                 return
             }
-            val target = focusedAllowedTarget()?.takeIf { AccessibilityTargetPolicy.hasStableIdentity(it) }
+            val target = focusedEligibleTarget() ?: return
             val session = AccessibilityDictationSession(
                 id = ++nextSessionId,
                 target = target,
@@ -688,11 +700,13 @@ class DictationAccessibilityService : AccessibilityService() {
             }
 
             startWaveformAnimation()
-            serviceScope.launch {
+            // Keep the recorder stop independent from serviceScope. A focus-loss event or service
+            // destruction must not cancel AudioRecorder while it is transitioning to idle.
+            recorderStopJob = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob()).launch {
                 val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
                 ownsRecorderSession = false
                 if (!isCurrentSession(session)) return@launch
-                processingJob = launch(Dispatchers.Default) {
+                processingJob = serviceScope.launch(Dispatchers.Default) {
                 val models = repository.allModels.first()
                 val selected = models.find { it.isSelected && it.isDownloaded }
                     ?: models.firstOrNull { it.isDownloaded }
@@ -774,24 +788,27 @@ class DictationAccessibilityService : AccessibilityService() {
 
         if (!isCurrentSession(session)) return
 
-        repository.insertHistory(
-            dev.sebastian.vozlocal.data.model.TranscriptionHistory(
-                text = processed,
-                durationSec = durationSec,
-                modelUsed = modelName,
-                type = "dictation"
-            )
-        )
-
         withContext(Dispatchers.Main) {
             if (!isCurrentSession(session)) return@withContext
-            // If target field is present, try to paste into it. If absent or rejected, copy to clipboard.
-            val pasted = if (session.target != null) {
-                pasteTextToActiveInput(session.target, processed)
-            } else {
-                false
+            // Results are discarded if the original focused field is no longer the sole eligible
+            // input. Do not copy stale dictation into the clipboard.
+            val stillEligible = session.target?.let { recordingTarget ->
+                AccessibilityTargetPolicy.matchesRecordingTarget(recordingTarget, focusedEligibleTarget())
+            } == true
+            if (!stillEligible) {
+                stopRecordingUI()
+                activeSession = null
+                return@withContext
             }
+            val pasted = pasteTextToActiveInput(requireNotNull(session.target), processed)
             if (!pasted) {
+                // Failure can mean the target vanished between the two framework snapshots.
+                // Clipboard fallback is only appropriate for a still-eligible editor rejecting text.
+                if (!AccessibilityTargetPolicy.matchesRecordingTarget(session.target, focusedEligibleTarget())) {
+                    stopRecordingUI()
+                    activeSession = null
+                    return@withContext
+                }
                 copyToClipboard(processed)
                 Toast.makeText(
                     this@DictationAccessibilityService,
@@ -799,6 +816,14 @@ class DictationAccessibilityService : AccessibilityService() {
                     Toast.LENGTH_SHORT
                 ).show()
             }
+            repository.insertHistory(
+                dev.sebastian.vozlocal.data.model.TranscriptionHistory(
+                    text = processed,
+                    durationSec = durationSec,
+                    modelUsed = modelName,
+                    type = "dictation"
+                )
+            )
             stopRecordingUI()
             activeSession = null
         }
@@ -817,9 +842,12 @@ class DictationAccessibilityService : AccessibilityService() {
     }
 
     private fun pasteTextToActiveInput(recordingTarget: AccessibilityTarget, text: String): Boolean {
+        if (!deviceAllowsOverlay()) return false
+        val windowSnapshot = interactiveWindowsSnapshot()
+        if (!OverlayEligibilityPolicy.canReadFocusedTarget(windowSnapshot)) return false
         val targetNode = findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
         val target = nodeTarget(targetNode)
-        if (!AccessibilityTargetPolicy.canTarget(target, deniedPackages()) ||
+        if (!OverlayEligibilityPolicy.isEligibleTarget(windowSnapshot, target, deniedPackages()) ||
             !AccessibilityTargetPolicy.matchesRecordingTarget(recordingTarget, target)) {
             return false
         }
@@ -851,32 +879,9 @@ class DictationAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        val packageName = event.packageName?.toString()
-        if (!AccessibilityTargetPolicy.canObservePackage(packageName, deniedPackages())) {
-            currentPackageName = packageName
-            clearTarget()
-            if (isRecording || activeSession != null) {
-                stopAndDiscardForSensitiveApp()
-            } else {
-                floatingView?.visibility = View.GONE
-            }
-            return
-        }
-
-        if (currentPackageName != packageName) {
-            currentPackageName = packageName
-            currentTarget = null
-        }
-
-        // Only retrieve the event source after the package denylist check.
-        val source = event.source
-        val target = nodeTarget(source)
-        currentTarget = target?.takeIf { AccessibilityTargetPolicy.canTarget(it, deniedPackages()) }
-        updateFloatingViewVisibility()
-
-        if (currentTarget != null && !isRecording) {
-            warmupModelIfNeeded()
-        }
+        // Event package/source is often the IME or this overlay. Always derive the foreground
+        // target from interactive-window metadata and framework input focus instead.
+        reevaluateEligibility()
     }
 
     internal fun warmupModelIfNeeded() {
@@ -906,29 +911,35 @@ class DictationAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun stopAndDiscardForSensitiveApp() {
+    private fun stopAndDiscardForIneligibleTarget() {
         isRecording = false
         timerJob?.cancel()
         timerJob = null
         if (ownsRecorderSession) {
             ownsRecorderSession = false
-            serviceScope.launch { audioRecorder.discardRecording() }
+            ensureRecorderDiscarded()
         }
         cancelActiveSession()
         clearTarget()
-        stopRecordingUI()
+        // Do not call stopRecordingUI here: it re-reads eligibility while a loss is being handled.
+        stopWaveformAnimation()
+        expandedPanel?.visibility = View.GONE
         floatingView?.visibility = View.GONE
     }
 
     override fun onInterrupt() {
         isRecording = false
+        timerJob?.cancel()
+        timerJob = null
         stopWaveformAnimation()
         if (ownsRecorderSession) {
             ownsRecorderSession = false
-            serviceScope.launch { audioRecorder.discardRecording() }
+            ensureRecorderDiscarded()
         }
         cancelActiveSession()
         clearTarget()
+        expandedPanel?.visibility = View.GONE
+        floatingView?.visibility = View.GONE
     }
 
     override fun onDestroy() {
@@ -939,7 +950,7 @@ class DictationAccessibilityService : AccessibilityService() {
         lastWarmedModelId = null
         if (ownsRecorderSession) {
             ownsRecorderSession = false
-            serviceScope.launch(NonCancellable) { audioRecorder.discardRecording() }
+            ensureRecorderDiscarded()
         }
         cancelActiveSession()
         serviceScope.cancel()
