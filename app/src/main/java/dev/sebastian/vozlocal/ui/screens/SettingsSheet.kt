@@ -25,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -68,7 +69,6 @@ fun SettingsSheet(
     val autoCapitalization by viewModel.autoCapitalization.collectAsStateWithLifecycle()
     val applyDictionary by viewModel.applyDictionary.collectAsStateWithLifecycle()
     val cleanupMode by viewModel.cleanupMode.collectAsStateWithLifecycle()
-    val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
     val whisperLanguage by viewModel.whisperLanguage.collectAsStateWithLifecycle()
     val cpuBackendMode by viewModel.cpuBackendMode.collectAsStateWithLifecycle()
     val cpuBackendDiagnostics by viewModel.cpuBackendDiagnostics.collectAsStateWithLifecycle()
@@ -592,32 +592,7 @@ fun SettingsSheet(
                     letterSpacing = 1.sp
                 )
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.surfaceContainer)
-                        .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(12.dp))
-                        .toggleable(
-                            value = showOnlyOnInput,
-                            role = Role.Switch,
-                            onValueChange = { viewModel.setShowOnlyOnInput(it) }
-                        )
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(text = "Only show on text fields", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Text(text = "Hides the mic when no input is focused", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(
-                        checked = showOnlyOnInput,
-                        onCheckedChange = null,
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = PrimaryColor)
-                    )
-                }
+                FloatingMicEligibilityNotice()
 
                 OutlinedButton(
                     onClick = {
@@ -1147,6 +1122,33 @@ fun SettingsSheet(
             }
         }
     }
+    }
+}
+
+@Composable
+internal fun FloatingMicEligibilityNotice() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainer)
+            .border(BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant), RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .testTag("floating_mic_eligibility_notice"),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.floating_mic_eligibility_title),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = stringResource(R.string.floating_mic_eligibility_description),
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 18.sp
+        )
     }
 }
 

@@ -195,7 +195,6 @@ class MainViewModel(
     val themeMode = MutableStateFlow(repository.getThemeMode())
     val historyLimit = MutableStateFlow(repository.getHistoryLimit())
     val saveHistory = MutableStateFlow(repository.getSaveHistory())
-    val showOnlyOnInput = MutableStateFlow(repository.getShowOnlyOnInput())
     val whisperLanguage = MutableStateFlow(repository.getLanguage())
     val cpuBackendMode = MutableStateFlow(repository.getCpuBackendMode())
     val cpuBackendDiagnostics = CpuBackendManager.diagnostics
@@ -293,11 +292,6 @@ class MainViewModel(
             "it" to "🇮🇹 Italiano",
             "auto" to "🌐 Auto-detect (slower)"
         )
-    }
-
-    fun setShowOnlyOnInput(value: Boolean) {
-        repository.saveShowOnlyOnInput(value)
-        showOnlyOnInput.value = value
     }
 
     fun setSmartPunctuation(value: Boolean) {

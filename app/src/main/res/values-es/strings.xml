@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">VozLocal</string>
-    <string name="accessibility_service_description">El servicio de dictado de VozLocal proporciona dictado flotante global. Toca el micrófono flotante para grabar e insertar transcripciones automáticamente en cualquier campo de texto.</string>
+    <string name="accessibility_service_description">El servicio de dictado de VozLocal muestra el micrófono flotante solo cuando el teclado en pantalla está visible y hay un campo de texto permitido enfocado. Tócalo para grabar e insertar la transcripción en ese campo.</string>
+    <string name="floating_mic_eligibility_title">Disponibilidad del micrófono flotante</string>
+    <string name="floating_mic_eligibility_description">El micrófono flotante solo está disponible mientras el teclado en pantalla está visible y hay un campo de texto permitido enfocado. Se oculta y cancela el dictado cuando alguno deja de estar disponible. No está disponible solo con un teclado físico.</string>
+    <string name="setup_floating_button_description">Activa el micrófono flotante mientras el teclado en pantalla está visible y hay un campo de texto permitido enfocado.</string>
+    <string name="setup_floating_mic_privacy_note">El asistente flotante solo aparece cuando el teclado en pantalla está visible y hay un campo de texto permitido enfocado.</string>
 
     <!-- Navegación -->
     <string name="nav_dictate">Dictar</string>

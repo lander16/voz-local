@@ -19,7 +19,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hearing
-import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -148,7 +147,7 @@ fun SetupWizardScreen(
         // Step 2: Floating Dictation Button (Accessibility Service)
         SetupStepCard(
             title = "2. Floating Microphone Button",
-            description = "Enables the floating microphone button alongside your traditional keyboard in WhatsApp, Slack, Notes, or Chrome.",
+            description = stringResource(R.string.setup_floating_button_description),
             isGranted = hasAccessibilityEnabled,
             buttonText = "Enable Floating Button",
             onAction = onEnableAccessibility,
@@ -333,57 +332,7 @@ fun SetupWizardScreen(
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = null,
-                            tint = PrimaryColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "Overlay Button Preference",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    Text(
-                        text = "VozLocal can automatically hide the floating overlay button when no text input is focused, ensuring your screen remains clean and clutter-free.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 16.sp
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Show button ONLY on clicking inputs",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        val showOnlyOnInput by viewModel.showOnlyOnInput.collectAsStateWithLifecycle()
-                        Switch(
-                            checked = showOnlyOnInput,
-                            onCheckedChange = { viewModel.setShowOnlyOnInput(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary,
-                                uncheckedThumbColor = MaterialTheme.colorScheme.outline,
-                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceContainer
-                            ),
-                            modifier = Modifier.testTag("setup_only_on_input_switch")
-                        )
-                    }
+                    FloatingMicEligibilityNotice()
                 }
             }
 
@@ -398,7 +347,7 @@ fun SetupWizardScreen(
                     listOf(
                         "No cloud dictation or telemetry",
                         "Models download once, then run offline",
-                        "The floating assistant only appears over focused text fields"
+                        stringResource(R.string.setup_floating_mic_privacy_note)
                     ).forEach { line ->
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                             Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(PrimaryColor).padding(top = 5.dp))

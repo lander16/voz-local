@@ -1,6 +1,10 @@
 <resources>
     <string name="app_name">VozLocal</string>
-    <string name="accessibility_service_description">VozLocal Dictation Service provides global floating dictation. Tap the floating microphone to record and auto-paste transcriptions into any text box.</string>
+    <string name="accessibility_service_description">VozLocal Dictation Service shows the floating microphone only when the on-screen keyboard is visible and an allowed text field is focused. Tap it to record and insert transcription in that field.</string>
+    <string name="floating_mic_eligibility_title">Floating microphone availability</string>
+    <string name="floating_mic_eligibility_description">The floating microphone is available only while the on-screen keyboard is visible and an allowed text field is focused. It hides and cancels dictation when either is no longer available. It is not available with a hardware keyboard alone.</string>
+    <string name="setup_floating_button_description">Enables the floating microphone while the on-screen keyboard is visible and an allowed text field is focused.</string>
+    <string name="setup_floating_mic_privacy_note">The floating assistant appears only when the on-screen keyboard is visible and an allowed text field is focused.</string>
 
     <!-- Navigation -->
     <string name="nav_dictate">Dictate</string>

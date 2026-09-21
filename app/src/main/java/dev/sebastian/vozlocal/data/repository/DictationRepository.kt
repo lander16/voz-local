@@ -249,14 +249,6 @@ class DictationRepository(
         prefs.edit { putBoolean("save_history", value) }
     }
 
-    fun getShowOnlyOnInput(): Boolean {
-        return prefs.getBoolean("show_only_on_input", true)
-    }
-
-    fun saveShowOnlyOnInput(value: Boolean) {
-        prefs.edit { putBoolean("show_only_on_input", value) }
-    }
-
     fun getDeniedPackages(): Set<String> =
         prefs.getStringSet("denied_accessibility_packages", emptySet())?.toSet() ?: emptySet()
 
