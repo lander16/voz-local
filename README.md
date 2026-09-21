@@ -140,7 +140,10 @@ Compose Screen
 2. Uses its own `serviceScope` for floating-overlay-only work.
 3. Queries `repository.allModels.first()` and `repository.postProcessText(...)` with the persisted cleanup settings to share the canonical post-processing pipeline with the in-app ViewModel.
 
-A `SharedPreferences.OnSharedPreferenceChangeListener` is registered in the service for `show_only_on_input` so overlay visibility updates instantly when the user toggles the setting in the app.
+Floating dictation requires visible input-method UI and an eligible focused text
+field. Window/focus changes re-evaluate this requirement, and protected-app
+preference changes take effect immediately. The former always-visible option is
+removed; its saved value cannot bypass the requirement.
 
 ---
 
@@ -288,8 +291,8 @@ A "Skip Setup & Explore App" option is provided; if you skip, a persistent banne
 1. Enable **VozLocal Floating Dictation** in Android's *Accessibility Settings*.
 2. In **Settings → Floating assistant**, add banks, password managers, authenticators, and payment apps to **Protect sensitive apps**.
 3. Open a permitted app (WhatsApp, Gmail, Chrome, Notes).
-4. Tap on a text field — the floating mic icon appears (it stays hidden when no field is focused).
-5. Tap the floating mic to dictate; text is inserted only with direct `ACTION_SET_TEXT` into the original permitted app/window. If the target changes or rejects insertion, the transcript stays local in history.
+4. Tap an allowed text field and open the on-screen keyboard — the floating mic appears. Closing the keyboard or leaving the eligible field hides it.
+5. Tap the floating mic to dictate; text is inserted through `ACTION_SET_TEXT` only into the original eligible field. Leaving the target or dismissing the keyboard cancels the overlay session and discards ongoing capture. Use in-app dictation when no on-screen keyboard is available.
 
 ### 4. Transcribing Shared Audio Files
 1. In WhatsApp, Voice Memos, or Files, tap **Share** on any audio file (`.wav`, `.mp3`, `.m4a`, `.ogg`).
@@ -381,12 +384,18 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 
 ### 2. Optional Accessibility Service
 - **Purpose**: VozLocal offers user-triggered voice typing through an optional floating microphone. It is declared with `android:isAccessibilityTool="false"`; do not represent this app as an accessibility aid unless its purpose and Play Console declarations genuinely meet that policy category.
-- **Banking-app limitation**: A protected-app list prevents overlay display, recording, source-node access, and insertion in selected apps. Android and bank security software can still detect an enabled accessibility service, so users must disable the service entirely if their bank requires it.
+- **Banking-app limitation**: A protected-app list prevents overlay display, recording, field-content reads, and insertion in selected apps. Android and bank security software can still detect an enabled accessibility service, so users must disable the service entirely if their bank requires it. Hiding the button does not remove accessibility capabilities or guarantee that bank or Play Protect warnings disappear.
 - **Pixel 8 Pro / Nu validation (September 8, 2026)**: Nu rejected a locally packaged build that used Android's debug certificate. Nu accepted the optimized build signed with the VozLocal upload certificate with the accessibility service both disabled and enabled. A temporary same-certificate build with the service removed also worked, so the controlled result identified the certificate—not the service declaration or enabled state—as the differentiator in this environment. This is one device/app-version observation, not a guarantee for other banks, devices, certificates, or future Nu releases.
 - **Strict Scope of Operation**:
-  - The accessibility service only observes focus and window transitions (`TYPE_VIEW_FOCUSED`, `TYPE_WINDOW_STATE_CHANGED`) to position the floating microphone alongside the active keyboard.
-  - It does not enumerate interactive windows, log keystrokes, capture screenshots, or persist screen contents. It reads only the focused editable node needed to validate and perform direct insertion.
+  - The accessibility service observes focus, window-state, window-list, and window-content changes to recheck keyboard and editor eligibility. It does not subscribe to text-change or text-selection events.
+  - `flagRetrieveInteractiveWindows` allows inspection of interactive-window metadata to detect input-method UI and foreground window ownership. This expands the platform's permitted window access; the implementation does not traverse other windows' content trees, log keystrokes, capture screenshots, or persist screen contents. It checks focused-node identity and eligibility before reading field text for insertion.
   - Text insertion occurs solely via Android's `ACTION_SET_TEXT` API when the user explicitly triggers dictation.
+
+See [overlay research, behavior contract, and device checks](docs/floating-overlay-safety.md)
+and [issue #15](https://github.com/lander16/voz-local/issues/15). Android's accessibility
+permission notice and a Play Protect finding are different signals; identifying the
+latter requires the exact warning. Hardware-keyboard-only use without visible
+input-method UI does not show the floating microphone.
 
 ### 3. Sensitive & Banking Application Protection
 - **Protected-app Shielding**: VozLocal includes a local sensitive-application exclusion manager in **Settings → Floating assistant**.
@@ -398,7 +407,7 @@ VozLocal is architected from inception for complete local sovereignty, zero clou
 | Permission | Justification & Usage Scope |
 |---|---|
 | `android.permission.RECORD_AUDIO` | **Dictation capture**: Used exclusively while an active speech recording session is initiated by the user. The microphone is never accessed in the background or when dictation is stopped. Audio is processed directly in-memory into 16 kHz PCM frames without leaving device RAM. |
-| `android.permission.BIND_ACCESSIBILITY_SERVICE` | **Assistive overlay & text entry**: Used solely to detect when an editable text view is focused so the floating microphone button can be presented, and to insert the generated transcription directly into the active field via `ACTION_SET_TEXT`. |
+| `android.permission.BIND_ACCESSIBILITY_SERVICE` | **Floating dictation & text entry**: Allows the optional service to inspect window metadata and the focused editor, show the mic only with eligible input and visible input-method UI, and insert user-requested transcription through `ACTION_SET_TEXT`. |
 | `android.permission.VIBRATE` | **Haptic feedback**: Used only for optional tactile feedback from the floating microphone button. |
 | `android.permission.INTERNET` | **Model downloads only**: Utilized exclusively for user-directed downloads of quantized Whisper model weights from Hugging Face. Never invoked during recording or transcription. |
 

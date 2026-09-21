@@ -6,6 +6,17 @@ scenarios remain release gates; see each item's validation section.
 Companion: [Performance implementation plan](Performance-Implementation-Plan.md).
 Historical measurements: [Performance.md](Performance.md).
 
+## Floating-overlay eligibility architecture
+
+[Issue #15](https://github.com/lander16/voz-local/issues/15) tracks mandatory
+input-method visibility and focused-editor eligibility, replacing the always-visible
+preference. The same eligibility boundary governs presentation, recording start,
+session cancellation, and insertion. Interactive-window metadata provides keyboard
+and window ownership signals; it does not establish bank or Play Protect acceptance.
+Research, capability tradeoffs, and the device protocol are in
+[Floating overlay safety](docs/floating-overlay-safety.md). Execution progress and
+outstanding release checks belong to the issue.
+
 ## September 7 review follow-up
 
 Validation: 199 host tests passed and Android debug lint completed with zero
