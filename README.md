@@ -167,6 +167,14 @@ removed; its saved value cannot bypass the requirement.
 
 Models are downloaded on-demand from Hugging Face directly to `context.filesDir/models` and run offline:
 
+Experimental research: [Moonshine Spanish streaming](docs/moonshine-experiment-plan.md)
+is being evaluated against Whisper Small q8_0 under [issue #11](https://github.com/lander16/voz-local/issues/11).
+It is not currently a production model option; inclusion requires Pixel latency,
+accuracy and lifecycle evidence. See [Performance.md](Performance.md) for findings.
+Initial [Pixel screening](docs/validation/2026-09-21-moonshine/README.md) found lower
+complete-clip inference latency for both candidates; accuracy and streaming
+validation remain open before production inclusion.
+
 | Model ID | Weight File | Approx. Download | Language | Quantization | Selection Notes |
 |---|---|---:|---|---|---|
 | `whisper_base` *(default)* | `ggml-base-q8_0.bin` | ~78 MB | Multilingual | q8_0 | Default starting point; compare against Tiny and Small on representative audio. |

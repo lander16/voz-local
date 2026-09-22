@@ -1,0 +1,64 @@
+{
+  "schema": "moonshine-validation-v1",
+  "app_commit": "859d8c8",
+  "moonshine_version": "0.1.5",
+  "moonshine_aar_sha256": "ee2d95c21150683c743db8f3aef66281fd5408bcefc94be3ca1d2545ada1f571",
+  "timestamp_epoch_ms": 1790041979951,
+  "model": "small-es",
+  "language": "es",
+  "architecture": 4,
+  "iterations_requested": 10,
+  "pcm_sha256": "23b8db3cdc813839c01bc4d7f7920a780de5f078a91a1fd67184c8acea81f25a",
+  "model_manifest_sha256": "c1206c016b82b8795b6bbd1a88a4b23726e56b77fc839d597b7330a6f5b98932",
+  "native_header_version": 30000,
+  "pcm_samples": 160000,
+  "sample_rate": 16000,
+  "runtime": {
+    "sdk": 37,
+    "device": "Pixel 8 Pro",
+    "build": "CP2A.260805.005",
+    "battery_saver": false,
+    "thermal_status": 0,
+    "charging": false
+  },
+  "streaming": {
+    "status": "pending",
+    "reason": "complete-clip smoke only"
+  },
+  "cold_load_ms": 721,
+  "warmup_ms": 1815,
+  "warm_inference_ms": [
+    1799,
+    1919,
+    1842,
+    1925,
+    1879,
+    1800,
+    1868,
+    1882,
+    1907,
+    1895
+  ],
+  "failure": null,
+  "close_failure": null,
+  "runtime_after": {
+    "sdk": 37,
+    "device": "Pixel 8 Pro",
+    "build": "CP2A.260805.005",
+    "battery_saver": false,
+    "thermal_status": 0,
+    "charging": false
+  },
+  "hypotheses_nonempty": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ]
+}

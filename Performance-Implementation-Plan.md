@@ -319,6 +319,15 @@ and alternative ASR families require independent provenance, licensing, multilin
 tokenizer, timestamp, and accuracy validation. Keep the current GGML CPU engine and
 models as the fallback on unsupported devices.
 
+Alternative CPU engines are a separate branch of P11 and do not require a Tensor
+NPU runtime. The [Moonshine Spanish streaming experiment](docs/moonshine-experiment-plan.md)
+specifies validation-only Tiny/Small screening against Whisper Small q8_0,
+verified multi-file assets, real-time streaming versus offline timing, and P02
+accuracy gates. Introduce a production engine abstraction and opt-in catalog only
+after measured latency, accuracy, lifecycle and resource gates pass. Track progress
+in [#11](https://github.com/lander16/voz-local/issues/11); missing representative
+corpus evidence in [#2](https://github.com/lander16/voz-local/issues/2) blocks promotion.
+
 ## Definition of done
 
 Every optimization must have:

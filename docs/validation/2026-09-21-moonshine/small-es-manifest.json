@@ -1,0 +1,63 @@
+{
+  "model": "small-es",
+  "runtime": "0.1.5",
+  "upstreamRevision": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+  "files": [
+    {
+      "name": "adapter.ort",
+      "size": 2869296,
+      "sha256": "04b54114c8aab534222922640f7ca0882948ff9f6ed76777f6e184e55a8e8b15",
+      "crc32c": "ZCOnJw==",
+      "url": "https://download.moonshine.ai/model/small-streaming-es/quantized_26_08_24/adapter.ort"
+    },
+    {
+      "name": "cross_kv.ort",
+      "size": 5358752,
+      "sha256": "4bfd0a641d72ccdae22751f86bbb2e25ff70c1fba4f81213f2415a1accff9618",
+      "crc32c": "B6G3LA==",
+      "url": "https://download.moonshine.ai/model/small-streaming-es/quantized_26_08_24/cross_kv.ort"
+    },
+    {
+      "name": "decoder_kv.ort",
+      "size": 61314512,
+      "sha256": "5b77c3d6baf801ef925a5bc54d7eb3db0c35ebbb86f8eaf5390d7f5bb42fef37",
+      "crc32c": "Q6TnrQ==",
+      "url": "https://download.moonshine.ai/model/small-streaming-es/quantized_26_08_24/decoder_kv.ort"
+    },
+    {
+      "name": "encoder.ort",
+      "size": 44358376,
+      "sha256": "a9b8d6d5d9348d0e319cceffdb0196ef622df8e4e9f3fb4797dcd8dfafd50857",
+      "crc32c": "EYLK1A==",
+      "url": "https://download.moonshine.ai/model/small-streaming-es/quantized_26_08_24/encoder.ort"
+    },
+    {
+      "name": "frontend.model.ort",
+      "size": 26776,
+      "sha256": "69c76287f49db365aa278d4908ec450e69ca1b4bfb7e836159d963d623ee0c13",
+      "crc32c": "bvdZXg==",
+      "url": "https://download.moonshine.ai/model/small-streaming-es/quantized_26_08_24/frontend.model.ort"
+    },
+    {
+      "name": "frontend.weights.ort",
+      "size": 7769280,
+      "sha256": "2f5a0eb5f3004c9447810d74274a352746319a32144e31d95ef410f425b84dda",
+      "crc32c": "ITuX4A==",
+      "url": "https://download.moonshine.ai/model/small-streaming-es/quantized_26_08_24/frontend.weights.ort"
+    },
+    {
+      "name": "streaming_config.json",
+      "size": 512,
+      "sha256": "12d16c7f5ea6734d197b79baf47914ea7e996d6fca8d303a19aca10d0617cecc",
+      "crc32c": "Y/oEHw==",
+      "url": "https://download.moonshine.ai/model/small-streaming-es/quantized_26_08_24/streaming_config.json"
+    },
+    {
+      "name": "tokenizer.bin",
+      "size": 102888,
+      "sha256": "5fbb7d4314dcb18e03c5f975609e4a4cd572b22b01d2b2accb1b3e6830696f36",
+      "crc32c": "/7v8NQ==",
+      "url": "https://download.moonshine.ai/model/small-streaming-es/quantized_26_08_24/tokenizer.bin"
+    }
+  ]
+}

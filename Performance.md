@@ -70,7 +70,9 @@ benchmark runner or exporter.
 
 ### Configuration
 
-The following is the only published device measurement set:
+The following is the original exploratory Whisper measurement set. The later
+[Moonshine screening](docs/validation/2026-09-21-moonshine/README.md) uses different
+settings and a newer OS build; compare candidates within each set, not across them.
 
 | Field | Value |
 |---|---|
@@ -219,8 +221,47 @@ Available TFLite-style candidates need different treatment:
 | Other multilingual ASR models | Potential research candidates, but none is currently accepted as a drop-in, TPU-validated Spanish engine for VozLocal. |
 
 NPU work should begin only with a concrete model license, conversion pipeline,
-device coverage policy, and an accuracy corpus. It has the strongest potential
-for sustained efficiency, but the highest model/runtime maintenance cost.
+device coverage policy, and an accuracy corpus. It may improve sustained
+efficiency, but requires a separate runtime integration and validation effort.
+
+### Moonshine Spanish streaming CPU experiment (2026-09-21)
+
+The older TFLite row above describes that particular release, not all current
+Moonshine models. Moonshine Voice v0.1.5 now publishes MIT-licensed Spanish Small
+and Tiny Streaming bundles. The pinned native catalog resolves them to the
+official `download.moonshine.ai` CDN; the older Hugging Face asset mirror omits
+them. Upstream bundle metadata totals approximately 121.8 MB for Small and
+32.3 MB for Tiny. These are download sizes, not peak runtime memory.
+
+The published `ai.moonshine:moonshine-voice:0.1.5` Android AAR was inspected and
+contains arm64-v8a, armeabi-v7a and x86_64 native libraries. Its SHA-256 is
+`ee2d95c21150683c743db8f3aef66281fd5408bcefc94be3ca1d2545ada1f571`.
+This establishes an Android CPU experiment route, not Tensor TPU compatibility
+or a measured advantage over Whisper. The PCM API permits reusing VozLocal's
+recording path. `stopStream` flushes final transcription; cancellation latency
+and safe native ownership still require explicit validation.
+
+The [experiment plan](docs/moonshine-experiment-plan.md) defines artifact checks,
+an isolated validation runner, paired Pixel measurements and opt-in promotion
+gates. Track execution in [#11](https://github.com/lander16/voz-local/issues/11),
+with representative accuracy dependent on [#2](https://github.com/lander16/voz-local/issues/2).
+Publisher WER and model-size claims must not be substituted for local accuracy,
+end-to-end latency or energy measurements. Whisper remains the production engine.
+
+Initial Pixel execution is now verified. On the same ten-second Spanish fixture,
+ten warm complete-clip calls measured medians of **2.764 s** for Whisper Small q8_0
+(Automatic/I8MM, four threads), **1.881 s** for Moonshine Spanish Small and
+**0.929 s** for Tiny (SDK defaults). This is approximately 32% and 66% less inference
+time, respectively, on this workload. These are promising screening results, not
+streaming/Stop-to-result timings or verified accuracy improvements. Retained
+[reports and limitations](docs/validation/2026-09-21-moonshine/README.md) include
+model hashes, run order, settings, APK identities and the initial Compatibility
+control, which must not be confused with the optimized baseline. Corpus accuracy,
+cancellation, sustained memory/energy and release integration remain unvalidated.
+
+Sources: [pinned model catalog](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-model-catalog.cpp),
+[model metadata](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-model-file-metadata.generated.cpp),
+[models and licenses](https://moonshine-voice.readthedocs.io/en/latest/models/available-models/).
 
 ## Future benchmark plan
 
