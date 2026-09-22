@@ -165,15 +165,27 @@ removed; its saved value cannot bypass the requirement.
 
 ## 📦 Supported Local Speech Models
 
-Models are downloaded on-demand from Hugging Face directly to `context.filesDir/models` and run offline:
+Whisper models are downloaded on-demand from Hugging Face to app-private storage and run offline.
 
-Experimental research: [Moonshine Spanish streaming](docs/moonshine-experiment-plan.md)
-is being evaluated against Whisper Small q8_0 under [issue #11](https://github.com/lander16/voz-local/issues/11).
-It is not currently a production model option; inclusion requires Pixel latency,
-accuracy and lifecycle evidence. See [Performance.md](Performance.md) for findings.
+Experimental options: **Moonshine Tiny Spanish** (~32.3 MB) and **Moonshine Small
+Spanish** (~121.8 MB) can be explicitly downloaded and selected in Models. Their
+eight-file bundles come from the official Moonshine CDN; every file is checked
+against pinned size and SHA-256 before activation and loading. Whisper remains the
+default and is never automatically replaced by a Moonshine download.
+
+Choose Spanish explicitly (not automatic language detection). This first integration
+supports complete-clip live dictation of at most **30 seconds**, without incremental
+previews, shared-file transcription or Whisper calibration. Longer clips are rejected,
+not silently truncated. Cancelling discards the result; because the SDK has no native
+abort, another request may need to wait for the background computation to finish.
+Models are closed after each request. No extra accessibility permissions are added.
+
 Initial [Pixel screening](docs/validation/2026-09-21-moonshine/README.md) found lower
-complete-clip inference latency for both candidates; accuracy and streaming
-validation remain open before production inclusion.
+complete-clip inference latency, but representative accuracy, sustained performance
+and real-time streaming remain unverified. These are opt-in experiments, not a claim
+of better accuracy or end-to-end speed. See the [integration plan](docs/moonshine-experiment-plan.md),
+[Pixel integration checks](docs/validation/2026-09-22-moonshine-integration/README.md),
+[findings](Performance.md) and [issue #11](https://github.com/lander16/voz-local/issues/11).
 
 | Model ID | Weight File | Approx. Download | Language | Quantization | Selection Notes |
 |---|---|---:|---|---|---|

@@ -1,16 +1,43 @@
 # Moonshine Spanish streaming experiment
 
-Architecture and acceptance plan, 2026-09-21. Execution, decisions and retained
+Architecture and acceptance plan, updated 2026-09-22. Execution, decisions and retained
 evidence belong to [P11 / issue #11](https://github.com/lander16/voz-local/issues/11).
 Representative accuracy and promotion depend on [P02 / issue #2](https://github.com/lander16/voz-local/issues/2).
+
+## Authorized app inclusion amendment
+
+After the successful Pixel screening, the user explicitly requested app inclusion.
+Implement a clearly labeled experimental option now; the earlier requirement to
+keep all code test-only is superseded for this opt-in release. The accuracy and
+long-term performance gates below still govern recommendation/default promotion.
+Whisper remains default and the available fallback, with no automatic selection
+of Moonshine on download, deletion of another model, or missing-model recovery.
+
+Implementation ownership: Luna medium agents handle pinned transactional bundles,
+the serialized runtime adapter, and EN/ES model cards. Primary handles repository
+routing, safety/error handling, tests, release validation and documentation.
+
+Initial contract: Spanish-only `moonshine_tiny_es` / `moonshine_small_es`, explicit
+user download and model selection, complete-clip live dictation up to 30 seconds,
+no shared-file transcription or incremental preview. Unsupported language,
+duration and Whisper-only calibration are rejected with localized messages.
+Do not silently change language or switch engines when a request fails.
+
+Use pinned v0.1.5 native binaries and the retained SHA-256 manifests. Load only
+verified complete bundles; serialize native inference and destruction, discard
+cancelled results, keep at most one engine active, and reject additional requests
+while a cancelled native operation is still draining. Do not claim immediate native
+abort where the SDK has none. Test cancellation/recovery and model switching,
+then run build/unit/lint/release packaging checks and device smoke checks. Keep
+permissions and accessibility eligibility unchanged. Track completed work in #11.
 
 ## Decision and scope
 
 Evaluate Spanish Moonshine Small Streaming and Tiny Streaming on the Pixel 8 Pro
 against Whisper Small q8_0. Start with CPU execution in the separate validation
 package. This is an alternative ASR engine experiment, not Tensor TPU support.
-Keep Whisper as the shipping engine until the gates below pass; a successful
-smoke test alone does not justify adding a model to the production catalog.
+Keep Whisper as the default engine until the gates below pass. The authorized
+amendment above permits experimental opt-in availability, not default promotion.
 
 Prioritize Small for accuracy and Tiny for latency/memory. Evaluate corresponding
 English models only after Spanish feasibility, and explicitly test language
@@ -54,9 +81,10 @@ are not VozLocal accuracy measurements.
 
 ## P1: isolated validation implementation
 
-- Add the pinned runtime only to the instrumentation test APK. Keep its runner and
-  dependencies out of production. Use the existing side-by-side validation package and
-  explicit fixture staging; do not replace the user's signed app for screening.
+- Initial screening kept the pinned runtime only in the instrumentation APK.
+  The authorized app integration now includes it in the application; keep benchmark
+  runners and fixture staging test-only. Use the side-by-side validation package
+  rather than replacing the user's signed app for screening.
 - Use `Transcriber.loadFromFiles`, supplied mono 16 kHz float PCM and serialized
   native operations. Start with complete-clip decoding for a smoke test, then
   replay PCM in bounded chunks at recording cadence for streaming.
@@ -71,8 +99,8 @@ are not VozLocal accuracy measurements.
 
 Relevant integration seams: `WhisperEngine`, `DictationRepository`,
 `TranscriptionBenchmark.kt`, and `PixelNativeValidationTest`. Begin with a parallel
-validation runner; defer a broad production engine abstraction until the candidate
-has earned integration.
+validation runner; the opt-in integration adds a narrow parallel adapter rather
+than a broad rewrite of the existing Whisper engine.
 
 ## P1: experiment protocol
 
@@ -125,7 +153,11 @@ Missing corpus, lifecycle or resource evidence means further investigation even
 if timing looks excellent. The current narrow Whisper measurements are context,
 not a substitute for a fresh paired baseline.
 
-## P2: production opt-in, only after the gates pass
+## P2: app integration and broader promotion
+
+The amendment permits the bounded experimental subset now. Streaming and broader
+recommendation remain gated; the items below describe the full target, not a claim
+that every capability is implemented.
 
 1. Introduce engine-neutral session/result/capability types with explicit language,
    streaming, timestamp and prompt support. Adapt Whisper without behavior changes.

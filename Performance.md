@@ -246,7 +246,11 @@ an isolated validation runner, paired Pixel measurements and opt-in promotion
 gates. Track execution in [#11](https://github.com/lander16/voz-local/issues/11),
 with representative accuracy dependent on [#2](https://github.com/lander16/voz-local/issues/2).
 Publisher WER and model-size claims must not be substituted for local accuracy,
-end-to-end latency or energy measurements. Whisper remains the production engine.
+end-to-end latency or energy measurements. Whisper remains the default engine;
+Spanish Tiny/Small are now explicitly selected experimental alternatives (see README).
+Their first app path uses complete clips up to 30 seconds, not streaming previews.
+Per-request verification/loading/teardown adds costs outside the screening inference
+timings below, so these figures are not promises of app Stop-to-result latency.
 
 Initial Pixel execution is now verified. On the same ten-second Spanish fixture,
 ten warm complete-clip calls measured medians of **2.764 s** for Whisper Small q8_0
@@ -257,7 +261,13 @@ streaming/Stop-to-result timings or verified accuracy improvements. Retained
 [reports and limitations](docs/validation/2026-09-21-moonshine/README.md) include
 model hashes, run order, settings, APK identities and the initial Compatibility
 control, which must not be confused with the optimized baseline. Corpus accuracy,
-cancellation, sustained memory/energy and release integration remain unvalidated.
+sustained memory/energy and representative accuracy remain unvalidated. Cancellation
+discards results but cannot abort Moonshine's native computation; engine switching and
+deletion must drain that work before releasing its files. Track integration validation
+separately in #11 rather than treating the screening run as app lifecycle evidence.
+The [Pixel integration checks](docs/validation/2026-09-22-moonshine-integration/README.md)
+exercise both models through the app repository without adding speed or accuracy
+measurements.
 
 Sources: [pinned model catalog](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-model-catalog.cpp),
 [model metadata](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-model-file-metadata.generated.cpp),
