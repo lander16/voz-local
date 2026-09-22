@@ -189,8 +189,8 @@ dependencies {
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
-  // P11 experiment only: packaged in the instrumentation APK, never the app.
-  androidTestImplementation("ai.moonshine:moonshine-voice:0.1.5")
+  // Explicit experimental Spanish dictation; Whisper stays the default engine.
+  implementation("ai.moonshine:moonshine-voice:0.1.5")
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)

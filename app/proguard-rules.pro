@@ -1,5 +1,7 @@
 # JNI bridge
 -keep class com.whispercpp.whisper.** { *; }
+# Moonshine JNI accesses transcript fields and bridge classes by their Java names.
+-keep class ai.moonshine.voice.** { *; }
 
 # Room
 -keep class dev.sebastian.vozlocal.data.model.** { *; }

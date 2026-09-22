@@ -2,6 +2,7 @@ package dev.sebastian.vozlocal.ui.viewmodel
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import dev.sebastian.vozlocal.R
 import dev.sebastian.vozlocal.audio.AudioRecorder
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.data.repository.DictationRepository
@@ -64,6 +65,16 @@ class MainViewModelFlowStabilityTest {
         assertNotNull(viewModel.downloadUiStateMap)
         assertEquals(emptyMap<String, Float>(), viewModel.downloadProgressMap.value)
         assertEquals(emptyMap<String, ModelDownloadUiState>(), viewModel.downloadUiStateMap.value)
+    }
+
+    @Test
+    fun moonshineLanguageGuardRejectsBeforeRecording() {
+        repository.saveLanguage("en")
+        val error = repository.liveModelError("moonshine_tiny_es")
+        assertEquals(
+            ApplicationProvider.getApplicationContext<Context>().getString(R.string.moonshine_language_error),
+            error
+        )
     }
 
     @Test

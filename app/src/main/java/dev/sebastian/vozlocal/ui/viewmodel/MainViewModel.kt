@@ -18,6 +18,7 @@ import dev.sebastian.vozlocal.polish.TextPolishEngine
 import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import dev.sebastian.vozlocal.whisper.CpuBackendManager
 import dev.sebastian.vozlocal.whisper.CpuBackendMode
+import dev.sebastian.vozlocal.moonshine.MoonshineModels
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.ArrayList
@@ -108,7 +109,7 @@ class MainViewModel(
     val selectedModel: StateFlow<DictationModel?> = repository.allModels
         .map { list ->
             list.find { it.isSelected && it.isDownloaded }
-                ?: list.firstOrNull { it.isDownloaded }
+                ?: list.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
                 ?: list.find { it.isSelected }
                 ?: list.firstOrNull()
         }
@@ -209,6 +210,9 @@ class MainViewModel(
         cpuCalibrationRunning.value = true
         cpuCalibrationJob = viewModelScope.launch {
             try {
+                check(!MoonshineModels.isMoonshine(selectedModel.value?.id.orEmpty())) {
+                    appContext.getString(dev.sebastian.vozlocal.R.string.moonshine_calibration_error)
+                }
                 cpuCalibrationProgress.value = appContext.getString(dev.sebastian.vozlocal.R.string.cpu_calibration_loading)
                 val samples = dev.sebastian.vozlocal.audio.AudioDecoder(appContext).decodeToPcm16k(uri)
                 val threads = repository.calibrateCpu(samples) { done, total ->
@@ -529,7 +533,7 @@ class MainViewModel(
         if (selected != null && selected.isDownloaded) return selected
         val list = repository.allModels.first()
         return list.find { it.isSelected && it.isDownloaded }
-            ?: list.firstOrNull { it.isDownloaded }
+            ?: list.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
     }
 
     private fun startRecording() {
@@ -542,6 +546,10 @@ class MainViewModel(
             val model = getActiveDownloadedModel()
             if (model == null) {
                 _currentLiveTranscription.value = "⚠️ Speech model not downloaded yet. Please download a model from the Models tab to start dictating."
+                return@launch
+            }
+            repository.liveModelError(model.id)?.let { error ->
+                _currentLiveTranscription.value = error
                 return@launch
             }
 
@@ -637,7 +645,16 @@ class MainViewModel(
                 return@launch
             }
 
-            _currentLiveTranscription.value = "Running local Whisper model inference..."
+            repository.liveModelError(session.model.id, samples.size)?.let { error ->
+                if (isCurrentDictation(session)) {
+                    _currentLiveTranscription.value = error
+                    _liveWaveform.value = emptyList()
+                    activeDictationSession = null
+                }
+                return@launch
+            }
+
+            _currentLiveTranscription.value = repository.inferenceRunningLabel()
 
             dictationJob = launch(Dispatchers.Default) {
             try {
@@ -714,7 +731,7 @@ class MainViewModel(
                 Log.e(TAG, "Dictation failed", e)
                 withContext(Dispatchers.Main) {
                     if (isCurrentDictation(session)) {
-                        _currentLiveTranscription.value = "Transcription failed. Please try again."
+                        _currentLiveTranscription.value = e.message ?: "Transcription failed. Please try again."
                         _liveWaveform.value = emptyList()
                         activeDictationSession = null
                     }

@@ -58,6 +58,14 @@ data class ModelPresentation(
 )
 
 fun modelPresentation(modelId: String): ModelPresentation = when (modelId) {
+    "moonshine_tiny_es" -> ModelPresentation(
+        R.string.model_name_moonshine_tiny_es, R.string.model_badge_experimental,
+        R.string.model_language_spanish_only, "—", R.string.model_description_moonshine_tiny_es,
+    )
+    "moonshine_small_es" -> ModelPresentation(
+        R.string.model_name_moonshine_small_es, R.string.model_badge_experimental,
+        R.string.model_language_spanish_only, "—", R.string.model_description_moonshine_small_es,
+    )
     "whisper_tiny" -> ModelPresentation(
         R.string.model_name_tiny_q8, R.string.model_badge_smallest_download,
         R.string.model_language_multilingual, "q8_0", R.string.model_description_tiny_q8,

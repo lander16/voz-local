@@ -26,6 +26,8 @@ class ModelPresentationTest {
             "whisper_small_q5_1" to Triple(R.string.model_badge_smaller_small, R.string.model_language_multilingual, "q5_1"),
             "whisper_large_v3_turbo" to Triple(R.string.model_badge_turbo, R.string.model_language_multilingual, "q5_0"),
             "whisper_medium" to Triple(R.string.model_badge_largest_download, R.string.model_language_multilingual, "q8_0"),
+            "moonshine_tiny_es" to Triple(R.string.model_badge_experimental, R.string.model_language_spanish_only, "—"),
+            "moonshine_small_es" to Triple(R.string.model_badge_experimental, R.string.model_language_spanish_only, "—"),
         )
 
         expected.forEach { (id, values) ->
@@ -63,6 +65,10 @@ class ModelPresentationTest {
             R.string.model_download_downloading,
             R.string.model_verified_sha256,
             R.string.model_delete_title,
+            R.string.model_badge_experimental,
+            R.string.model_language_spanish_only,
+            R.string.model_description_moonshine_tiny_es,
+            R.string.model_description_moonshine_small_es,
         )
 
         ids.forEach { id ->
@@ -70,6 +76,17 @@ class ModelPresentationTest {
             assertTrue(spanish.getString(id).isNotBlank())
             assertNotEquals(english.getString(id), spanish.getString(id))
         }
+    }
+
+    @Test
+    fun moonshineNamesExplainSpanishVariantInBothLocales() {
+        val base = ApplicationProvider.getApplicationContext<Context>()
+        val english = localizedContext(base, Locale.ENGLISH)
+        val spanish = localizedContext(base, Locale.forLanguageTag("es"))
+        assertEquals("Moonshine Tiny Spanish (Experimental)", english.getString(R.string.model_name_moonshine_tiny_es))
+        assertEquals("Moonshine Small Spanish (Experimental)", english.getString(R.string.model_name_moonshine_small_es))
+        assertEquals("Moonshine Tiny Español (Experimental)", spanish.getString(R.string.model_name_moonshine_tiny_es))
+        assertEquals("Moonshine Small Español (Experimental)", spanish.getString(R.string.model_name_moonshine_small_es))
     }
 
     private fun localizedContext(context: Context, locale: Locale): Context {

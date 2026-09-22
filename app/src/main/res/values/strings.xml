@@ -82,6 +82,8 @@
     <string name="model_name_turbo_q5">Whisper Large v3 Turbo q5_0</string>
     <string name="model_name_medium_q8">Whisper Medium q8_0</string>
     <string name="model_name_local">Local model</string>
+    <string name="model_name_moonshine_tiny_es">Moonshine Tiny Spanish (Experimental)</string>
+    <string name="model_name_moonshine_small_es">Moonshine Small Spanish (Experimental)</string>
     <string name="model_badge_smallest_download">Smallest download</string>
     <string name="model_badge_default">Default</string>
     <string name="model_badge_english_only">English only</string>
@@ -90,6 +92,7 @@
     <string name="model_badge_turbo">Turbo checkpoint</string>
     <string name="model_badge_largest_download">Largest download</string>
     <string name="model_badge_local">Local model</string>
+    <string name="model_badge_experimental">Experimental · opt-in</string>
     <string name="model_description_tiny_q8">Useful when storage and memory are constrained; recognition results can differ from larger models.</string>
     <string name="model_description_base_q8">Default starting point. Compare it with Tiny or Small using recordings representative of your voice.</string>
     <string name="model_description_base_en_q8">English-only checkpoint. Do not select it for Spanish or multilingual dictation.</string>
@@ -98,6 +101,9 @@
     <string name="model_description_turbo_q5">Substantial storage and memory requirements. Benchmark it locally before making it the default.</string>
     <string name="model_description_medium_q8">Intended for devices with ample storage and memory; sustained performance must be measured locally.</string>
     <string name="model_description_unknown">Recognition quality and transcription time depend on the device, audio, and decoding settings.</string>
+    <string name="model_language_spanish_only">Spanish only</string>
+    <string name="model_description_moonshine_tiny_es">Experimental Spanish-only model for dictation clips up to 30 seconds. Approximately 32 MB. Whisper remains the default; no live previews or file transcription yet.</string>
+    <string name="model_description_moonshine_small_es">Experimental Spanish-only model for dictation clips up to 30 seconds. Approximately 122 MB. Whisper remains the default; no live previews or file transcription yet.</string>
     <string name="model_delete_description">Delete %1$s</string>
     <string name="model_redownload_description">Download %1$s again</string>
     <string name="model_delete_title">Delete model?</string>
@@ -112,6 +118,14 @@
     <string name="model_verified_sha256">Verified (SHA-256)</string>
     <string name="model_verified_transport">Verified (transport and size)</string>
     <string name="model_unverified">Unverified</string>
+    <string name="moonshine_language_error">This experimental model supports Spanish only. Set the language to Spanish or select Whisper.</string>
+    <string name="moonshine_duration_error">Moonshine currently supports dictation up to 30 seconds. Use Whisper for longer recordings.</string>
+    <string name="moonshine_file_error">File transcription currently requires a Whisper model.</string>
+    <string name="moonshine_calibration_error">CPU calibration currently requires a Whisper model.</string>
+    <string name="moonshine_busy_error">The previous transcription is finishing. Please try again shortly.</string>
+    <string name="moonshine_model_missing">Download this Moonshine model again before dictating.</string>
+    <string name="speech_model_missing">Download a speech model before dictating.</string>
+    <string name="inference_running_generic">Transcribing on device…</string>
     <string name="setup_model_downloaded">Model “%1$s” (%2$d MB) is stored locally and ready for offline transcription.</string>
     <string name="setup_model_download_prompt" formatted="false">VozLocal transcribes on-device without cloud servers. Download the default model (Whisper Base q8_0, approximately 78 MB) to enable speech recognition.</string>
     <string name="cpu_calibration_description">Optional CPU calibration: choose a 3–30 second speech clip. Runs locally for up to 10 minutes. Turn battery saver off and let the phone cool first. Keep VozLocal open; do not record while calibrating. Saves a profile only if candidate transcripts match the baseline.</string>

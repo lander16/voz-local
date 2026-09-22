@@ -83,6 +83,8 @@
     <string name="model_name_turbo_q5">Whisper Large v3 Turbo q5_0</string>
     <string name="model_name_medium_q8">Whisper Medium q8_0</string>
     <string name="model_name_local">Modelo local</string>
+    <string name="model_name_moonshine_tiny_es">Moonshine Tiny Español (Experimental)</string>
+    <string name="model_name_moonshine_small_es">Moonshine Small Español (Experimental)</string>
     <string name="model_badge_smallest_download">Descarga más pequeña</string>
     <string name="model_badge_default">Predeterminado</string>
     <string name="model_badge_english_only">Solo inglés</string>
@@ -91,6 +93,7 @@
     <string name="model_badge_turbo">Modelo Turbo</string>
     <string name="model_badge_largest_download">Descarga más grande</string>
     <string name="model_badge_local">Modelo local</string>
+    <string name="model_badge_experimental">Experimental · activación opcional</string>
     <string name="model_description_tiny_q8">Útil cuando el almacenamiento y la memoria son limitados; los resultados pueden diferir de los modelos más grandes.</string>
     <string name="model_description_base_q8">Punto de partida predeterminado. Compáralo con Tiny o Small usando grabaciones representativas de tu voz.</string>
     <string name="model_description_base_en_q8">Modelo exclusivo para inglés. No lo selecciones para dictado en español o multilingüe.</string>
@@ -99,6 +102,9 @@
     <string name="model_description_turbo_q5">Requiere bastante almacenamiento y memoria. Mídelo localmente antes de convertirlo en predeterminado.</string>
     <string name="model_description_medium_q8">Pensado para dispositivos con suficiente almacenamiento y memoria; el rendimiento sostenido debe medirse localmente.</string>
     <string name="model_description_unknown">La calidad y el tiempo de transcripción dependen del dispositivo, el audio y la configuración de decodificación.</string>
+    <string name="model_language_spanish_only">Solo español</string>
+    <string name="model_description_moonshine_tiny_es">Modelo experimental solo para español y clips de dictado de hasta 30 segundos. Aproximadamente 32 MB. Whisper sigue siendo el predeterminado; todavía no hay vistas previas en vivo ni transcripción de archivos.</string>
+    <string name="model_description_moonshine_small_es">Modelo experimental solo para español y clips de dictado de hasta 30 segundos. Aproximadamente 122 MB. Whisper sigue siendo el predeterminado; todavía no hay vistas previas en vivo ni transcripción de archivos.</string>
     <string name="model_delete_description">Eliminar %1$s</string>
     <string name="model_redownload_description">Volver a descargar %1$s</string>
     <string name="model_delete_title">¿Eliminar modelo?</string>
@@ -113,6 +119,14 @@
     <string name="model_verified_sha256">Verificado (SHA-256)</string>
     <string name="model_verified_transport">Verificado (transporte y tamaño)</string>
     <string name="model_unverified">Sin verificar</string>
+    <string name="moonshine_language_error">Este modelo experimental solo admite español. Cambia el idioma a español o selecciona Whisper.</string>
+    <string name="moonshine_duration_error">Moonshine admite actualmente dictados de hasta 30 segundos. Usa Whisper para grabaciones más largas.</string>
+    <string name="moonshine_file_error">La transcripción de archivos requiere actualmente un modelo Whisper.</string>
+    <string name="moonshine_calibration_error">La calibración de CPU requiere actualmente un modelo Whisper.</string>
+    <string name="moonshine_busy_error">La transcripción anterior está terminando. Vuelve a intentarlo en unos instantes.</string>
+    <string name="moonshine_model_missing">Vuelve a descargar este modelo Moonshine antes de dictar.</string>
+    <string name="speech_model_missing">Descarga un modelo de voz antes de dictar.</string>
+    <string name="inference_running_generic">Transcribiendo en el dispositivo…</string>
     <string name="setup_model_downloaded">El modelo “%1$s” (%2$d MB) está guardado localmente y listo para transcribir sin conexión.</string>
     <string name="setup_model_download_prompt" formatted="false">VozLocal transcribe en el dispositivo sin servidores en la nube. Descarga el modelo predeterminado (Whisper Base q8_0, aproximadamente 78 MB) para activar el reconocimiento de voz.</string>
     <string name="cpu_calibration_description">Calibración de CPU opcional: elige un audio de voz de 3–30 segundos. Se ejecuta localmente durante un máximo de 10 minutos. Desactiva el ahorro de batería y deja enfriar el teléfono. Mantén VozLocal abierto; no grabes durante la calibración. Solo guarda un perfil si las transcripciones coinciden con la referencia inicial.</string>

@@ -39,6 +39,8 @@ import android.widget.TextView
 import android.widget.Toast
 import dev.sebastian.vozlocal.VozLocalApp
 import dev.sebastian.vozlocal.data.repository.DictationRepository
+import dev.sebastian.vozlocal.data.model.DictationModel
+import dev.sebastian.vozlocal.moonshine.MoonshineModels
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlin.math.max
@@ -69,6 +71,9 @@ class DictationAccessibilityService : AccessibilityService() {
     private var warmupJob: Job? = null
     private var recorderDiscardJob: Job? = null
     private var recorderStopJob: Job? = null
+    // Captured when recording begins so a settings/model change cannot reroute this audio.
+    private var recordingModel: DictationModel? = null
+    private var availableModels: List<DictationModel> = emptyList()
 
     // Process-wide singleton recorder (has an internal Mutex); shared with the main app.
     private val audioRecorder get() = (applicationContext as VozLocalApp).audioRecorder
@@ -276,8 +281,9 @@ class DictationAccessibilityService : AccessibilityService() {
         prefs.registerOnSharedPreferenceChangeListener(prefListener)
         serviceScope.launch {
             repository.allModels.collect { models ->
+                availableModels = models
                 val active = models.find { it.isSelected && it.isDownloaded }
-                    ?: models.firstOrNull { it.isDownloaded }
+                    ?: models.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
                 if (active?.id != lastWarmedModelId) {
                     lastWarmedModelId = null
                 }
@@ -606,6 +612,18 @@ class DictationAccessibilityService : AccessibilityService() {
                 return
             }
             val target = focusedEligibleTarget() ?: return
+            val models = availableModels
+            val model = models.find { it.isSelected && it.isDownloaded }
+                ?: models.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
+            if (model == null) {
+                Toast.makeText(this, getString(dev.sebastian.vozlocal.R.string.speech_model_missing), Toast.LENGTH_SHORT).show()
+                return
+            }
+            repository.liveModelError(model.id)?.let { error ->
+                Toast.makeText(this, error, Toast.LENGTH_SHORT).show()
+                return
+            }
+            recordingModel = model
             val session = AccessibilityDictationSession(
                 id = ++nextSessionId,
                 target = target,
@@ -665,6 +683,7 @@ class DictationAccessibilityService : AccessibilityService() {
                                 timerJob = null
                                 stopRecordingUI()
                                 activeSession = null
+                                recordingModel = null
                             }
                         }
                     }
@@ -680,6 +699,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 isRecording = false
                 stopRecordingUI()
                 if (isCurrentSession(session)) activeSession = null
+                recordingModel = null
                 return
             }
         } else {
@@ -706,32 +726,60 @@ class DictationAccessibilityService : AccessibilityService() {
                 val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
                 ownsRecorderSession = false
                 if (!isCurrentSession(session)) return@launch
+                // Snapshot the model before dispatching: model selection can change while this
+                // clip is decoding, but an in-flight clip must stay on its start-time model.
+                val sessionModel = recordingModel
                 processingJob = serviceScope.launch(Dispatchers.Default) {
-                val models = repository.allModels.first()
-                val selected = models.find { it.isSelected && it.isDownloaded }
-                    ?: models.firstOrNull { it.isDownloaded }
-                if (selected == null) {
-                    withContext(Dispatchers.Main) {
-                        if (isCurrentSession(session)) {
-                            stopRecordingUI()
-                            activeSession = null
+                    try {
+                        val selected = sessionModel
+                        if (selected == null || !selected.isDownloaded) {
+                            withContext(Dispatchers.Main) {
+                                if (isCurrentSession(session)) {
+                                    Toast.makeText(this@DictationAccessibilityService, getString(dev.sebastian.vozlocal.R.string.speech_model_missing), Toast.LENGTH_SHORT).show()
+                                    stopRecordingUI()
+                                    activeSession = null
+                                    recordingModel = null
+                                }
+                            }
+                            return@launch
+                        }
+                        val modelId = selected.id
+                        repository.liveModelError(modelId, samples.size)?.let { error ->
+                            withContext(Dispatchers.Main) {
+                                if (isCurrentSession(session)) {
+                                    Toast.makeText(this@DictationAccessibilityService, error, Toast.LENGTH_SHORT).show()
+                                    stopRecordingUI()
+                                    activeSession = null
+                                    recordingModel = null
+                                }
+                            }
+                            return@launch
+                        }
+                        val rawText = repository.transcribeAudio(samples, modelId)
+                        if (!isCurrentSession(session)) return@launch
+                        withContext(Dispatchers.Main) {
+                            if (!isCurrentSession(session)) return@withContext
+                            if (rawText.isNotEmpty()) {
+                                processAndPaste(session, rawText, selected.name)
+                            } else {
+                                stopRecordingUI()
+                                activeSession = null
+                                recordingModel = null
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Accessibility dictation failed", e)
+                        withContext(Dispatchers.Main) {
+                            if (isCurrentSession(session)) {
+                                Toast.makeText(this@DictationAccessibilityService, e.message ?: "Transcription failed. Please try again.", Toast.LENGTH_SHORT).show()
+                                stopRecordingUI()
+                                activeSession = null
+                                recordingModel = null
+                            }
                         }
                     }
-                    return@launch
-                }
-                val modelId = selected.id
-
-                val rawText = repository.transcribeAudio(samples, modelId)
-                if (!isCurrentSession(session)) return@launch
-                withContext(Dispatchers.Main) {
-                    if (!isCurrentSession(session)) return@withContext
-                    if (rawText.isNotEmpty()) {
-                        processAndPaste(session, rawText, selected.name)
-                    } else {
-                        stopRecordingUI()
-                        activeSession = null
-                    }
-                }
                 }
             }
         }
@@ -798,6 +846,7 @@ class DictationAccessibilityService : AccessibilityService() {
             if (!stillEligible) {
                 stopRecordingUI()
                 activeSession = null
+                recordingModel = null
                 return@withContext
             }
             val pasted = pasteTextToActiveInput(requireNotNull(session.target), processed)
@@ -807,6 +856,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 if (!AccessibilityTargetPolicy.matchesRecordingTarget(session.target, focusedEligibleTarget())) {
                     stopRecordingUI()
                     activeSession = null
+                    recordingModel = null
                     return@withContext
                 }
                 copyToClipboard(processed)
@@ -826,6 +876,7 @@ class DictationAccessibilityService : AccessibilityService() {
             )
             stopRecordingUI()
             activeSession = null
+            recordingModel = null
         }
     }
 
@@ -893,7 +944,7 @@ class DictationAccessibilityService : AccessibilityService() {
             try {
                 val models = repository.allModels.first()
                 val selected = models.find { it.isSelected && it.isDownloaded }
-                    ?: models.firstOrNull { it.isDownloaded }
+                    ?: models.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
                 val modelId = selected?.id ?: return@launch
 
                 if (lastWarmedModelId == modelId && repository.modelLoaded.value) {
@@ -920,6 +971,7 @@ class DictationAccessibilityService : AccessibilityService() {
             ensureRecorderDiscarded()
         }
         cancelActiveSession()
+        recordingModel = null
         clearTarget()
         // Do not call stopRecordingUI here: it re-reads eligibility while a loss is being handled.
         stopWaveformAnimation()
@@ -937,6 +989,7 @@ class DictationAccessibilityService : AccessibilityService() {
             ensureRecorderDiscarded()
         }
         cancelActiveSession()
+        recordingModel = null
         clearTarget()
         expandedPanel?.visibility = View.GONE
         floatingView?.visibility = View.GONE

@@ -4,5 +4,6 @@
     <include domain="file" path="."/>
     <include domain="database" path="."/>
     <exclude domain="file" path="models"/>
+    <exclude domain="file" path="moonshine"/>
     <exclude domain="database" path="vozlocal_database"/>
 </full-backup-content>

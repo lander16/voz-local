@@ -5,6 +5,7 @@
         <include domain="file" path="."/>
         <include domain="database" path="."/>
         <exclude domain="file" path="models"/>
+        <exclude domain="file" path="moonshine"/>
         <exclude domain="database" path="vozlocal_database"/>
     </cloud-backup>
     <device-transfer>
@@ -12,6 +13,7 @@
         <include domain="file" path="."/>
         <include domain="database" path="."/>
         <exclude domain="file" path="models"/>
+        <exclude domain="file" path="moonshine"/>
         <exclude domain="database" path="vozlocal_database"/>
     </device-transfer>
 </data-extraction-rules>
