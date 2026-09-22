@@ -8,7 +8,8 @@ integration evidence, not a new speed, accuracy, energy or bank-compatibility re
 
 `MoonshineAppIntegrationTest` ran against `dev.sebastian.vozlocal.validation` only.
 The signed production package was not replaced and no bank app was inspected.
-Both test methods passed: `OK (2 tests)`, instrumentation elapsed 61.936 seconds
+Both test methods passed on the committed implementation: `OK (2 tests)`,
+instrumentation elapsed 56.92 seconds
 (whole-test duration, **not** inference latency).
 
 For each model, the test downloaded its official pinned bundle through the app's
@@ -28,14 +29,12 @@ PCM SHA-256: `23b8db3cdc813839c01bc4d7f7920a780de5f078a91a1fd67184c8acea81f25a`.
 
 - Device: Pixel 8 Pro, ARM64, Android 17.
 - Build: `google/husky/husky:17/CP2A.260805.005/15828068:user/release-keys`.
-- Post-run state: Battery Saver off, unplugged, 94%, battery 33.6 °C,
+- Post-run state: Battery Saver off, unplugged, 79%, battery 32.8 °C,
   system thermal status 0/NONE. Pre-run state was not retained; do not use this
   smoke test for thermal or performance comparisons.
-- Source base: `6eee20167a3ab4b95669bde8e142cc993cbe3b58` plus the integration
-  changes committed alongside this evidence. A later test-only move-injection
-  seam and regression tests do not alter the normal device path.
+- App source commit: `b1a6dd2` (documentation changes do not alter the APK).
 - Validation APK SHA-256:
-  `38d77bd1a361a3f9a8b7aa8924c72ea8afd879cc7e1361fc41c907df216180df`.
+  `59079e773f59ff916ed6763c2cbac2123d75c9b424877fe0c5bc0fe84afed309`.
 - Instrumentation APK SHA-256:
   `de497548732289f52ff8137739cebfc8af5f5d1c131284ad4e5812f248ad2065`.
 
