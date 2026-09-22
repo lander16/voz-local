@@ -181,8 +181,9 @@ abort, another request may need to wait for the background computation to finish
 Models are closed after each request. No extra accessibility permissions are added.
 With Smart Punctuation enabled, Moonshine dictation adds a final period when its
 output ends in a word or number, while preserving any punctuation the model
-already supplied. This does not infer commas or sentence boundaries within an
-utterance. Spoken punctuation commands remain a separate opt-in setting.
+already supplied. It also pairs an explicit Spanish closing question mark with
+a missing opening ¿. This does not infer commas or sentence boundaries within
+an utterance. Spoken punctuation commands remain a separate opt-in setting.
 
 Initial [Pixel screening](docs/validation/2026-09-21-moonshine/README.md) found lower
 complete-clip inference latency, but representative accuracy, sustained performance

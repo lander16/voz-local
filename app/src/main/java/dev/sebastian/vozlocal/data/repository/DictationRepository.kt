@@ -1279,7 +1279,15 @@ class DictationRepository(
                 val rawSentences = line.split(REGEX_SENTENCE_SPLIT).toMutableList()
                 for (i in rawSentences.indices) {
                     val sentence = rawSentences[i].trim()
-                    if (sentence.isEmpty() || sentence.endsWith("?") || sentence.endsWith("!")) continue
+                    if (sentence.isEmpty() || sentence.endsWith("!")) continue
+                    if (sentence.endsWith("?")) {
+                        // The Spanish Moonshine models can emit only the closing mark.
+                        // Repair an explicit question without guessing new boundaries.
+                        if (MoonshineModels.isMoonshine(modelId.orEmpty()) && '¿' !in sentence) {
+                            rawSentences[i] = "¿$sentence"
+                        }
+                        continue
+                    }
 
                     // Check Spanish Question Intent
                     val isSpanishQuestion = REGEX_ES_QUESTION_START.containsMatchIn(sentence) || REGEX_ES_QUESTION_END.containsMatchIn(sentence)
@@ -1320,7 +1328,7 @@ class DictationRepository(
 
         // Moonshine can end a declarative utterance without punctuation. Only add
         // the final period when the user enabled smart punctuation; do not guess
-        // interior commas or alter questions, exclamations, or Whisper output.
+        // interior commas or change existing closing marks or Whisper output.
         if (smartPunctuation && MoonshineModels.isMoonshine(modelId.orEmpty()) &&
             result.lastOrNull()?.isLetterOrDigit() == true
         ) {

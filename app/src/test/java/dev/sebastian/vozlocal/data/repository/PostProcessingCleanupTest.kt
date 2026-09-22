@@ -51,6 +51,21 @@ class PostProcessingCleanupTest {
     }
 
     @Test
+    fun moonshineSmallRepairsMissingOpeningQuestionMark() = runTest {
+        val r = repo()
+        assertEquals("¿Como estas?", r.postProcessText("como estas?", true, true, false, false, modelId = "moonshine_small_es"))
+        assertEquals("Hola. ¿Como estas?", r.postProcessText("hola. como estas?", true, true, false, false, modelId = "moonshine_small_es"))
+        assertEquals("¿Como estas?", r.postProcessText("¿como estas?", true, true, false, false, modelId = "moonshine_small_es"))
+    }
+
+    @Test
+    fun questionMarkRepairDoesNotChangeWhisperOrDisabledPunctuation() = runTest {
+        val r = repo()
+        assertEquals("Como estas?", r.postProcessText("como estas?", true, true, false, false, modelId = "whisper_small"))
+        assertEquals("Como estas?", r.postProcessText("como estas?", false, true, false, false, modelId = "moonshine_small_es"))
+    }
+
+    @Test
     fun moonshineRespectsDisabledSmartPunctuation() = runTest {
         val result = repo().postProcessText(
             "hola mundo", false, true, false, false, modelId = "moonshine_small_es"
