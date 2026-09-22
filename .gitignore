@@ -27,3 +27,6 @@ debug.keystore
 *.jks
 *.keystore
 *.p12
+
+# Local experiment script bytecode; never part of benchmark evidence.
+/scripts/__pycache__/
