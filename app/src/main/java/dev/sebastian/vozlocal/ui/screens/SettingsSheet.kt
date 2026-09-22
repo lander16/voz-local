@@ -484,7 +484,7 @@ fun SettingsSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(text = "Smart punctuation", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                        Text(text = "Turns pauses into punctuation", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(text = "Cleans punctuation and adds a final period for Moonshine", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
                         checked = smartPunctuation,

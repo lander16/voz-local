@@ -1240,7 +1240,8 @@ class DictationRepository(
         autoCapitalize: Boolean,
         applyDict: Boolean,
         useAiPolisher: Boolean = false,
-        cleanupMode: CleanupMode = getCleanupMode()
+        cleanupMode: CleanupMode = getCleanupMode(),
+        modelId: String? = null
     ): String = withContext(Dispatchers.Default) {
         var result = text
 
@@ -1315,6 +1316,15 @@ class DictationRepository(
         // 5. Optional local rule-based "AI" polisher pass (filler removal, punctuation polish)
         if (useAiPolisher) {
             result = textPolishEngine.polish(result, getLanguage(), cleanupMode)
+        }
+
+        // Moonshine can end a declarative utterance without punctuation. Only add
+        // the final period when the user enabled smart punctuation; do not guess
+        // interior commas or alter questions, exclamations, or Whisper output.
+        if (smartPunctuation && MoonshineModels.isMoonshine(modelId.orEmpty()) &&
+            result.lastOrNull()?.isLetterOrDigit() == true
+        ) {
+            result += "."
         }
 
         result

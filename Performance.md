@@ -268,6 +268,11 @@ separately in #11 rather than treating the screening run as app lifecycle eviden
 The [Pixel integration checks](docs/validation/2026-09-22-moonshine-integration/README.md)
 exercise both models through the app repository without adding speed or accuracy
 measurements.
+Moonshine Small may omit a final period in ordinary dictation. The app's Smart
+Punctuation setting now supplies a conservative terminal period when the output
+ends in a letter or digit; it does not estimate pauses, interior commas or
+sentence boundaries. This formatting change is not evidence of model accuracy,
+and representative punctuation quality still needs the #2 corpus.
 
 Sources: [pinned model catalog](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-model-catalog.cpp),
 [model metadata](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-model-file-metadata.generated.cpp),

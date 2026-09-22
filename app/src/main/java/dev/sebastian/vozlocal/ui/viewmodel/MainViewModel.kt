@@ -692,7 +692,8 @@ class MainViewModel(
                 autoCapitalize = session.settings.autoCapitalize,
                 applyDict = session.settings.applyDictionary,
                 useAiPolisher = session.settings.useAiPolisher,
-                cleanupMode = session.settings.cleanupMode
+                cleanupMode = session.settings.cleanupMode,
+                modelId = model.id
             )
 
             if (!isCurrentDictation(session)) return@launch

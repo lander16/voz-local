@@ -631,7 +631,7 @@ fun DictateTab(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterStatusChip(
-                    label = "Smart Pause",
+                    label = "Punctuation",
                     active = smartPunctuation,
                     activeColor = PrimaryColor,
                     onClick = { viewModel.setSmartPunctuation(!smartPunctuation) }

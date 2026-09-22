@@ -760,7 +760,7 @@ class DictationAccessibilityService : AccessibilityService() {
                         withContext(Dispatchers.Main) {
                             if (!isCurrentSession(session)) return@withContext
                             if (rawText.isNotEmpty()) {
-                                processAndPaste(session, rawText, selected.name)
+                                processAndPaste(session, rawText, selected.name, selected.id)
                             } else {
                                 stopRecordingUI()
                                 activeSession = null
@@ -821,7 +821,8 @@ class DictationAccessibilityService : AccessibilityService() {
     private suspend fun processAndPaste(
         session: AccessibilityDictationSession,
         rawText: String,
-        modelName: String
+        modelName: String,
+        modelId: String
     ) {
         if (!isCurrentSession(session)) return
         val durationSec = ((System.currentTimeMillis() - session.startedAtMs) / 1000).toInt().coerceAtLeast(1)
@@ -831,7 +832,8 @@ class DictationAccessibilityService : AccessibilityService() {
             smartPunctuation = true,
             autoCapitalize = true,
             applyDict = true,
-            useAiPolisher = session.useAiPolisher
+            useAiPolisher = session.useAiPolisher,
+            modelId = modelId
         )
 
         if (!isCurrentSession(session)) return

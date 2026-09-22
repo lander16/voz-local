@@ -35,6 +35,38 @@ class PostProcessingCleanupTest {
     }
 
     @Test
+    fun moonshineSmallAddsFinalPeriodToPlainUtterance() = runTest {
+        val result = repo().postProcessText(
+            "hola mundo", true, true, false, false, modelId = "moonshine_small_es"
+        )
+        assertEquals("Hola mundo.", result)
+    }
+
+    @Test
+    fun moonshineTinyPreservesExistingPunctuation() = runTest {
+        val r = repo()
+        assertEquals("Hola mundo.", r.postProcessText("hola mundo.", true, true, false, false, modelId = "moonshine_tiny_es"))
+        assertEquals("¿Como estas?", r.postProcessText("como estas", true, true, false, false, modelId = "moonshine_tiny_es"))
+        assertEquals("Hola!", r.postProcessText("hola!", true, true, false, false, modelId = "moonshine_tiny_es"))
+    }
+
+    @Test
+    fun moonshineRespectsDisabledSmartPunctuation() = runTest {
+        val result = repo().postProcessText(
+            "hola mundo", false, true, false, false, modelId = "moonshine_small_es"
+        )
+        assertEquals("Hola mundo", result)
+    }
+
+    @Test
+    fun whisperOutputDoesNotGainFinalPeriod() = runTest {
+        val result = repo().postProcessText(
+            "hola mundo", true, true, false, false, modelId = "whisper_small"
+        )
+        assertEquals("Hola mundo", result)
+    }
+
+    @Test
     fun spokenPunctuationDoesNotReplaceWhenDisabled() = runTest {
         val r = repo()
         r.saveSpokenPunctuationCommands(false)
