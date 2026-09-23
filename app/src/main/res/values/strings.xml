@@ -102,8 +102,8 @@
     <string name="model_description_medium_q8">Intended for devices with ample storage and memory; sustained performance must be measured locally.</string>
     <string name="model_description_unknown">Recognition quality and transcription time depend on the device, audio, and decoding settings.</string>
     <string name="model_language_spanish_only">Spanish only</string>
-    <string name="model_description_moonshine_tiny_es">Experimental Spanish-only model for dictation clips up to 30 seconds. Approximately 32 MB. Whisper remains the default; no live previews or file transcription yet.</string>
-    <string name="model_description_moonshine_small_es">Experimental Spanish-only model for dictation clips up to 30 seconds. Approximately 122 MB. Whisper remains the default; no live previews or file transcription yet.</string>
+    <string name="model_description_moonshine_tiny_es">Spanish-only model for offline dictation. Approximately 32 MB. Fast and memory efficient.</string>
+    <string name="model_description_moonshine_small_es">Spanish-only model for offline dictation. Approximately 122 MB. Higher accuracy than Tiny.</string>
     <string name="model_delete_description">Delete %1$s</string>
     <string name="model_redownload_description">Download %1$s again</string>
     <string name="model_delete_title">Delete model?</string>

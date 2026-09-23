@@ -181,7 +181,6 @@ class DictationRepository(
     fun liveModelError(modelId: String, sampleCount: Int = 0): String? = when {
         !MoonshineModels.isMoonshine(modelId) -> null
         getLanguage() != "es" -> context.getString(R.string.moonshine_language_error)
-        sampleCount > 30 * 16000 -> context.getString(R.string.moonshine_duration_error)
         moonshineEngine.isBusy() -> context.getString(R.string.moonshine_busy_error)
         else -> null
     }
@@ -247,6 +246,8 @@ class DictationRepository(
             "whisper_small_q5_1" -> 5
             "whisper_large_v3_turbo" -> 6
             "whisper_medium" -> 7
+            "moonshine_tiny_es" -> 8
+            "moonshine_small_es" -> 9
             else -> 10
         } }
     }

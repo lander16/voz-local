@@ -32,7 +32,6 @@ class MoonshineEngine(
 
     suspend fun transcribe(directory: File, modelId: String, samples: FloatArray): String {
         require(directory.isDirectory) { "Moonshine model directory does not exist: $directory" }
-        require(samples.size <= MAX_SAMPLES) { "Moonshine clips must be at most 30 seconds at 16 kHz" }
         require(samples.isNotEmpty()) { "Moonshine clips must not be empty" }
         val architecture = architectureFor(modelId)
         // Copy caller-owned PCM before dispatching it to native code.
@@ -131,8 +130,6 @@ class MoonshineEngine(
         const val TINY_ES = "moonshine_tiny_es"
         const val SMALL_ES = "moonshine_small_es"
         const val SAMPLE_RATE = 16_000
-        const val MAX_SECONDS = 30
-        const val MAX_SAMPLES = SAMPLE_RATE * MAX_SECONDS
 
         fun architectureFor(modelId: String): Int = when (modelId) {
             TINY_ES -> JNI.MOONSHINE_MODEL_ARCH_TINY_STREAMING

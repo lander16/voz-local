@@ -247,8 +247,8 @@ gates. Track execution in [#11](https://github.com/lander16/voz-local/issues/11)
 with representative accuracy dependent on [#2](https://github.com/lander16/voz-local/issues/2).
 Publisher WER and model-size claims must not be substituted for local accuracy,
 end-to-end latency or energy measurements. Whisper remains the default engine;
-Spanish Tiny/Small are now explicitly selected experimental alternatives (see README).
-Their first app path uses complete clips up to 30 seconds, not streaming previews.
+Spanish Tiny/Small are explicitly selected alternative models (see README).
+Their app path uses complete clips without streaming previews.
 Per-request verification/loading/teardown adds costs outside the screening inference
 timings below, so these figures are not promises of app Stop-to-result latency.
 

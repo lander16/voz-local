@@ -167,16 +167,15 @@ removed; its saved value cannot bypass the requirement.
 
 Whisper models are downloaded on-demand from Hugging Face to app-private storage and run offline.
 
-Experimental options: **Moonshine Tiny Spanish** (~32.3 MB) and **Moonshine Small
-Spanish** (~121.8 MB) can be explicitly downloaded and selected in Models. Their
+Moonshine options: **Moonshine Tiny Spanish** (~32.3 MB) and **Moonshine Small
+Spanish** (~121.8 MB) can be downloaded and selected in Models. Their
 eight-file bundles come from the official Moonshine CDN; every file is checked
 against pinned size and SHA-256 before activation and loading. Whisper remains the
 default and is never automatically replaced by a Moonshine download.
 
-Choose Spanish explicitly (not automatic language detection). This first integration
-supports complete-clip live dictation of at most **30 seconds**, without incremental
-previews, shared-file transcription or Whisper calibration. Longer clips are rejected,
-not silently truncated. Cancelling discards the result; because the SDK has no native
+Choose Spanish explicitly (not automatic language detection). This integration
+supports complete-clip live dictation without incremental
+previews, shared-file transcription or Whisper calibration. Cancelling discards the result; because the SDK has no native
 abort, another request may need to wait for the background computation to finish.
 Models are closed after each request. No extra accessibility permissions are added.
 With Smart Punctuation enabled, Moonshine dictation adds a final period when its
@@ -187,8 +186,7 @@ an utterance. Spoken punctuation commands remain a separate opt-in setting.
 
 Initial [Pixel screening](docs/validation/2026-09-21-moonshine/README.md) found lower
 complete-clip inference latency, but representative accuracy, sustained performance
-and real-time streaming remain unverified. These are opt-in experiments, not a claim
-of better accuracy or end-to-end speed. See the [integration plan](docs/moonshine-experiment-plan.md),
+and real-time streaming remain unverified. See the [integration plan](docs/moonshine-experiment-plan.md),
 [Pixel integration checks](docs/validation/2026-09-22-moonshine-integration/README.md),
 [findings](Performance.md) and [issue #11](https://github.com/lander16/voz-local/issues/11).
 
@@ -201,6 +199,8 @@ of better accuracy or end-to-end speed. See the [integration plan](docs/moonshin
 | `whisper_small_q5_1` | `ggml-small-q5_1.bin` | ~175 MB | Multilingual | q5_1 | Smaller download than Small q8_0; quantization can affect output and device performance. |
 | `whisper_large_v3_turbo` | `ggml-large-v3-turbo-q5_0.bin` | ~547 MB | Multilingual | q5_0 | Turbo checkpoint with substantial storage and memory demand; benchmark locally. |
 | `whisper_medium` | `ggml-medium-q8_0.bin` | ~823 MB | Multilingual | q8_0 | Largest download in the catalog; benchmark sustained performance before selecting. |
+| `moonshine_tiny_es` | 8-file bundle | ~32.3 MB | Spanish only | int8 | Fast and memory-efficient offline Spanish dictation. |
+| `moonshine_small_es` | 8-file bundle | ~121.8 MB | Spanish only | int8 | Higher-accuracy offline Spanish dictation checkpoint. |
 
 
 The sizes above are approximate download sizes, not RAM estimates. VozLocal does not publish universal accuracy percentages or speed multipliers: meaningful results require a named corpus, device, native backend, thread count, thermal state, and decoding configuration.

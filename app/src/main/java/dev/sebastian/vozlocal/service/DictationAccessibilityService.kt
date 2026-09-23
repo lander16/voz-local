@@ -52,7 +52,10 @@ private data class AccessibilityDictationSession(
     val id: Long,
     val target: AccessibilityTarget?,
     val startedAtMs: Long,
+    val model: DictationModel,
     val useAiPolisher: Boolean,
+    val smartPunctuation: Boolean,
+    val autoCapitalize: Boolean,
 )
 
 class DictationAccessibilityService : AccessibilityService() {
@@ -71,8 +74,6 @@ class DictationAccessibilityService : AccessibilityService() {
     private var warmupJob: Job? = null
     private var recorderDiscardJob: Job? = null
     private var recorderStopJob: Job? = null
-    // Captured when recording begins so a settings/model change cannot reroute this audio.
-    private var recordingModel: DictationModel? = null
     private var availableModels: List<DictationModel> = emptyList()
 
     // Process-wide singleton recorder (has an internal Mutex); shared with the main app.
@@ -612,7 +613,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 return
             }
             val target = focusedEligibleTarget() ?: return
-            val models = availableModels
+            val models = availableModels.ifEmpty { kotlinx.coroutines.runBlocking { repository.allModels.first() } }
             val model = models.find { it.isSelected && it.isDownloaded }
                 ?: models.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
             if (model == null) {
@@ -623,12 +624,14 @@ class DictationAccessibilityService : AccessibilityService() {
                 Toast.makeText(this, error, Toast.LENGTH_SHORT).show()
                 return
             }
-            recordingModel = model
             val session = AccessibilityDictationSession(
                 id = ++nextSessionId,
                 target = target,
                 startedAtMs = System.currentTimeMillis(),
-                useAiPolisher = repository.getUseAiPolisher()
+                model = model,
+                useAiPolisher = repository.getUseAiPolisher(),
+                smartPunctuation = repository.getSmartPunctuation(),
+                autoCapitalize = repository.getAutoCapitalization(),
             )
             activeSession = session
             isRecording = true
@@ -683,7 +686,6 @@ class DictationAccessibilityService : AccessibilityService() {
                                 timerJob = null
                                 stopRecordingUI()
                                 activeSession = null
-                                recordingModel = null
                             }
                         }
                     }
@@ -699,7 +701,6 @@ class DictationAccessibilityService : AccessibilityService() {
                 isRecording = false
                 stopRecordingUI()
                 if (isCurrentSession(session)) activeSession = null
-                recordingModel = null
                 return
             }
         } else {
@@ -728,17 +729,15 @@ class DictationAccessibilityService : AccessibilityService() {
                 if (!isCurrentSession(session)) return@launch
                 // Snapshot the model before dispatching: model selection can change while this
                 // clip is decoding, but an in-flight clip must stay on its start-time model.
-                val sessionModel = recordingModel
+                val selected = session.model
                 processingJob = serviceScope.launch(Dispatchers.Default) {
                     try {
-                        val selected = sessionModel
-                        if (selected == null || !selected.isDownloaded) {
+                        if (!selected.isDownloaded) {
                             withContext(Dispatchers.Main) {
                                 if (isCurrentSession(session)) {
                                     Toast.makeText(this@DictationAccessibilityService, getString(dev.sebastian.vozlocal.R.string.speech_model_missing), Toast.LENGTH_SHORT).show()
                                     stopRecordingUI()
                                     activeSession = null
-                                    recordingModel = null
                                 }
                             }
                             return@launch
@@ -750,7 +749,6 @@ class DictationAccessibilityService : AccessibilityService() {
                                     Toast.makeText(this@DictationAccessibilityService, error, Toast.LENGTH_SHORT).show()
                                     stopRecordingUI()
                                     activeSession = null
-                                    recordingModel = null
                                 }
                             }
                             return@launch
@@ -764,7 +762,6 @@ class DictationAccessibilityService : AccessibilityService() {
                             } else {
                                 stopRecordingUI()
                                 activeSession = null
-                                recordingModel = null
                             }
                         }
                     } catch (e: CancellationException) {
@@ -776,7 +773,6 @@ class DictationAccessibilityService : AccessibilityService() {
                                 Toast.makeText(this@DictationAccessibilityService, e.message ?: "Transcription failed. Please try again.", Toast.LENGTH_SHORT).show()
                                 stopRecordingUI()
                                 activeSession = null
-                                recordingModel = null
                             }
                         }
                     }
@@ -829,8 +825,8 @@ class DictationAccessibilityService : AccessibilityService() {
 
         val processed = repository.postProcessText(
             text = rawText,
-            smartPunctuation = true,
-            autoCapitalize = true,
+            smartPunctuation = session.smartPunctuation,
+            autoCapitalize = session.autoCapitalize,
             applyDict = true,
             useAiPolisher = session.useAiPolisher,
             modelId = modelId
@@ -848,7 +844,6 @@ class DictationAccessibilityService : AccessibilityService() {
             if (!stillEligible) {
                 stopRecordingUI()
                 activeSession = null
-                recordingModel = null
                 return@withContext
             }
             val pasted = pasteTextToActiveInput(requireNotNull(session.target), processed)
@@ -858,7 +853,6 @@ class DictationAccessibilityService : AccessibilityService() {
                 if (!AccessibilityTargetPolicy.matchesRecordingTarget(session.target, focusedEligibleTarget())) {
                     stopRecordingUI()
                     activeSession = null
-                    recordingModel = null
                     return@withContext
                 }
                 copyToClipboard(processed)
@@ -878,7 +872,6 @@ class DictationAccessibilityService : AccessibilityService() {
             )
             stopRecordingUI()
             activeSession = null
-            recordingModel = null
         }
     }
 
@@ -973,7 +966,6 @@ class DictationAccessibilityService : AccessibilityService() {
             ensureRecorderDiscarded()
         }
         cancelActiveSession()
-        recordingModel = null
         clearTarget()
         // Do not call stopRecordingUI here: it re-reads eligibility while a loss is being handled.
         stopWaveformAnimation()
@@ -991,7 +983,6 @@ class DictationAccessibilityService : AccessibilityService() {
             ensureRecorderDiscarded()
         }
         cancelActiveSession()
-        recordingModel = null
         clearTarget()
         expandedPanel?.visibility = View.GONE
         floatingView?.visibility = View.GONE

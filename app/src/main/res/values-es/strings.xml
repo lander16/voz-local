@@ -103,8 +103,8 @@
     <string name="model_description_medium_q8">Pensado para dispositivos con suficiente almacenamiento y memoria; el rendimiento sostenido debe medirse localmente.</string>
     <string name="model_description_unknown">La calidad y el tiempo de transcripción dependen del dispositivo, el audio y la configuración de decodificación.</string>
     <string name="model_language_spanish_only">Solo español</string>
-    <string name="model_description_moonshine_tiny_es">Modelo experimental solo para español y clips de dictado de hasta 30 segundos. Aproximadamente 32 MB. Whisper sigue siendo el predeterminado; todavía no hay vistas previas en vivo ni transcripción de archivos.</string>
-    <string name="model_description_moonshine_small_es">Modelo experimental solo para español y clips de dictado de hasta 30 segundos. Aproximadamente 122 MB. Whisper sigue siendo el predeterminado; todavía no hay vistas previas en vivo ni transcripción de archivos.</string>
+    <string name="model_description_moonshine_tiny_es">Modelo en español para dictado sin conexión. Aproximadamente 32 MB. Rápido y ligero.</string>
+    <string name="model_description_moonshine_small_es">Modelo en español para dictado sin conexión. Aproximadamente 122 MB. Mayor precisión que Tiny.</string>
     <string name="model_delete_description">Eliminar %1$s</string>
     <string name="model_redownload_description">Volver a descargar %1$s</string>
     <string name="model_delete_title">¿Eliminar modelo?</string>

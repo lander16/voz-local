@@ -60,6 +60,7 @@ class MoonshineModelDownloader(private val context: Context) {
             val target = MoonshineModels.directory(context, id)
             val parent = requireNotNull(target.parentFile)
             parent.mkdirs()
+            deleteStalePartDirectories(target)
             val stage = File(parent, ".${id}.${UUID.randomUUID()}.part")
             try {
                 stage.mkdirs()
@@ -122,10 +123,16 @@ class MoonshineModelDownloader(private val context: Context) {
         val target = MoonshineModels.directory(context, id)
         val parent = target.parentFile
         val targetDeleted = !target.exists() || target.deleteRecursively()
-        val backupsDeleted = parent?.listFiles { f ->
-            f.name.startsWith(".${target.name}.") && f.name.endsWith(".backup")
+        val temporaryDeleted = parent?.listFiles { f ->
+            f.name.startsWith(".${target.name}.") && (f.name.endsWith(".backup") || f.name.endsWith(".part"))
         }?.all { !it.exists() || it.deleteRecursively() } ?: true
-        targetDeleted && backupsDeleted
+        targetDeleted && temporaryDeleted
+    }
+
+    private fun deleteStalePartDirectories(target: File) {
+        target.parentFile?.listFiles { f ->
+            f.name.startsWith(".${target.name}.") && f.name.endsWith(".part")
+        }?.forEach { it.deleteRecursively() }
     }
 
     /** Keeps call.cancel() wired until the response body has been fully consumed. */

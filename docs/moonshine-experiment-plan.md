@@ -18,9 +18,9 @@ the serialized runtime adapter, and EN/ES model cards. Primary handles repositor
 routing, safety/error handling, tests, release validation and documentation.
 
 Initial contract: Spanish-only `moonshine_tiny_es` / `moonshine_small_es`, explicit
-user download and model selection, complete-clip live dictation up to 30 seconds,
-no shared-file transcription or incremental preview. Unsupported language,
-duration and Whisper-only calibration are rejected with localized messages.
+user download and model selection, complete-clip live dictation,
+no shared-file transcription or incremental preview. Unsupported language
+and Whisper-only calibration are rejected with localized messages.
 Do not silently change language or switch engines when a request fails.
 
 Use pinned v0.1.5 native binaries and the retained SHA-256 manifests. Load only

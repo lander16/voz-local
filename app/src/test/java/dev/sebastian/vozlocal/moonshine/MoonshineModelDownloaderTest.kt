@@ -101,12 +101,38 @@ class MoonshineModelDownloaderTest {
             mkdirs()
             File(this, "one.bin").writeBytes(bytes["one.bin"]!!)
         }
+        val part = File(target.parentFile, ".${spec.id}.stale.part").apply {
+            mkdirs()
+            File(this, "one.bin").writeBytes(bytes["one.bin"]!!)
+        }
         val downloader = downloader(spec, bytes)
         try {
             assertTrue(downloader.delete(spec.id))
             assertFalse(target.exists())
             assertFalse(backup.exists())
+            assertFalse(part.exists())
             assertTrue(downloader.verifiedDirectory(spec.id) == null)
+        } finally {
+            clean(spec.id)
+        }
+    }
+
+    @Test fun stalePartDirectoriesAreCleanedBeforeDownloading() = runBlocking {
+        val bytes = mapOf("one.bin" to "one".toByteArray())
+        val spec = spec(bytes, id = "moonshine_fixture_stale_part")
+        clean(spec.id)
+        val target = MoonshineModels.directory(context, spec.id)
+        target.parentFile?.mkdirs()
+        val stalePart = File(target.parentFile, ".${spec.id}.stale.part").apply {
+            mkdirs()
+            File(this, "incomplete.bin").writeBytes("leftover".toByteArray())
+        }
+        assertTrue(stalePart.exists())
+        val downloader = downloader(spec, bytes)
+        try {
+            assertTrue(downloader.download(spec.id, onProgress = {}))
+            assertFalse(stalePart.exists())
+            assertTrue(downloader.verifiedDirectory(spec.id) != null)
         } finally {
             clean(spec.id)
         }

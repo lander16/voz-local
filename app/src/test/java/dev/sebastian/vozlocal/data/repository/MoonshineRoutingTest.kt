@@ -20,7 +20,7 @@ class MoonshineRoutingTest {
         val repository = DictationRepository(context)
         repository.saveLanguage("es")
         assertNull(repository.liveModelError("moonshine_tiny_es", 480000))
-        assertNotNull(repository.liveModelError("moonshine_tiny_es", 480001))
+        assertNull(repository.liveModelError("moonshine_tiny_es", 480001))
         repository.saveLanguage("en")
         assertNotNull(repository.liveModelError("moonshine_small_es"))
         repository.saveLanguage("auto")
