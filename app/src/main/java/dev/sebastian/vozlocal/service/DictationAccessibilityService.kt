@@ -38,9 +38,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import dev.sebastian.vozlocal.VozLocalApp
+import dev.sebastian.vozlocal.BuildConfig
 import dev.sebastian.vozlocal.data.repository.DictationRepository
 import dev.sebastian.vozlocal.data.model.DictationModel
 import dev.sebastian.vozlocal.moonshine.MoonshineModels
+import dev.sebastian.vozlocal.performance.StopToTextTrace
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlin.math.max
@@ -56,6 +58,7 @@ private data class AccessibilityDictationSession(
     val useAiPolisher: Boolean,
     val smartPunctuation: Boolean,
     val autoCapitalize: Boolean,
+    var stopToTextTrace: StopToTextTrace? = null,
 )
 
 class DictationAccessibilityService : AccessibilityService() {
@@ -705,6 +708,9 @@ class DictationAccessibilityService : AccessibilityService() {
             }
         } else {
             val session = activeSession ?: return
+            val trace = if (BuildConfig.STOP_TO_TEXT_TRACE_ENABLED) StopToTextTrace.start("overlay") else null
+            session.stopToTextTrace = trace
+            trace?.point("stop_received")
             timerJob?.cancel()
             timerJob = null
             isRecording = false
@@ -724,13 +730,16 @@ class DictationAccessibilityService : AccessibilityService() {
             // Keep the recorder stop independent from serviceScope. A focus-loss event or service
             // destruction must not cancel AudioRecorder while it is transitioning to idle.
             recorderStopJob = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob()).launch {
-                val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
+                val totalRecorderStop = trace?.begin("recorder_stop_total")
+                val samples = if (ownsRecorderSession) audioRecorder.stopRecording(trace) else FloatArray(0)
+                trace?.end(totalRecorderStop)
                 ownsRecorderSession = false
                 if (!isCurrentSession(session)) return@launch
                 // Snapshot the model before dispatching: model selection can change while this
                 // clip is decoding, but an in-flight clip must stay on its start-time model.
                 val selected = session.model
                 processingJob = serviceScope.launch(Dispatchers.Default) {
+                    var traceOutcome = "failed"
                     try {
                         if (!selected.isDownloaded) {
                             withContext(Dispatchers.Main) {
@@ -740,6 +749,7 @@ class DictationAccessibilityService : AccessibilityService() {
                                     activeSession = null
                                 }
                             }
+                            traceOutcome = "model_unavailable"
                             return@launch
                         }
                         val modelId = selected.id
@@ -751,22 +761,27 @@ class DictationAccessibilityService : AccessibilityService() {
                                     activeSession = null
                                 }
                             }
+                            traceOutcome = "request_rejected"
                             return@launch
                         }
-                        val rawText = repository.transcribeAudio(samples, modelId)
+                        val rawText = repository.transcribeAudio(samples, modelId, trace)
+                        trace?.point("transcript_available")
                         if (!isCurrentSession(session)) return@launch
                         withContext(Dispatchers.Main) {
                             if (!isCurrentSession(session)) return@withContext
                             if (rawText.isNotEmpty()) {
-                                processAndPaste(session, rawText, selected.name, selected.id)
+                                traceOutcome = processAndPaste(session, rawText, selected.name, selected.id, trace)
                             } else {
                                 stopRecordingUI()
                                 activeSession = null
+                                traceOutcome = "empty_transcript"
                             }
                         }
                     } catch (e: CancellationException) {
+                        traceOutcome = "cancelled"
                         throw e
                     } catch (e: Exception) {
+                        traceOutcome = "error"
                         Log.e(TAG, "Accessibility dictation failed", e)
                         withContext(Dispatchers.Main) {
                             if (isCurrentSession(session)) {
@@ -775,6 +790,9 @@ class DictationAccessibilityService : AccessibilityService() {
                                 activeSession = null
                             }
                         }
+                    } finally {
+                        trace?.recordPcmIdentity(samples)
+                        trace?.finish(selected.id, traceOutcome)
                     }
                 }
             }
@@ -818,24 +836,31 @@ class DictationAccessibilityService : AccessibilityService() {
         session: AccessibilityDictationSession,
         rawText: String,
         modelName: String,
-        modelId: String
-    ) {
-        if (!isCurrentSession(session)) return
+        modelId: String,
+        trace: StopToTextTrace?,
+    ): String {
+        if (!isCurrentSession(session)) return "stale_session"
         val durationSec = ((System.currentTimeMillis() - session.startedAtMs) / 1000).toInt().coerceAtLeast(1)
 
-        val processed = repository.postProcessText(
-            text = rawText,
-            smartPunctuation = session.smartPunctuation,
-            autoCapitalize = session.autoCapitalize,
-            applyDict = true,
-            useAiPolisher = session.useAiPolisher,
-            modelId = modelId
-        )
+        val postProcess = trace?.begin("text_postprocess")
+        val processed = try {
+            repository.postProcessText(
+                text = rawText,
+                smartPunctuation = session.smartPunctuation,
+                autoCapitalize = session.autoCapitalize,
+                applyDict = true,
+                useAiPolisher = session.useAiPolisher,
+                modelId = modelId
+            )
+        } finally {
+            trace?.end(postProcess)
+        }
+        trace?.point("processed_text_ready")
 
-        if (!isCurrentSession(session)) return
+        if (!isCurrentSession(session)) return "stale_session"
 
-        withContext(Dispatchers.Main) {
-            if (!isCurrentSession(session)) return@withContext
+        return withContext(Dispatchers.Main) {
+            if (!isCurrentSession(session)) return@withContext "stale_session"
             // Results are discarded if the original focused field is no longer the sole eligible
             // input. Do not copy stale dictation into the clipboard.
             val stillEligible = session.target?.let { recordingTarget ->
@@ -844,16 +869,20 @@ class DictationAccessibilityService : AccessibilityService() {
             if (!stillEligible) {
                 stopRecordingUI()
                 activeSession = null
-                return@withContext
+                return@withContext "target_lost"
             }
+            trace?.point("app_text_ready_for_delivery")
+            val delivery = trace?.begin("overlay_delivery_and_insertion")
             val pasted = pasteTextToActiveInput(requireNotNull(session.target), processed)
+            trace?.end(delivery)
+            trace?.point(if (pasted) "accessibility_action_accepted" else "accessibility_action_rejected")
             if (!pasted) {
                 // Failure can mean the target vanished between the two framework snapshots.
                 // Clipboard fallback is only appropriate for a still-eligible editor rejecting text.
                 if (!AccessibilityTargetPolicy.matchesRecordingTarget(session.target, focusedEligibleTarget())) {
                     stopRecordingUI()
                     activeSession = null
-                    return@withContext
+                    return@withContext "target_lost"
                 }
                 copyToClipboard(processed)
                 Toast.makeText(
@@ -872,6 +901,7 @@ class DictationAccessibilityService : AccessibilityService() {
             )
             stopRecordingUI()
             activeSession = null
+            if (pasted) "overlay_action_accepted" else "clipboard_fallback"
         }
     }
 

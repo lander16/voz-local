@@ -10,6 +10,7 @@ STORE_SERVICE="dev.sebastian.vozlocal.release-store-password"
 KEY_SERVICE="dev.sebastian.vozlocal.release-key-password"
 ALLOW_FIRST_INSTALL=false
 SKIP_TESTS=false
+STOP_TO_TEXT_TRACE=false
 TEMP_DIR=""
 STORE_SECRET=""
 KEY_SECRET=""
@@ -18,12 +19,13 @@ usage() {
   cat <<'EOF'
 Usage:
   scripts/install-signed-release.sh --setup-keychain
-  scripts/install-signed-release.sh [--skip-tests] [--allow-first-install]
+  scripts/install-signed-release.sh [--skip-tests] [--allow-first-install] [--stop-to-text-trace]
 
 Options:
   --setup-keychain       Save both signing passwords through hidden macOS Keychain prompts.
   --skip-tests           Skip unit tests; the signed release is still built and verified.
   --allow-first-install  Permit installation when VozLocal is not already installed.
+  --stop-to-text-trace  Opt into text-free monotonic Stop-to-delivery log spans for this build.
   --help                 Show this help.
 
 Environment overrides:
@@ -72,6 +74,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-tests)
       SKIP_TESTS=true
+      ;;
+    --stop-to-text-trace)
+      STOP_TO_TEXT_TRACE=true
       ;;
     --help|-h)
       usage
@@ -123,6 +128,10 @@ GRADLE_TASKS=(assembleRelease)
 if [[ "$SKIP_TESTS" == false ]]; then
   GRADLE_TASKS=(testDebugUnitTest assembleRelease)
 fi
+GRADLE_ARGS=(--no-daemon --no-configuration-cache)
+if [[ "$STOP_TO_TEXT_TRACE" == true ]]; then
+  GRADLE_ARGS+=(-PstopToTextTrace=true)
+fi
 
 echo "Building a production release without retaining signing credentials in Gradle."
 KEYSTORE_PATH="$KEYSTORE_PATH" \
@@ -130,7 +139,7 @@ STORE_PASSWORD="$STORE_SECRET" \
 KEY_ALIAS="$KEY_ALIAS" \
 KEY_PASSWORD="$KEY_SECRET" \
 JAVA_HOME="$JAVA_HOME" \
-  ./gradlew --no-daemon --no-configuration-cache "${GRADLE_TASKS[@]}"
+  ./gradlew "${GRADLE_ARGS[@]}" "${GRADLE_TASKS[@]}"
 
 APK="$REPO_ROOT/app/build/outputs/apk/release/app-release.apk"
 [[ -f "$APK" ]] || { echo "Signed release APK was not produced: $APK" >&2; exit 1; }

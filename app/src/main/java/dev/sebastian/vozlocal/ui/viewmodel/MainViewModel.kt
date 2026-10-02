@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
+import dev.sebastian.vozlocal.BuildConfig
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dev.sebastian.vozlocal.audio.AudioRecorder
@@ -12,6 +13,7 @@ import dev.sebastian.vozlocal.data.model.DictationStat
 import dev.sebastian.vozlocal.data.model.DictionaryWord
 import dev.sebastian.vozlocal.data.model.TranscriptionHistory
 import dev.sebastian.vozlocal.data.repository.DictationRepository
+import dev.sebastian.vozlocal.performance.StopToTextTrace
 import dev.sebastian.vozlocal.data.repository.SensitiveApp
 import dev.sebastian.vozlocal.data.repository.VadDownloadStatus
 import dev.sebastian.vozlocal.polish.TextPolishEngine
@@ -624,6 +626,8 @@ class MainViewModel(
         if (!_isRecording.value) return
 
         val session = activeDictationSession ?: return
+        val trace = if (BuildConfig.STOP_TO_TEXT_TRACE_ENABLED) StopToTextTrace.start("in_app") else null
+        trace?.point("stop_received")
 
         timerJob?.cancel()
         timerJob = null
@@ -631,7 +635,9 @@ class MainViewModel(
         pushFinalWaveformSnapshot()
 
         viewModelScope.launch {
-            val samples = if (ownsRecorderSession) audioRecorder.stopRecording() else FloatArray(0)
+            val recorderStop = trace?.begin("recorder_stop_total")
+            val samples = if (ownsRecorderSession) audioRecorder.stopRecording(trace) else FloatArray(0)
+            trace?.end(recorderStop)
             ownsRecorderSession = false
             val finalDuration = ((System.currentTimeMillis() - session.startedAtMs) / 1000)
                 .toInt().coerceAtLeast(1)
@@ -642,6 +648,7 @@ class MainViewModel(
                     _liveWaveform.value = emptyList()
                     activeDictationSession = null
                 }
+                trace?.finish(session.model.id, "empty_capture")
                 return@launch
             }
 
@@ -651,12 +658,14 @@ class MainViewModel(
                     _liveWaveform.value = emptyList()
                     activeDictationSession = null
                 }
+                trace?.finish(session.model.id, "request_rejected")
                 return@launch
             }
 
             _currentLiveTranscription.value = repository.inferenceRunningLabel()
 
             dictationJob = launch(Dispatchers.Default) {
+            var traceOutcome = "failed"
             try {
             if (!isCurrentDictation(session)) return@launch
             val model = session.model
@@ -668,10 +677,12 @@ class MainViewModel(
                         activeDictationSession = null
                     }
                 }
+                traceOutcome = "model_unavailable"
                 return@launch
             }
 
-            val rawOutput = repository.transcribeAudio(samples, model.id)
+            val rawOutput = repository.transcribeAudio(samples, model.id, trace)
+            trace?.point("transcript_available")
 
             if (!isCurrentDictation(session)) return@launch
 
@@ -683,18 +694,25 @@ class MainViewModel(
                         activeDictationSession = null
                     }
                 }
+                traceOutcome = "empty_transcript"
                 return@launch
             }
 
-            val processedText = repository.postProcessText(
-                text = rawOutput,
-                smartPunctuation = session.settings.smartPunctuation,
-                autoCapitalize = session.settings.autoCapitalize,
-                applyDict = session.settings.applyDictionary,
-                useAiPolisher = session.settings.useAiPolisher,
-                cleanupMode = session.settings.cleanupMode,
-                modelId = model.id
-            )
+            val postProcess = trace?.begin("text_postprocess")
+            val processedText = try {
+                repository.postProcessText(
+                    text = rawOutput,
+                    smartPunctuation = session.settings.smartPunctuation,
+                    autoCapitalize = session.settings.autoCapitalize,
+                    applyDict = session.settings.applyDictionary,
+                    useAiPolisher = session.settings.useAiPolisher,
+                    cleanupMode = session.settings.cleanupMode,
+                    modelId = model.id
+                )
+            } finally {
+                trace?.end(postProcess)
+            }
+            trace?.point("processed_text_ready")
 
             if (!isCurrentDictation(session)) return@launch
 
@@ -702,33 +720,42 @@ class MainViewModel(
             val calcDuration = if (finalDuration > 0) finalDuration else 1
             val calculatedWpm = (wordCount.toFloat() / (calcDuration.toFloat() / 60f))
 
-            repository.insertStat(
-                DictationStat(
-                    wordCount = wordCount,
-                    durationSec = finalDuration,
-                    wpm = calculatedWpm
+            val persistence = trace?.begin("history_and_stats_persistence")
+            try {
+                repository.insertStat(
+                    DictationStat(
+                        wordCount = wordCount,
+                        durationSec = finalDuration,
+                        wpm = calculatedWpm
+                    )
                 )
-            )
 
-            repository.insertHistory(
-                TranscriptionHistory(
-                    text = processedText,
-                    durationSec = finalDuration,
-                    modelUsed = model.name,
-                    type = "dictation"
+                repository.insertHistory(
+                    TranscriptionHistory(
+                        text = processedText,
+                        durationSec = finalDuration,
+                        modelUsed = model.name,
+                        type = "dictation"
+                    )
                 )
-            )
+            } finally {
+                trace?.end(persistence)
+            }
 
             withContext(Dispatchers.Main) {
                 if (isCurrentDictation(session)) {
                     _currentLiveTranscription.value = processedText
+                    trace?.point("in_app_result_state_published")
                     _liveWaveform.value = emptyList()
                     activeDictationSession = null
                 }
             }
+            traceOutcome = "app_result_published"
             } catch (e: CancellationException) {
                 // A cancelled session is intentionally silent: a newer session owns the UI.
+                traceOutcome = "cancelled"
             } catch (e: Exception) {
+                traceOutcome = "error"
                 Log.e(TAG, "Dictation failed", e)
                 withContext(Dispatchers.Main) {
                     if (isCurrentDictation(session)) {
@@ -737,6 +764,9 @@ class MainViewModel(
                         activeDictationSession = null
                     }
                 }
+            } finally {
+                trace?.recordPcmIdentity(samples)
+                trace?.finish(session.model.id, traceOutcome)
             }
             }
         }

@@ -3,6 +3,7 @@ package dev.sebastian.vozlocal.asr
 import ai.moonshine.voice.JNI
 import ai.moonshine.voice.Transcriber
 import android.content.Context
+import dev.sebastian.vozlocal.performance.StopToTextTrace
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -30,13 +31,21 @@ class MoonshineEngine(
     private var draining = false
     private var drainSignal: CompletableDeferred<Unit>? = null
 
-    suspend fun transcribe(directory: File, modelId: String, samples: FloatArray): String {
+    internal suspend fun transcribe(
+        directory: File,
+        modelId: String,
+        samples: FloatArray,
+        trace: StopToTextTrace? = null,
+    ): String {
         require(directory.isDirectory) { "Moonshine model directory does not exist: $directory" }
         require(samples.isNotEmpty()) { "Moonshine clips must not be empty" }
         val architecture = architectureFor(modelId)
         // Copy caller-owned PCM before dispatching it to native code.
-        val pcm = samples.copyOf()
+        val copy = trace?.begin("moonshine_pcm_request_copy")
+        val pcm = try { samples.copyOf() } finally { trace?.end(copy) }
+        val dispatch = trace?.begin("moonshine_coroutine_dispatch")
         return withContext(dispatcher) {
+            trace?.end(dispatch)
             suspendCancellableCoroutine { continuation ->
                 // Admission belongs to the cancellable section. If the caller is
                 // cancelled before this block runs, no request is admitted and
@@ -47,28 +56,37 @@ class MoonshineEngine(
                         return@suspendCancellableCoroutine
                     }
                     busy.set(true)
+                    val queued = trace?.begin("moonshine_native_worker_queue")
                     try {
                         // Submit while holding the admission lock. This makes
                         // admission and queue ordering one atomic operation with
                         // release's barrier submission.
                         worker.execute {
+                            trace?.end(queued)
                             var requestAdapter: MoonshineAdapter? = null
                             var result: String? = null
                             var failure: Throwable? = null
                             try {
-                                val nativeAdapter = adapterFactory.create()
+                                val create = trace?.begin("moonshine_adapter_create")
+                                val nativeAdapter = try { adapterFactory.create() } finally { trace?.end(create) }
                                 requestAdapter = nativeAdapter
-                                nativeAdapter.load(directory, architecture)
-                                result = nativeAdapter.transcribe(pcm, SAMPLE_RATE)
+                                val load = trace?.begin("moonshine_model_load")
+                                try { nativeAdapter.load(directory, architecture) } finally { trace?.end(load) }
+                                val inference = trace?.begin("moonshine_inference")
+                                try { result = nativeAdapter.transcribe(pcm, SAMPLE_RATE) } finally { trace?.end(inference) }
                             } catch (t: Throwable) {
                                 failure = t
                             } finally {
+                                val close = trace?.begin("moonshine_native_teardown")
                                 try {
                                     requestAdapter?.close()
                                 } catch (t: Throwable) {
                                     if (failure == null) failure = t
+                                } finally {
+                                    trace?.end(close)
                                 }
-                                pcm.fill(0f)
+                                val clear = trace?.begin("moonshine_pcm_clear")
+                                try { pcm.fill(0f) } finally { trace?.end(clear) }
                                 synchronized(stateLock) { busy.set(false) }
                             }
                             if (continuation.isActive) {

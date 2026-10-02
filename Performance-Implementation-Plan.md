@@ -25,11 +25,11 @@ An item is not complete merely because its code exists:
 
 | Tracker | Priority | Work | Implementation | Device evidence | Acceptance | Next action |
 |---|---|---|---|---|---|---|
-| [P01 · #1](https://github.com/lander16/voz-local/issues/1) | P1 | Benchmark runner and native metrics | Implemented | Partial | Partial | Add signed-release end-to-end Stop-to-result runs and complete environment capture |
+| [P01 · #1](https://github.com/lander16/voz-local/issues/1) | P1 | Benchmark runner and native metrics | Implemented | Partial | Partial | Run the opt-in signed-release Stop-to-text traces and capture complete environment provenance |
 | [P02 · #2](https://github.com/lander16/voz-local/issues/2) | P1 | Accuracy corpus and q8_0 comparison | Scoring/manifest implemented | Missing representative corpus run | Open | Curate licensed audio and compare Small q5_1 with q8_0 |
 | [P03 · #3](https://github.com/lander16/voz-local/issues/3) | P1 | CPU topology and calibration | Implemented | Tiny calibration and Small q5_1 thread sweep | Partial | Run calibration with Small and prove persisted profile use after restart |
 | [P04 · #4](https://github.com/lander16/voz-local/issues/4) | P1 | Bounded audio memory and copies | Initial safeguards implemented | Not measured | Partial | Measure peak Java/native memory, then design the long-file bounded pipeline |
-| [P05 · #5](https://github.com/lander16/voz-local/issues/5) | P1 | Model residency, warmup, and eviction | Implemented | Basic reuse after cancellation | Partial | Exercise focus storms, model switches, warmup cancellation, and memory pressure on device |
+| [P05 · #5](https://github.com/lander16/voz-local/issues/5) | P1 | Model residency, warmup, and eviction | Implemented | Basic reuse after cancellation | Partial | First decide from #1 timings whether removable verification/load/teardown cost can support at least 15% median Stop-to-text gain; implement residency only if supported, otherwise continue lifecycle validation without it |
 | [P06 · #6](https://github.com/lander16/voz-local/issues/6) | P2 | UI, database, and progress overhead | Implemented | Not profiled | Partial | Measure recomposition/jobs, history pruning, frames, and progress behavior |
 | [P07 · #7](https://github.com/lander16/voz-local/issues/7) | P2 | Resampling, trimming, and VAD | Implemented | Not compared end to end | Partial | Measure preprocessing cost and quiet-speech accuracy on the P02 corpus |
 | [P08 · #8](https://github.com/lander16/voz-local/issues/8) | P2 | Decoder, prompt, and short-context tuning | Experiment controls implemented | No controlled matrix | Open | Run one-variable-at-a-time experiments after P02 baseline |
@@ -322,9 +322,12 @@ models as the fallback on unsupported devices.
 Alternative CPU engines are a separate branch of P11 and do not require a Tensor
 NPU runtime. The [Moonshine Spanish streaming experiment](docs/moonshine-experiment-plan.md)
 specifies Tiny/Small screening against Whisper Small q8_0, verified multi-file
-assets, real-time streaming versus offline timing, and P02 accuracy gates. Explicitly
-selected experimental Spanish models now use a serialized CPU adapter, verified
-bundles and a 30-second complete-clip limit. Whisper stays default; shared files,
+assets, real-time streaming versus offline timing, and P02 accuracy gates. Moonshine
+Spanish Small is the primary candidate for the current Stop-to-text latency goal;
+Tiny remains an optional comparison and neither model is promoted to default.
+Explicitly selected experimental Spanish models use a serialized CPU adapter and
+verified bundles. The former 30-second complete-clip cap was removed in `40f12c7`.
+Whisper stays default; shared files,
 incremental previews and calibration remain unavailable for Moonshine. Broader
 recommendation/default promotion still requires latency, accuracy, lifecycle and
 resource gates; experimental availability does not establish those results. Track progress

@@ -5,6 +5,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
+import dev.sebastian.vozlocal.performance.StopToTextTrace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
@@ -273,12 +274,15 @@ class AudioRecorder internal constructor(
     }
 
     /** Stops capture, awaits the reader off the main thread, and returns the final PCM once. */
-    suspend fun stopRecording(): FloatArray = finishSession(keepSamples = true)
+    suspend fun stopRecording(): FloatArray = finishSession(keepSamples = true, trace = null)
+
+    internal suspend fun stopRecording(trace: StopToTextTrace?): FloatArray =
+        finishSession(keepSamples = true, trace)
 
     /** Stops capture without allocating a full PCM copy. */
-    suspend fun discardRecording() { finishSession(keepSamples = false) }
+    suspend fun discardRecording() { finishSession(keepSamples = false, trace = null) }
 
-    private suspend fun finishSession(keepSamples: Boolean): FloatArray {
+    private suspend fun finishSession(keepSamples: Boolean, trace: StopToTextTrace?): FloatArray {
         val session = synchronized(this) {
             if (sessionState != SessionState.RECORDING) return@synchronized null
             sessionState = SessionState.STOPPING
@@ -289,13 +293,33 @@ class AudioRecorder internal constructor(
         } ?: return FloatArray(0)
 
         withContext(Dispatchers.IO) {
-            session.second?.let(::stopAndRelease)
-            session.third?.join()
+            val release = trace?.begin("recorder_hardware_release")
+            try {
+                session.second?.let(::stopAndRelease)
+            } finally {
+                trace?.end(release)
+            }
+            val drain = trace?.begin("recorder_reader_drain")
+            try {
+                session.third?.join()
+            } finally {
+                trace?.end(drain)
+            }
         }
         val samples = synchronized(floatBuffer) {
-            val result = if (keepSamples) floatBuffer.toFloatArray() else FloatArray(0)
-            floatBuffer.reset()
-            floatBuffer.shrinkIfOversized()
+            val copy = trace?.begin("recorder_pcm_snapshot_copy")
+            val result = try {
+                if (keepSamples) floatBuffer.toFloatArray() else FloatArray(0)
+            } finally {
+                trace?.end(copy)
+            }
+            val cleanup = trace?.begin("recorder_buffer_reset_and_shrink")
+            try {
+                floatBuffer.reset()
+                floatBuffer.shrinkIfOversized()
+            } finally {
+                trace?.end(cleanup)
+            }
             result
         }
         synchronized(this) {

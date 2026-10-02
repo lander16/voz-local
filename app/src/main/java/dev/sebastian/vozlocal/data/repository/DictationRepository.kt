@@ -9,6 +9,7 @@ import dev.sebastian.vozlocal.moonshine.MoonshineModels
 import dev.sebastian.vozlocal.moonshine.MoonshineModelDownloader
 import dev.sebastian.vozlocal.asr.MoonshineEngine
 import dev.sebastian.vozlocal.asr.MoonshineBusyException
+import dev.sebastian.vozlocal.performance.StopToTextTrace
 import dev.sebastian.vozlocal.audio.AudioDecoder
 import dev.sebastian.vozlocal.audio.AudioSilenceTrimmer
 import dev.sebastian.vozlocal.data.local.AppDatabase
@@ -1019,27 +1020,44 @@ class DictationRepository(
         }
     }
 
-    suspend fun transcribeAudio(samples: FloatArray, modelId: String): String = withContext(Dispatchers.Default) {
+    suspend fun transcribeAudio(samples: FloatArray, modelId: String): String =
+        transcribeAudio(samples, modelId, trace = null)
+
+    internal suspend fun transcribeAudio(
+        samples: FloatArray,
+        modelId: String,
+        trace: StopToTextTrace?,
+    ): String = withContext(Dispatchers.Default) {
         liveModelError(modelId, samples.size)?.let { throw IllegalStateException(it) }
         if (samples.isEmpty()) return@withContext ""
 
         // Trim leading and trailing silence to avoid processing dead audio frames
-        val trimmed = AudioSilenceTrimmer.trim(samples)
+        val trim = trace?.begin("audio_silence_trim")
+        val trimmed = try { AudioSilenceTrimmer.trim(samples) } finally { trace?.end(trim) }
         if (trimmed.isEmpty() && samples.isNotEmpty()) {
             Log.i(TAG, "Audio is complete silence; skipping Whisper inference.")
             return@withContext ""
         }
         val activeSamples = if (trimmed.isNotEmpty()) trimmed else samples
 
+        val modelLockWait = trace?.begin("model_operation_lock_wait")
         modelOperationLock(modelId).withLock {
+          trace?.end(modelLockWait)
+          val engineLockWait = trace?.begin("engine_operation_lock_wait")
           engineOperationMutex.withLock inference@{
+            trace?.end(engineLockWait)
             if (MoonshineModels.isMoonshine(modelId)) {
-                val directory = moonshineDownloader.verifiedDirectory(modelId)
-                    ?: throw IllegalStateException(context.getString(R.string.moonshine_model_missing))
-                whisperEngine.release()
+                val verify = trace?.begin("moonshine_asset_verification")
+                val directory = try {
+                    moonshineDownloader.verifiedDirectory(modelId)
+                } finally {
+                    trace?.end(verify)
+                } ?: throw IllegalStateException(context.getString(R.string.moonshine_model_missing))
+                val releaseWhisper = trace?.begin("whisper_engine_release")
+                try { whisperEngine.release() } finally { trace?.end(releaseWhisper) }
                 _modelLoaded.value = false
                 return@inference try {
-                    moonshineEngine.transcribe(directory, modelId, activeSamples)
+                    moonshineEngine.transcribe(directory, modelId, activeSamples, trace)
                 } catch (_: MoonshineBusyException) {
                     throw IllegalStateException(context.getString(R.string.moonshine_busy_error))
                 }

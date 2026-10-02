@@ -22,6 +22,12 @@ val hasReleaseSigning = listOf(
   releaseStorePassword,
   releaseKeyPassword
 ).all { !it.isNullOrBlank() }
+val stopToTextTraceEnabled = providers.gradleProperty("stopToTextTrace")
+  .map { value ->
+    require(value == "true" || value == "false") { "stopToTextTrace must be true or false" }
+    value.toBoolean()
+  }
+  .getOrElse(false)
 
 android {
   namespace = "dev.sebastian.vozlocal"
@@ -36,6 +42,7 @@ android {
     targetSdk = 36
     versionCode = 1
     versionName = "1.0"
+    buildConfigField("boolean", "STOP_TO_TEXT_TRACE_ENABLED", stopToTextTraceEnabled.toString())
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     ndk {

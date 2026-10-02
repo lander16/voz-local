@@ -5,7 +5,26 @@ separates **measurements** from code inspection, user observations, and future
 hypotheses. A result is not a general model ranking unless it identifies the
 device, software configuration, audio, and test conditions used to obtain it.
 
-Last updated: 2026-09-07.
+Last updated: 2026-10-02.
+
+## Stop-to-text latency milestone in progress
+
+Moonshine Spanish Small is the primary candidate for the current user goal of
+reducing wait after Stop; it remains explicitly selected and experimental, with
+no default or model-promotion change. The former 30-second complete-clip cap was
+removed in `40f12c7`. Its current app path verifies the selected bundle and
+creates, loads, runs, and closes a native transcriber for each request.
+
+The opt-in `stopToTextTrace` build property records monotonic offset spans for
+recorder release and drain, PCM snapshot/reset, trimming, bundle verification,
+engine handoff, adapter creation/load/inference/teardown, postprocessing, and
+delivery. In-app result state publication and overlay accessibility-action
+acceptance are separate endpoints. Action acceptance is not evidence that the
+target visibly rendered the text. Nested and overlapping spans retain their
+offsets and must not be summed. Trace lines contain no audio or transcript text;
+they are disabled by default. Signed-device timings, first-use/warm repeats,
+longer-duration checks, and an asset-residency decision remain unavailable
+until the approved, consented test speech is recorded and the runs are captured.
 
 ## September 7 device-validation follow-up
 
@@ -251,6 +270,10 @@ Spanish Tiny/Small are explicitly selected alternative models (see README).
 Their app path uses complete clips without streaming previews.
 Per-request verification/loading/teardown adds costs outside the screening inference
 timings below, so these figures are not promises of app Stop-to-result latency.
+For the active latency milestone, Small Spanish is the primary candidate; Tiny is
+retained as an optional comparison. The former 30-second complete-clip limit was
+removed in `40f12c7`. Do not infer a user-visible advantage or implement residency
+from the complete-clip inference-only figures above.
 
 Initial Pixel execution is now verified. On the same ten-second Spanish fixture,
 ten warm complete-clip calls measured medians of **2.764 s** for Whisper Small q8_0
