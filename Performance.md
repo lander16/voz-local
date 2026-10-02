@@ -29,9 +29,21 @@ a 6.299-second take. Asset verification, model load, and native teardown occupie
 566 ms (45.7%) of that one sample's measured critical path. This is enough to
 prioritize repeated screening, not to classify the run as cold or warm, claim a
 general gain, or justify resident model reuse. Two earlier user takes had no
-recoverable trace records; the reason is unknown. The retained artifact includes
-no raw audio or transcript. Longer-duration checks, ten warm repeats, p95, and an
-asset-residency decision remain outstanding.
+recoverable trace records; the reason is unknown. Nine further complete traces
+are retained at
+[`docs/validation/2026-10-02-stop-to-text/repeated-mic-traces.json`](docs/validation/2026-10-02-stop-to-text/repeated-mic-traces.json).
+For these distinct microphone takes (5.819–13.059 seconds; different PCM hashes),
+Stop-to-state median was 1,681 ms, range 1,098–1,973 ms, with descriptive
+nearest-rank p95 1,973 ms (n=9). Median verification/load/teardown was 478 ms
+(29% median per-run share); conservatively, median load plus teardown alone was
+343 ms (20.4% of the endpoint median). This makes a verified-instance experiment
+plausible under the 15% screening gate while retaining full verification before
+instance creation, but it is an attribution-based hypothesis, not measured
+resident improvement. The takes are not matched PCM, durations vary, warm-cache
+state is unproven, and this is not a paired control comparison. The two retained
+artifacts contain no raw audio or transcripts. Twenty-to-thirty-second and
+sixty-to-ninety-second checks, matched-PCM paired comparisons, p95 regression
+gate, memory retention, and an end-to-end residency decision remain outstanding.
 Build and install the opt-in signed diagnostic release with
 `scripts/install-signed-release.sh --skip-tests --stop-to-text-trace`. The script
 checks that its certificate matches the installed app before updating it. Capture
