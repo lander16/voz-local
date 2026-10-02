@@ -1,0 +1,58 @@
+{
+  "schema": "vozlocal-stop-to-text-resident-candidate-partial-v1",
+  "capture_date_local": "2026-10-02",
+  "app": {
+    "commit": "1e95bc5aeb0da01e984b9d472758f962e6568fd3",
+    "apk_sha256": "534fce7382ee97a2cc00405581bfff13b9fa8fb346978f5d54e6da8e69d47d79"
+  },
+  "device": {
+    "model": "Google Pixel 8 Pro",
+    "os": "Android 17",
+    "build": "CP3A.260905.009"
+  },
+  "model": {
+    "id": "moonshine_small_es",
+    "language": "es"
+  },
+  "capture": {
+    "filter": "VozLocal UID 10595; StopToTextTrace:I",
+    "source": "user-initiated in-app microphone recordings",
+    "complete_unique_trace_ids_observed": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+    "outcomes": "All 11 records reported app_result_published.",
+    "resident_reuse": "ID 1 showed adapter creation and model load; IDs 2–11 showed moonshine_resident_reused and no adapter creation/model-load spans.",
+    "durable_row_retention": "The terminal stream output was truncated. Only IDs 1–3 and 9–11 could be recovered from the returned tool output; a later UID/tag-filtered main-buffer read returned no rows. IDs 4–8 timing details are unavailable.",
+    "raw_audio_retained": false,
+    "transcript_retained": false,
+    "matched_pcm_comparison": false,
+    "first_use_or_warm_state": "ID 1 is the first observed request in this capture and created/loaded the resident instance; cold OS/filesystem cache is not established. Later requests reused the instance."
+  },
+  "endpoint": "Stop receipt to in-app result state publication; not proof of rendered pixels.",
+  "recovered_rows": [
+    {"trace_id": 1, "audio_duration_ms": 5979, "pcm_sha256_f32le": "2cd69ed5c9cd15dcb98c138c94129d4fa784df3d383d45c9cc8a158e20fb5ed4", "stop_to_app_state_published_ms": 1491, "asset_verification_ms": 202, "adapter_create_ms": 0, "model_load_ms": 594, "inference_ms": 614, "resident_reused": false},
+    {"trace_id": 2, "audio_duration_ms": 6819, "pcm_sha256_f32le": "24247a7dedbe64ffc0c2cd83f9caf96dde3f6db054031e3733957fa73eb3b605", "stop_to_app_state_published_ms": 818, "asset_verification_ms": 126, "inference_ms": 653, "resident_reused": true},
+    {"trace_id": 3, "audio_duration_ms": 11239, "pcm_sha256_f32le": "38d09faac4cdc969ed188f740213268fef7ae2dbf57c51f2e9b159925c95c835", "stop_to_app_state_published_ms": 1350, "asset_verification_ms": 127, "inference_ms": 1160, "resident_reused": true},
+    {"trace_id": 9, "audio_duration_ms": 10519, "pcm_sha256_f32le": "f2f8a2e40c348fcf9eb365356a6aaefcbd52b80a227abfa26c4427e55c940cc2", "stop_to_app_state_published_ms": 1444, "asset_verification_ms": 143, "inference_ms": 1250, "resident_reused": true},
+    {"trace_id": 10, "audio_duration_ms": 11299, "pcm_sha256_f32le": "3de8d698791c60049200b4e34886310d711fdaebf94eab2a6fc92fc341995fd9", "stop_to_app_state_published_ms": 1530, "asset_verification_ms": 127, "inference_ms": 1349, "resident_reused": true},
+    {"trace_id": 11, "audio_duration_ms": 15499, "pcm_sha256_f32le": "30115fcbb8240b61b77fe0ad69e4881ab0247b03a6c69e6a2de61595e38bc896", "stop_to_app_state_published_ms": 1976, "asset_verification_ms": 128, "inference_ms": 1798, "resident_reused": true}
+  ],
+  "power_thermal": {
+    "before_series": {"battery_percent": 44, "battery_temperature_c": 33.7, "charging": false, "battery_saver": false, "android_thermal_status": 0},
+    "after_series": {"battery_percent": 43, "battery_temperature_c": 33.2, "charging": false, "battery_saver": false, "android_thermal_status": 0},
+    "note": "Point samples only; battery saver was read as global low_power=0."
+  },
+  "post_run_process_memory_kb": {
+    "pid": 20733,
+    "total_pss": 299110,
+    "total_rss": 411412,
+    "native_heap_pss": 188053,
+    "note": "Single post-use sample; no idle retention-growth, memory-pressure eviction, or leak conclusion is supported."
+  },
+  "aggregate": {
+    "status": "unavailable_due_to_incomplete_retention",
+    "latency_median_ms": null,
+    "latency_p95_ms": null,
+    "paired_gain_percent": null,
+    "decision": "Evidence confirms resident reuse occurred and removed adapter creation/model loading on subsequent requests, but the complete candidate timing distribution was not retained. These live microphone takes differ in duration and PCM hash. Do not claim a measured speedup or pass the 15% median / 10% p95 gate."
+  },
+  "next_capture_requirement": "Stream only UID 10595 and StopToTextTrace:I to a private local file, confirm the expected unique IDs and required fields are present before stopping, and retain only sanitized metadata."
+}

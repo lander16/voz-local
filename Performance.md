@@ -43,13 +43,29 @@ resident improvement. The takes are not matched PCM, durations vary, warm-cache
 state is unproven, and this is not a paired control comparison. The two retained
 artifacts contain no raw audio or transcripts. Twenty-to-thirty-second and
 sixty-to-ninety-second checks, matched-PCM paired comparisons, p95 regression
-gate, memory retention, and an end-to-end residency decision remain outstanding.
+gate, and second-day finalist repeat remain outstanding. A subsequent signed
+candidate build (`1e95bc5`, APK SHA-256
+`534fce7382ee97a2cc00405581bfff13b9fa8fb346978f5d54e6da8e69d47d79`) produced
+11 in-app traces: one first-observed create/load and ten subsequent
+`moonshine_resident_reused` requests, all for `moonshine_small_es` and all
+publishing in-app result state. Complete rows were not durably retained:
+terminal output truncation left only IDs 1–3 and 9–11 recoverable; a later
+UID/tag-filtered buffer read returned no rows. Partial visible values are
+retained without an aggregate in
+[`docs/validation/2026-10-02-stop-to-text/resident-candidate-partial.json`](docs/validation/2026-10-02-stop-to-text/resident-candidate-partial.json).
+No candidate median, p95, paired gain, or pass of the 15%/10% gate is claimed.
+Post-series package memory was 299,110 KB PSS / 411,412 KB RSS, including
+188,053 KB native-heap PSS; this is a single post-use sample, not a leak or
+retention-stability test. Next capture must write the filtered stream to a
+private local file, verify all expected IDs and timing fields, then stop capture
+and retain only sanitized metadata.
 Build and install the opt-in signed diagnostic release with
 `scripts/install-signed-release.sh --skip-tests --stop-to-text-trace`. The script
 checks that its certificate matches the installed app before updating it. Capture
-only VozLocal's UID and the trace tag with
-`adb logcat --uid=<VozLocal-uid> -s StopToTextTrace:I`; retain the PCM SHA-256 and
-timings, never the samples or transcript. Recheck the device state before each run.
+only VozLocal's UID and the trace tag, directing output to a private local file
+rather than a terminal buffer. Before stopping capture, verify all expected
+unique IDs have complete timing rows. Retain the PCM SHA-256 and timings, never
+the samples or transcript. Recheck the device state before each run.
 
 ## September 7 device-validation follow-up
 
