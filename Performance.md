@@ -66,6 +66,16 @@ only VozLocal's UID and the trace tag, directing output to a private local file
 rather than a terminal buffer. Before stopping capture, verify all expected
 unique IDs have complete timing rows. Retain the PCM SHA-256 and timings, never
 the samples or transcript. Recheck the device state before each run.
+`scripts/stop_to_text_trace_capture.py` implements this workflow: `capture
+--serial <ADB-serial> --uid 10595 --adb <absolute-adb-path> --output
+/private/tmp/<new-session>.log` creates an exclusive mode-0600 file, snapshots
+existing filtered IDs to avoid counting logcat backfill, and flushes new filtered
+lines directly to disk. Stop it with Ctrl-C after the user-run batch, then run
+`validate --file <path> --expected-complete <expected-count>`; the validator
+groups IDs by app PID, detects malformed or incomplete records, and reports
+counts/IDs only. Synthetic behavior is covered by
+`python3 -m unittest scripts/test_stop_to_text_trace_capture.py`; this host-side
+file/parser check is not proof of Android-device capture or a measurement.
 
 ## September 7 device-validation follow-up
 
