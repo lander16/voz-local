@@ -22,14 +22,21 @@ delivery. In-app result state publication and overlay accessibility-action
 acceptance are separate endpoints. Action acceptance is not evidence that the
 target visibly rendered the text. Nested and overlapping spans retain their
 offsets and must not be summed. Trace lines contain no audio or transcript text;
-they are disabled by default. Signed-device timings, first-use/warm repeats,
-longer-duration checks, and an asset-residency decision remain unavailable
-until the approved, consented test speech is recorded and the runs are captured.
+they are disabled by default. One consented in-app microphone trace is retained
+at [`docs/validation/2026-10-02-stop-to-text/single-live-mic-trace.json`](docs/validation/2026-10-02-stop-to-text/single-live-mic-trace.json).
+It measured 1,238 ms from Stop receipt to ViewModel result-state publication for
+a 6.299-second take. Asset verification, model load, and native teardown occupied
+566 ms (45.7%) of that one sample's measured critical path. This is enough to
+prioritize repeated screening, not to classify the run as cold or warm, claim a
+general gain, or justify resident model reuse. Two earlier user takes had no
+recoverable trace records; the reason is unknown. The retained artifact includes
+no raw audio or transcript. Longer-duration checks, ten warm repeats, p95, and an
+asset-residency decision remain outstanding.
 Build and install the opt-in signed diagnostic release with
 `scripts/install-signed-release.sh --skip-tests --stop-to-text-trace`. The script
 checks that its certificate matches the installed app before updating it. Capture
-only the app process and trace tag with
-`adb logcat --pid <VozLocal-pid> -s StopToTextTrace:I`; retain the PCM SHA-256 and
+only VozLocal's UID and the trace tag with
+`adb logcat --uid=<VozLocal-uid> -s StopToTextTrace:I`; retain the PCM SHA-256 and
 timings, never the samples or transcript. Recheck the device state before each run.
 
 ## September 7 device-validation follow-up

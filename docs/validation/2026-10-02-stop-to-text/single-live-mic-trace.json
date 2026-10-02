@@ -1,0 +1,98 @@
+{
+  "schema": "vozlocal-stop-to-text-trace-v1",
+  "capture_date_local": "2026-10-02",
+  "capture_method": "signed production-path in-app microphone recording; live logcat filtered to VozLocal UID 10595 and StopToTextTrace tag",
+  "app": {
+    "commit": "5743024380029f565c769ba54c05f5db009d1a6e",
+    "apk_sha256": "ec1052f5fc8fe6d95a57e5e5b6f3ed4cc1ca7f9247e564d53007fd2f1a014668",
+    "trace_id": 3,
+    "source": "in_app",
+    "outcome": "app_result_published"
+  },
+  "device": {
+    "model": "Google Pixel 8 Pro",
+    "os": "Android 17",
+    "build": "CP3A.260905.009"
+  },
+  "model": {
+    "id": "moonshine_small_es",
+    "language": "es",
+    "assets_manifest_sha256": "c1206c016b82b8795b6bbd1a88a4b23726e56b77fc839d597b7330a6f5b98932",
+    "asset_verification_span_ms": 197,
+    "first_use_or_warm_state": "unknown"
+  },
+  "audio": {
+    "source": "user-initiated microphone speech; short reservation-related sentence; content intentionally not retained",
+    "pcm_format_for_hash": "canonical little-endian float32 at 16000 Hz mono",
+    "samples": 100798,
+    "duration_ms": 6299,
+    "pcm_sha256_f32le": "50bd38fd650e28956892edd74e2b0ebbaee41a432882c143554b212838ca59fe",
+    "raw_audio_retained": false,
+    "transcript_retained": false
+  },
+  "settings": "Not recorded by this trace; model identity and language are known, other decode/settings fields unavailable.",
+  "run_order": {
+    "trace_id_within_app_process": 3,
+    "first_record_seen_by_live_capture": true,
+    "two_earlier_user_recordings_in_session": "their trace records were not present in the available log buffer; timings unavailable; reason unknown",
+    "matched_pcm_comparison": false
+  },
+  "power_thermal": {
+    "before": {
+      "battery_percent": 69,
+      "battery_temperature_c": 34.6,
+      "charging": false,
+      "battery_saver": false,
+      "android_thermal_status": 0
+    },
+    "after": {
+      "battery_percent": 68,
+      "battery_temperature_c": 35.7,
+      "charging": false,
+      "battery_saver": false,
+      "android_thermal_status": 0
+    },
+    "note": "Before/after readings bracket the recording but are not continuous sensor traces."
+  },
+  "stop_to_app_state_published_ms": 1238,
+  "trace_offsets_from_trace_start_ms": {
+    "stop_received": 2,
+    "in_app_result_state_published": 1240,
+    "finalized_at": 1241
+  },
+  "stop_to_overlay_action_accepted": "not applicable; in-app source",
+  "spans": [
+    {"name": "recorder_hardware_release", "start_ms": 4, "end_ms": 43},
+    {"name": "recorder_reader_drain", "start_ms": 43, "end_ms": 43},
+    {"name": "recorder_pcm_snapshot_copy", "start_ms": 43, "end_ms": 44},
+    {"name": "recorder_buffer_reset_and_shrink", "start_ms": 44, "end_ms": 45},
+    {"name": "recorder_stop_total", "start_ms": 3, "end_ms": 45, "note": "contains the nested recorder spans above; do not add them again"},
+    {"name": "audio_silence_trim", "start_ms": 45, "end_ms": 46},
+    {"name": "model_operation_lock_wait", "start_ms": 46, "end_ms": 46},
+    {"name": "engine_operation_lock_wait", "start_ms": 46, "end_ms": 46},
+    {"name": "moonshine_asset_verification", "start_ms": 46, "end_ms": 243},
+    {"name": "whisper_engine_release", "start_ms": 243, "end_ms": 244},
+    {"name": "moonshine_pcm_request_copy", "start_ms": 244, "end_ms": 244},
+    {"name": "moonshine_coroutine_dispatch", "start_ms": 244, "end_ms": 244},
+    {"name": "moonshine_native_worker_queue", "start_ms": 244, "end_ms": 244},
+    {"name": "moonshine_adapter_create", "start_ms": 244, "end_ms": 244},
+    {"name": "moonshine_model_load", "start_ms": 244, "end_ms": 576},
+    {"name": "moonshine_inference", "start_ms": 576, "end_ms": 1187},
+    {"name": "moonshine_native_teardown", "start_ms": 1187, "end_ms": 1224},
+    {"name": "moonshine_pcm_clear", "start_ms": 1224, "end_ms": 1224},
+    {"name": "text_postprocess", "start_ms": 1225, "end_ms": 1229},
+    {"name": "history_and_stats_persistence", "start_ms": 1229, "end_ms": 1239},
+    {"name": "pcm_sha256_f32le", "start_ms": 1240, "end_ms": 1241, "note": "after delivery endpoint; excluded from stop-to-state latency"}
+  ],
+  "interpretation": {
+    "setup_verification_load_teardown_ms": 566,
+    "setup_share_of_stop_to_app_state_percent": 45.7,
+    "decision": "One sample shows verification/load/teardown are material stages and warrants the approved repeated-measurement screening. It is not a cold/warm classification, matched comparison, speedup claim, or sufficient basis to implement residency.",
+    "caveats": [
+      "Endpoint is ViewModel result-state publication, not proof of rendered pixels or user-visible display completion.",
+      "Span offsets are emitted at millisecond precision and retain overlap; nested or overlapping spans must not be summed.",
+      "Only one complete trace was recovered. The two earlier user recordings have unavailable timing evidence for an unknown reason.",
+      "20–30-second and 60–90-second duration checks, ten warm repeats, p95, and retained-memory behavior remain unmeasured."
+    ]
+  }
+}
