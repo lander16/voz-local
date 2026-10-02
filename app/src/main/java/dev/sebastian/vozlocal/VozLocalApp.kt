@@ -48,13 +48,11 @@ class VozLocalApp : Application() {
         Log.d("VozLocalApp", "onTrimMemory received level: $level")
         // Under critical memory pressure, release the idle native model to avoid process kill
         if (level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE || level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL) {
-            if (!audioRecorder.isRecording() && !repository.whisperEngine.isBusy()) {
-                Log.i("VozLocalApp", "Critical memory pressure ($level). Releasing idle Whisper model to protect process.")
+            if (!audioRecorder.isRecording() && !repository.whisperEngine.isBusy() && !repository.isMoonshineBusy()) {
+                Log.i("VozLocalApp", "Critical memory pressure ($level). Releasing idle ASR model to protect process.")
                 applicationScope.launch {
                     runCatching {
-                        if (repository.whisperEngine.releaseIfIdle()) {
-                            repository.updateModelLoadedState(false)
-                        }
+                        repository.releaseIdleEnginesForMemoryPressure()
                     }
                 }
             }

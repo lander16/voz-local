@@ -4,6 +4,7 @@ import ai.moonshine.voice.JNI
 import ai.moonshine.voice.Transcriber
 import android.content.Context
 import dev.sebastian.vozlocal.performance.StopToTextTrace
+import dev.sebastian.vozlocal.moonshine.MoonshineModels
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -30,6 +31,18 @@ class MoonshineEngine(
     private val stateLock = Any()
     private var draining = false
     private var drainSignal: CompletableDeferred<Unit>? = null
+
+    // Accessed only on `worker`; every directory reaches this engine only after
+    // DictationRepository has re-verified the full pinned bundle under its model
+    // lifecycle lock. The manifest identity prevents an instance for a different
+    // pinned bundle from being reused at the same path.
+    private data class Resident(
+        val modelId: String,
+        val directoryPath: String,
+        val bundleIdentity: String,
+        val adapter: MoonshineAdapter,
+    )
+    private var resident: Resident? = null
 
     internal suspend fun transcribe(
         directory: File,
@@ -63,28 +76,22 @@ class MoonshineEngine(
                         // release's barrier submission.
                         worker.execute {
                             trace?.end(queued)
-                            var requestAdapter: MoonshineAdapter? = null
                             var result: String? = null
                             var failure: Throwable? = null
                             try {
-                                val create = trace?.begin("moonshine_adapter_create")
-                                val nativeAdapter = try { adapterFactory.create() } finally { trace?.end(create) }
-                                requestAdapter = nativeAdapter
-                                val load = trace?.begin("moonshine_model_load")
-                                try { nativeAdapter.load(directory, architecture) } finally { trace?.end(load) }
+                                val nativeAdapter = getOrLoadResident(directory, modelId, architecture, trace)
                                 val inference = trace?.begin("moonshine_inference")
                                 try { result = nativeAdapter.transcribe(pcm, SAMPLE_RATE) } finally { trace?.end(inference) }
                             } catch (t: Throwable) {
                                 failure = t
-                            } finally {
-                                val close = trace?.begin("moonshine_native_teardown")
+                                // An inference failure may leave native state unusable. Do
+                                // not retain that adapter for a retry.
                                 try {
-                                    requestAdapter?.close()
-                                } catch (t: Throwable) {
-                                    if (failure == null) failure = t
-                                } finally {
-                                    trace?.end(close)
+                                    closeResident(trace)
+                                } catch (closeFailure: Throwable) {
+                                    failure?.addSuppressed(closeFailure)
                                 }
+                            } finally {
                                 val clear = trace?.begin("moonshine_pcm_clear")
                                 try { pcm.fill(0f) } finally { trace?.end(clear) }
                                 synchronized(stateLock) { busy.set(false) }
@@ -104,10 +111,18 @@ class MoonshineEngine(
     }
 
     suspend fun release() {
-        withContext(NonCancellable + dispatcher) {
+        releaseResident(requireIdle = false)
+    }
+
+    /** Evicts the retained adapter only when there is no admitted native request. */
+    suspend fun releaseIfIdle(): Boolean = releaseResident(requireIdle = true)
+
+    private suspend fun releaseResident(requireIdle: Boolean): Boolean {
+        return withContext(NonCancellable + dispatcher) {
             val signal: CompletableDeferred<Unit>
             val enqueue: Boolean
             synchronized(stateLock) {
+                if (requireIdle && (busy.get() || draining)) return@withContext false
                 val existing = drainSignal
                 if (existing != null) {
                     signal = existing
@@ -122,14 +137,22 @@ class MoonshineEngine(
             if (enqueue) {
                 synchronized(stateLock) {
                     try {
-                        // A barrier on the single native worker drains the request (and,
-                        // importantly, its close()) while keeping the executor reusable.
+                        // Queue behind native use before closing. Keep admission blocked
+                        // until close completes; the single worker remains reusable.
                         worker.execute {
-                            synchronized(stateLock) {
-                                draining = false
-                                drainSignal = null
+                            var closeFailure: Throwable? = null
+                            try {
+                                closeResident(trace = null)
+                            } catch (t: Throwable) {
+                                closeFailure = t
+                            } finally {
+                                synchronized(stateLock) {
+                                    draining = false
+                                    drainSignal = null
+                                }
                             }
-                            signal.complete(Unit)
+                            if (closeFailure == null) signal.complete(Unit)
+                            else signal.completeExceptionally(closeFailure)
                         }
                     } catch (t: Throwable) {
                         draining = false
@@ -139,10 +162,53 @@ class MoonshineEngine(
                 }
             }
             signal.await()
+            true
         }
     }
 
-    fun isBusy(): Boolean = busy.get()
+    fun isBusy(): Boolean = busy.get() || synchronized(stateLock) { draining }
+
+    private fun getOrLoadResident(
+        directory: File,
+        modelId: String,
+        architecture: Int,
+        trace: StopToTextTrace?,
+    ): MoonshineAdapter {
+        val path = directory.canonicalFile.absolutePath
+        val bundleIdentity = MoonshineModels.model(modelId)?.assets
+            ?.joinToString("|") { "${it.name}:${it.sizeBytes}:${it.sha256}" }
+            ?: throw IllegalArgumentException("Unsupported Moonshine model id: $modelId")
+        val active = resident
+        if (active != null && active.modelId == modelId && active.directoryPath == path && active.bundleIdentity == bundleIdentity) {
+            trace?.point("moonshine_resident_reused")
+            return active.adapter
+        }
+
+        closeResident(trace)
+        val create = trace?.begin("moonshine_adapter_create")
+        val adapter = try { adapterFactory.create() } finally { trace?.end(create) }
+        var loaded = false
+        try {
+            val load = trace?.begin("moonshine_model_load")
+            try { adapter.load(directory, architecture) } finally { trace?.end(load) }
+            resident = Resident(modelId, path, bundleIdentity, adapter)
+            loaded = true
+            return adapter
+        } finally {
+            if (!loaded) {
+                val close = trace?.begin("moonshine_native_teardown")
+                try { adapter.close() } finally { trace?.end(close) }
+            }
+        }
+    }
+
+    /** Must run on the native worker, after any request using the adapter. */
+    private fun closeResident(trace: StopToTextTrace?) {
+        val current = resident ?: return
+        resident = null
+        val close = trace?.begin("moonshine_native_teardown")
+        try { current.adapter.close() } finally { trace?.end(close) }
+    }
 
     companion object {
         const val TINY_ES = "moonshine_tiny_es"

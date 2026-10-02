@@ -53,6 +53,10 @@ class MoonshineEngineTest {
         assertTrue(started.await(2, TimeUnit.SECONDS))
         request.cancelAndJoin()
         assertTrue(engine.isBusy())
+        try {
+            engine.transcribe(modelDir(), MoonshineEngine.TINY_ES, pcm())
+            error("A retry must not enter native code before the cancelled request drains")
+        } catch (_: MoonshineBusyException) { }
         val release = async(Dispatchers.Default) { engine.release() }
         finish.countDown()
         withTimeout(2_000) { release.await() }
@@ -63,29 +67,136 @@ class MoonshineEngineTest {
         assertEquals("ok", next.await())
     }
 
-    @Test fun closeCompletesBeforeSuccessfulResultAndCloseFailureDoesNotPoisonEngine() = runBlocking {
-        val closedBeforeReturn = AtomicBoolean(false)
+    @Test fun residentAdapterIsLoadedOnceForRepeatedAndLongRequestsThenReleased() = runBlocking {
+        val creates = AtomicInteger(0)
+        val loads = AtomicInteger(0)
+        val closes = AtomicInteger(0)
+        val factory = FakeFactory {
+            creates.incrementAndGet()
+            object : FakeAdapter() {
+                override fun load(directory: File, architecture: Int) { loads.incrementAndGet() }
+                override fun transcribe(samples: FloatArray, sampleRate: Int) = "${samples.size}"
+                override fun close() { closes.incrementAndGet() }
+            }
+        }
+        val engine = engine(factory)
+        try {
+            repeat(12) { assertEquals("160", engine.transcribe(modelDir(), MoonshineEngine.SMALL_ES, FloatArray(160))) }
+            // The adapter accepts long clips without introducing an artificial 30 s cap.
+            assertEquals("496000", engine.transcribe(modelDir(), MoonshineEngine.SMALL_ES, FloatArray(31 * 16_000)))
+            assertEquals(1, creates.get())
+            assertEquals(1, loads.get())
+            assertEquals(0, closes.get())
+        } finally {
+            engine.release()
+        }
+        assertEquals(1, closes.get())
+    }
+
+    @Test fun modelOrVerifiedDirectoryIdentityChangeClosesOldResidentBeforeLoadingNext() = runBlocking {
+        val events = mutableListOf<String>()
+        val factory = FakeFactory {
+            val id = events.count { it.startsWith("create") } + 1
+            events += "create$id"
+            object : FakeAdapter() {
+                override fun load(directory: File, architecture: Int) { events += "load$id:$architecture:${directory.name}" }
+                override fun close() { events += "close$id" }
+            }
+        }
+        val engine = engine(factory)
+        val secondDir = File(context.cacheDir, "moonshine-second").apply { mkdirs() }
+        try {
+            engine.transcribe(modelDir(), MoonshineEngine.TINY_ES, pcm())
+            engine.transcribe(modelDir(), MoonshineEngine.TINY_ES, pcm())
+            engine.transcribe(secondDir, MoonshineEngine.SMALL_ES, pcm())
+            assertEquals(listOf("create1", "load1:${MoonshineEngine.architectureFor(MoonshineEngine.TINY_ES)}:cache", "close1", "create2", "load2:${MoonshineEngine.architectureFor(MoonshineEngine.SMALL_ES)}:moonshine-second"), events)
+        } finally {
+            engine.release()
+        }
+        assertEquals("close2", events.last())
+    }
+
+    @Test fun failedModelLoadClosesPartialAdapterAndRetryCreatesFreshResident() = runBlocking {
+        val creates = AtomicInteger(0)
+        val closes = AtomicInteger(0)
+        val factory = FakeFactory {
+            val index = creates.incrementAndGet()
+            object : FakeAdapter() {
+                override fun load(directory: File, architecture: Int) {
+                    if (index == 1) error("load failure")
+                }
+                override fun close() { closes.incrementAndGet() }
+                override fun transcribe(samples: FloatArray, sampleRate: Int) = "retry-ok"
+            }
+        }
+        val engine = engine(factory)
+        try {
+            try {
+                engine.transcribe(modelDir(), MoonshineEngine.SMALL_ES, pcm())
+                error("expected load failure")
+            } catch (expected: IllegalStateException) {
+                assertEquals("load failure", expected.message)
+            }
+            assertEquals(1, closes.get())
+            assertEquals("retry-ok", engine.transcribe(modelDir(), MoonshineEngine.SMALL_ES, pcm()))
+            assertEquals(2, creates.get())
+        } finally {
+            engine.release()
+        }
+        assertEquals(2, closes.get())
+    }
+
+    @Test fun closeFailureDoesNotPoisonEngineOrPreventFreshRetry() = runBlocking {
+        val closes = AtomicInteger(0)
         val calls = AtomicInteger(0)
         val factory = FakeFactory {
             val call = calls.incrementAndGet()
             object : FakeAdapter() {
                 override fun transcribe(samples: FloatArray, sampleRate: Int): String = "result-$call"
                 override fun close() {
+                    closes.incrementAndGet()
                     if (call == 1) throw IllegalStateException("close failed")
-                    closedBeforeReturn.set(true)
                 }
             }
         }
         val engine = engine(factory)
+        assertEquals("result-1", engine.transcribe(modelDir(), MoonshineEngine.TINY_ES, pcm()))
+        assertEquals(0, closes.get())
         try {
-            engine.transcribe(modelDir(), MoonshineEngine.TINY_ES, pcm())
+            engine.release()
             error("expected close failure")
         } catch (expected: IllegalStateException) {
             assertEquals("close failed", expected.message)
         }
         assertFalse(engine.isBusy())
         assertEquals("result-2", engine.transcribe(modelDir(), MoonshineEngine.TINY_ES, pcm()))
-        assertTrue(closedBeforeReturn.get())
+        engine.release()
+        assertEquals(2, closes.get())
+    }
+
+    @Test fun releaseIfIdleDoesNotCloseDuringNativeRequestAndClosesAfterDrain() = runBlocking {
+        val started = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        val closed = AtomicBoolean(false)
+        val factory = FakeFactory {
+            object : FakeAdapter() {
+                override fun transcribe(samples: FloatArray, sampleRate: Int): String {
+                    started.countDown()
+                    finish.await(2, TimeUnit.SECONDS)
+                    return "drained"
+                }
+                override fun close() { closed.set(true) }
+            }
+        }
+        val engine = engine(factory)
+        val request = async(Dispatchers.Default) { engine.transcribe(modelDir(), MoonshineEngine.TINY_ES, pcm()) }
+        assertTrue(started.await(2, TimeUnit.SECONDS))
+        assertFalse(engine.releaseIfIdle())
+        assertFalse(closed.get())
+        finish.countDown()
+        assertEquals("drained", request.await())
+        assertTrue(engine.releaseIfIdle())
+        assertTrue(closed.get())
     }
 
     @Test fun concurrentReleaseCallsShareDrainAndDoNotShutdownWorker() = runBlocking {

@@ -159,6 +159,7 @@ class DictationRepository(
     val modelDownloader: ModelDownloader = ModelDownloader(context),
     val audioDecoder: AudioDecoder = AudioDecoder(context),
     val textPolishEngine: TextPolishEngine = TextPolishEngine(),
+    private val moonshineEngine: MoonshineEngine = MoonshineEngine(context),
 ) {
     private val database = AppDatabase.getDatabase(context)
     private val modelDao = database.modelDao()
@@ -173,7 +174,6 @@ class DictationRepository(
     private val modelOperationLocks = ConcurrentHashMap<String, Mutex>()
     private val engineOperationMutex = Mutex()
     private val moonshineDownloader = MoonshineModelDownloader(context)
-    private val moonshineEngine = MoonshineEngine(context)
 
     private fun downloaded(modelId: String): Boolean = if (MoonshineModels.isMoonshine(modelId))
         MoonshineModels.isDownloaded(context, modelId) else ModelUrls.isModelDownloaded(context, modelId)
@@ -584,6 +584,16 @@ class DictationRepository(
         _modelLoaded.value = loaded
     }
 
+    fun isMoonshineBusy(): Boolean = moonshineEngine.isBusy()
+
+    /** Release either resident engine under the same lock used by transcription. */
+    suspend fun releaseIdleEnginesForMemoryPressure(): Boolean = engineOperationMutex.withLock {
+        val moonshineReleased = moonshineEngine.releaseIfIdle()
+        val whisperReleased = whisperEngine.releaseIfIdle()
+        if (moonshineReleased || whisperReleased) _modelLoaded.value = false
+        moonshineReleased && whisperReleased
+    }
+
     suspend fun preloadSelectedDownloadedModel(): Boolean = withContext(Dispatchers.IO) {
         val deferredToWait: CompletableDeferred<Boolean>?
         val myDeferred: CompletableDeferred<Boolean>?
@@ -804,11 +814,27 @@ class DictationRepository(
     suspend fun selectModel(modelId: String) = withContext(Dispatchers.IO) {
         ensureModelCatalogInitialized()
         val selected = modelOperationLock(modelId).withLock {
-            database.withTransaction {
-                val model = modelDao.getModelsList().find { it.id == modelId && it.isDownloaded }
+            engineOperationMutex.withLock {
+                val currentModels = modelDao.getModelsList()
+                val model = currentModels.find { it.id == modelId && it.isDownloaded }
                 if (model == null) false else {
-                    modelDao.selectModel(model.id)
-                    true
+                    val previousId = currentModels.firstOrNull { it.isSelected }?.id
+                    if (previousId != modelId) {
+                        // Selection invalidates the selected-only Moonshine resident.
+                        // Drain/close it before publishing the new selection. Selecting
+                        // Moonshine also releases Whisper so both large engines are never
+                        // retained together.
+                        moonshineEngine.release()
+                        if (MoonshineModels.isMoonshine(modelId)) whisperEngine.release()
+                        _modelLoaded.value = false
+                    }
+                    database.withTransaction {
+                        val stillAvailable = modelDao.getModelsList().any { it.id == modelId && it.isDownloaded }
+                        if (!stillAvailable) false else {
+                            modelDao.selectModel(modelId)
+                            true
+                        }
+                    }
                 }
             }
         }
