@@ -1,6 +1,6 @@
 # Transcription performance implementation plan
 
-Last reconciled: September 8, 2026
+Last reconciled: October 2, 2026
 
 Audit baseline: `921f413f0be25537b87092daf90b8617cd542133`
 

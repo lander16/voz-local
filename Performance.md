@@ -25,6 +25,12 @@ offsets and must not be summed. Trace lines contain no audio or transcript text;
 they are disabled by default. Signed-device timings, first-use/warm repeats,
 longer-duration checks, and an asset-residency decision remain unavailable
 until the approved, consented test speech is recorded and the runs are captured.
+Build and install the opt-in signed diagnostic release with
+`scripts/install-signed-release.sh --skip-tests --stop-to-text-trace`. The script
+checks that its certificate matches the installed app before updating it. Capture
+only the app process and trace tag with
+`adb logcat --pid <VozLocal-pid> -s StopToTextTrace:I`; retain the PCM SHA-256 and
+timings, never the samples or transcript. Recheck the device state before each run.
 
 ## September 7 device-validation follow-up
 
