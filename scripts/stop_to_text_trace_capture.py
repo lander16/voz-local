@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import deque
 import json
 import os
 import re
@@ -11,6 +12,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from typing import Iterable
 
@@ -120,15 +122,27 @@ def capture(args: argparse.Namespace) -> int:
         "StopToTextTrace:I",
     ]
     try:
-        baseline = subprocess.run(
-            [*command[:4], "-d", *command[4:]],
-            check=True,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=15,
-        )
+        try:
+            baseline = subprocess.run(
+                [*command[:4], "-d", *command[4:]],
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=15,
+            )
+        except subprocess.CalledProcessError as error:
+            detail = (error.stderr or "").strip()
+            print(
+                f"filtered baseline snapshot failed (adb exit {error.returncode}); "
+                f"no capture file was opened. {detail}",
+                file=sys.stderr,
+            )
+            return 2
+        except subprocess.TimeoutExpired:
+            print("filtered baseline snapshot timed out; no capture file was opened", file=sys.stderr)
+            return 2
         baseline_summary = summarize_lines(baseline.stdout.splitlines())
         baseline_keys = {
             (str(record["pid"]), str(record["trace_id"]))
@@ -144,12 +158,23 @@ def capture(args: argparse.Namespace) -> int:
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
-                stderr=sys.stderr,
+                stderr=subprocess.PIPE,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
                 bufsize=1,
             )
+            stderr_tail: deque[str] = deque(maxlen=20)
+
+            def drain_stderr() -> None:
+                assert process.stderr is not None
+                for error_line in process.stderr:
+                    stderr_tail.append(error_line[-1000:])
+
+            stderr_reader = threading.Thread(target=drain_stderr, daemon=True)
+            stderr_reader.start()
+            stop_reason = "adb_stream_ended"
+            complete_keys: set[tuple[str, str]] = set()
             try:
                 assert process.stdout is not None
                 for line in process.stdout:
@@ -159,8 +184,14 @@ def capture(args: argparse.Namespace) -> int:
                         continue
                     stream.write(line)
                     stream.flush()
+                    key = trace_key(line)
+                    if key is not None and summarize_lines([line])["complete_records"] == 1:
+                        complete_keys.add(key)
+                    if args.stop_after is not None and len(complete_keys) >= args.stop_after:
+                        stop_reason = "expected_complete_rows"
+                        break
             except KeyboardInterrupt:
-                pass
+                stop_reason = "keyboard_interrupt"
             finally:
                 if process.poll() is None:
                     process.send_signal(signal.SIGINT)
@@ -171,6 +202,11 @@ def capture(args: argparse.Namespace) -> int:
                     process.wait()
                 if process.stdout is not None:
                     process.stdout.close()
+                stderr_reader.join(timeout=2)
+                logcat_exit_code = process.returncode
+                if process.stderr is not None:
+                    process.stderr.close()
+                adb_stderr_tail = "".join(stderr_tail)[-3000:].strip()
     except FileExistsError:
         print("refusing to overwrite an existing capture file", file=sys.stderr)
         return 2
@@ -179,8 +215,19 @@ def capture(args: argparse.Namespace) -> int:
         return 2
 
     summary = read_summary(output)
-    print(json.dumps({"capture_stopped": True, "output": str(output), **summary}, sort_keys=True))
-    return 0 if int(summary["complete_records"]) > 0 else 1
+    print(json.dumps({
+        "capture_stopped": True,
+        "stop_reason": stop_reason,
+        "adb_logcat_exit_code": logcat_exit_code,
+        "adb_logcat_stderr_tail": adb_stderr_tail,
+        "output": str(output),
+        **summary,
+    }, sort_keys=True))
+    if stop_reason == "expected_complete_rows" and int(summary["complete_records"]) >= args.stop_after:
+        return 0
+    if stop_reason == "keyboard_interrupt" and int(summary["complete_records"]) > 0:
+        return 0
+    return 2 if logcat_exit_code not in (0, -signal.SIGINT) else 1
 
 
 def validate(args: argparse.Namespace) -> int:
@@ -209,6 +256,7 @@ def main() -> int:
     capture_parser.add_argument("--uid", required=True, type=int, help="VozLocal Android UID")
     capture_parser.add_argument("--output", required=True, help="new absolute private local file path")
     capture_parser.add_argument("--adb", help="absolute adb path; defaults to PATH lookup")
+    capture_parser.add_argument("--stop-after", type=int, help="stop after this many new complete trace rows")
     capture_parser.set_defaults(func=capture)
 
     validate_parser = subparsers.add_parser("validate", help="count unique and complete trace rows in a capture")
@@ -220,6 +268,8 @@ def main() -> int:
     args = parser.parse_args()
     if getattr(args, "uid", 0) < 0:
         parser.error("UID must be non-negative")
+    if getattr(args, "stop_after", None) is not None and args.stop_after < 1:
+        parser.error("--stop-after must be positive")
     return args.func(args)
 
 

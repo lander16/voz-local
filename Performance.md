@@ -70,10 +70,12 @@ the samples or transcript. Recheck the device state before each run.
 --serial <ADB-serial> --uid 10595 --adb <absolute-adb-path> --output
 /private/tmp/<new-session>.log` creates an exclusive mode-0600 file, snapshots
 existing filtered IDs to avoid counting logcat backfill, and flushes new filtered
-lines directly to disk. Stop it with Ctrl-C after the user-run batch, then run
-`validate --file <path> --expected-complete <expected-count>`; the validator
-groups IDs by app PID, detects malformed or incomplete records, and reports
-counts/IDs only. Synthetic behavior is covered by
+lines directly to disk. Pass `--stop-after <N>` to stop after exactly N complete
+new rows (preferred for short handoffs); otherwise stop with Ctrl-C. The capture
+summary includes the ADB child exit code and bounded stderr tail, so an empty or
+failed stream is explicit. Then run `validate --file <path> --expected-complete
+<expected-count>`; the validator groups IDs by app PID, detects malformed or
+incomplete records, and reports counts/IDs only. Synthetic behavior is covered by
 `python3 -m unittest scripts/test_stop_to_text_trace_capture.py`; this host-side
 file/parser check is not proof of Android-device capture or a measurement.
 
