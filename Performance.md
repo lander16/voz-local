@@ -184,6 +184,28 @@ settings and a newer OS build; compare candidates within each set, not across th
 - It must not be used to make universal claims that q8_0 is always faster or
   more accurate than q5_1.
 
+## Stop-to-text diagnostic journal (2026-10-03)
+
+The opt-in `-PstopToTextTrace=true` production build writes a bounded,
+metadata-only journal to VozLocal's app-scoped external `diagnostics` directory.
+Records are committed atomically before the writer acknowledges persistence;
+the journal retains at most 64 records and 256 KiB. Ordinary builds leave the
+diagnostic writer disabled. A synthetic startup probe exercises the same writer
+but is marked `synthetic` with model state `unknown`; it is not a speech or warm
+model measurement. The retained test verified a scoped `adb pull` and showed
+the first synthetic record survived an app-process restart.
+
+The first complete post-restart Small Spanish microphone record is retained in
+[`first-record.json`](docs/validation/2026-10-03-stop-trace-journal/first-record.json).
+Its Stop-to-in-app-result-state-publication time was 1,234 ms for 6,459 ms of
+PCM. The same trace records 212 ms of asset verification, 366 ms of model load,
+and 595 ms of inference; those offsets are separate stage observations, not a
+matched comparison. The PCM identity is a hash only; neither audio nor
+transcript is retained. This single take is not evidence of comparative speedup,
+and the endpoint is state publication rather than proof of visible rendering.
+Candidate repeats, duration checks, p95, a second-day repeat, and retained
+memory stability remain open under the performance issues.
+
 ## Observations and open risks
 
 ### Battery and thermal state

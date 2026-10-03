@@ -1,0 +1,86 @@
+{
+  "schema": "vozlocal-stop-to-text-journal-record-v1",
+  "capture_date_local": "2026-10-03",
+  "capture_source": "trace-enabled signed production build; one user-initiated in-app microphone dictation; app-scoped AtomicFile journal retrieved with adb pull",
+  "provenance": {
+    "app_commit": "2adb0f6",
+    "installed_apk_sha256": "c0d1c6331419dbc0f7c167b6358db86ee5d51e8183c2b840b8e172afe7803c78",
+    "model_lifecycle_implementation_commit": "1e95bc5",
+    "device": "Google Pixel 8 Pro",
+    "os": "Android 17",
+    "build": "CP3A.260905.009",
+    "journal_schema_version": 1,
+    "journal_record_count_after_take": 3,
+    "synthetic_probe_records_before_take": 2,
+    "app_process_run_id": "65e8a14e-27c9-4eb4-affc-254bdd3f660d",
+    "trace_id_in_process": 1,
+    "record_id": "b218f737-44c4-455c-af08-89a368430811"
+  },
+  "model": {
+    "id": "moonshine_small_es",
+    "language": "es",
+    "assets_manifest_sha256": "c1206c016b82b8795b6bbd1a88a4b23726e56b77fc839d597b7330a6f5b98932",
+    "load_state": "moonshine_model_load span present; no moonshine_resident_reused point",
+    "classification": "first real record in this app process after restart; OS/filesystem cache state is not established"
+  },
+  "audio_identity_only": {
+    "source": "user-initiated microphone speech; content and transcript intentionally not retained",
+    "pcm_format_for_hash": "canonical little-endian float32 at 16000 Hz mono",
+    "samples": 103358,
+    "duration_ms": 6459,
+    "pcm_sha256_f32le": "cbcccb11ff2dd1db1cb9f1d12dee05631d936874488db9b9c7271b0a519a827c",
+    "raw_audio_retained": false,
+    "transcript_retained": false,
+    "matched_pcm_comparison": false
+  },
+  "settings": "Beyond model/language, decode settings are unavailable from this trace.",
+  "power_thermal_after_take": {
+    "battery_percent": 52,
+    "charging": false,
+    "battery_saver": false,
+    "android_thermal_status": 0,
+    "battery_temperature_c_dumpsys_battery": 32.8,
+    "battery_temperature_c_thermalservice": 32.4,
+    "note": "Post-run point samples collected after the trace; they are not continuous or pre-run measurements. Package PSS query timed out, so memory is unavailable."
+  },
+  "endpoint": "stop_received to in_app_result_state_published (ViewModel state publication; not proof of rendered pixels)",
+  "outcome": "app_result_published",
+  "finalized_at_ms": 1246,
+  "stop_to_app_state_published_ms": 1234,
+  "stop_to_overlay_action_accepted_ms": null,
+  "post_endpoint_pcm_hash_ms": 12.2,
+  "stage_spans": [
+    {"name":"recorder_hardware_release","start_ms":1.2,"end_ms":39.9},
+    {"name":"recorder_reader_drain","start_ms":45.0,"end_ms":45.2},
+    {"name":"recorder_pcm_snapshot_copy","start_ms":45.6,"end_ms":46.1},
+    {"name":"recorder_buffer_reset_and_shrink","start_ms":46.1,"end_ms":46.1},
+    {"name":"recorder_stop_total","start_ms":0.5,"end_ms":46.1},
+    {"name":"audio_silence_trim","start_ms":47.1,"end_ms":49.6},
+    {"name":"model_operation_lock_wait","start_ms":49.6,"end_ms":49.7},
+    {"name":"engine_operation_lock_wait","start_ms":49.7,"end_ms":49.7},
+    {"name":"moonshine_asset_verification","start_ms":49.7,"end_ms":261.4},
+    {"name":"whisper_engine_release","start_ms":261.4,"end_ms":261.8},
+    {"name":"moonshine_pcm_request_copy","start_ms":261.8,"end_ms":262.0},
+    {"name":"moonshine_coroutine_dispatch","start_ms":262.0,"end_ms":262.1},
+    {"name":"moonshine_native_worker_queue","start_ms":262.2,"end_ms":262.9},
+    {"name":"moonshine_adapter_create","start_ms":263.6,"end_ms":263.6},
+    {"name":"moonshine_model_load","start_ms":263.6,"end_ms":629.3},
+    {"name":"moonshine_inference","start_ms":629.4,"end_ms":1224.3},
+    {"name":"moonshine_pcm_clear","start_ms":1224.3,"end_ms":1224.7},
+    {"name":"text_postprocess","start_ms":1225.1,"end_ms":1225.8},
+    {"name":"history_and_stats_persistence","start_ms":1225.9,"end_ms":1233.9},
+    {"name":"pcm_sha256_f32le","start_ms":1234.6,"end_ms":1246.8}
+  ],
+  "interpretation": {
+    "setup_verification_plus_adapter_create_plus_load_ms": 577.0,
+    "setup_share_of_stop_to_app_state_published_percent": 46.8,
+    "decision": "Single trace confirms saved app endpoint and captures verification/load stages. It is not evidence of residency benefit or a performance comparison.",
+    "caveats": [
+      "This single microphone take has no matched PCM control and cannot support a comparative gain or causal percent improvement.",
+      "Span offsets retain overlap; do not add overlapping or nested spans as independent latency.",
+      "The recorded endpoint is in-app state publication, not visible rendering.",
+      "A model-load span occurred; no resident-reuse marker occurred. Process-first does not prove cold OS cache.",
+      "Long-duration 20-30 second and 60-90 second samples, ten-repeat candidate median/p95, second-day repeat, retained-memory stability, and transcript equivalence remain unmeasured."
+    ]
+  }
+}
