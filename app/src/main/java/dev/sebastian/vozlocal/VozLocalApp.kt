@@ -5,6 +5,7 @@ import android.content.ComponentCallbacks2
 import android.util.Log
 import dev.sebastian.vozlocal.audio.AudioRecorder
 import dev.sebastian.vozlocal.data.repository.DictationRepository
+import dev.sebastian.vozlocal.performance.StopToTextJournal
 import dev.sebastian.vozlocal.whisper.CpuBackendManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,7 @@ class VozLocalApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        StopToTextJournal.initialize(this, BuildConfig.STOP_TO_TEXT_TRACE_ENABLED)
         CpuBackendManager.startup(this)
         dev.sebastian.vozlocal.whisper.CpuCalibration.initialize(this)
         repository = DictationRepository(this)
