@@ -195,16 +195,27 @@ but is marked `synthetic` with model state `unknown`; it is not a speech or warm
 model measurement. The retained test verified a scoped `adb pull` and showed
 the first synthetic record survived an app-process restart.
 
-The first complete post-restart Small Spanish microphone record is retained in
-[`first-record.json`](docs/validation/2026-10-03-stop-trace-journal/first-record.json).
-Its Stop-to-in-app-result-state-publication time was 1,234 ms for 6,459 ms of
-PCM. The same trace records 212 ms of asset verification, 366 ms of model load,
-and 595 ms of inference; those offsets are separate stage observations, not a
-matched comparison. The PCM identity is a hash only; neither audio nor
-transcript is retained. This single take is not evidence of comparative speedup,
-and the endpoint is state publication rather than proof of visible rendering.
-Candidate repeats, duration checks, p95, a second-day repeat, and retained
-memory stability remain open under the performance issues.
+The retained app journal contains two synthetic probes and 13 complete
+post-restart in-app Small Spanish traces. The first request published result
+state 1,234 ms after Stop and contains a 366 ms model-load span; the next 12
+requests contain a resident-reuse marker and no model-load or native-teardown
+span. Across those 12 distinct microphone takes, Stop-to-state-publication was
+median 1,073.5 ms (range 726–1,450; descriptive nearest-rank p95 1,450) for
+5.959–14.499 s of PCM. Verification median was 129.7 ms and inference median
+873.6 ms. Full rows and build/device provenance are in
+[`journal-v1.json`](docs/validation/2026-10-03-stop-trace-journal/journal-v1.json)
+and the [repeat summary](docs/validation/2026-10-03-stop-trace-journal/repeat-summary.json).
+
+An earlier nine-take live baseline had a 1,681 ms median (1,098–1,973 ms) over
+5.819–13.059 s clips, but these are different microphone takes, build and power
+conditions. The candidate has no pre-set battery/thermal sample; Battery Saver
+was on in the after-set reading, so whether it enabled during the set is unknown.
+These results confirm the reuse path is observable, not a matched or causal
+speedup estimate. The trace hashes PCM identities only; neither audio nor
+transcript is retained. The endpoint is state publication, not proof of visible
+rendering. Matched-PCM comparison, second-day repeat, long-duration clips,
+model-switch/cancellation/eviction lifecycle checks, and retained-memory
+stability remain open under the performance issues.
 
 ## Observations and open risks
 

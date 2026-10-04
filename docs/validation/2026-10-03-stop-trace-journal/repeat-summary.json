@@ -1,0 +1,88 @@
+{
+  "schema": "vozlocal-stop-to-text-journal-repeat-summary-v1",
+  "evidence_file": "journal-v1.json",
+  "capture_date_local": "2026-10-03",
+  "provenance": {
+    "app_commit": "2adb0f6",
+    "installed_apk_sha256": "c0d1c6331419dbc0f7c167b6358db86ee5d51e8183c2b840b8e172afe7803c78",
+    "model_residency_implementation_commit": "1e95bc5",
+    "device": "Google Pixel 8 Pro",
+    "os": "Android 17",
+    "build": "CP3A.260905.009",
+    "model_id": "moonshine_small_es",
+    "language": "es",
+    "assets_manifest_sha256": "c1206c016b82b8795b6bbd1a88a4b23726e56b77fc839d597b7330a6f5b98932",
+    "other_decode_settings": "Not captured by trace; unavailable.",
+    "process_run_id": "65e8a14e-27c9-4eb4-affc-254bdd3f660d",
+    "journal_schema_version": 1,
+    "journal_rows": 15,
+    "synthetic_probe_rows": 2,
+    "real_trace_rows": 13,
+    "real_trace_ids": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+    "all_real_rows_complete_in_app_result_published": true,
+    "raw_audio_retained": false,
+    "transcript_retained": false
+  },
+  "power_thermal_after_set_only": {
+    "battery_percent": 16,
+    "charging": false,
+    "battery_saver": true,
+    "android_thermal_status": 0,
+    "battery_temperature_c_dumpsys_battery": 32.6,
+    "battery_temperature_c_thermalservice": [32.4, 32.7],
+    "note": "Only sampled after the set. Battery Saver became enabled at some point during or after this sequence; the transition time and per-trial status are unknown."
+  },
+  "memory_after_set_only_kb": {
+    "process_pss_total": 217707,
+    "native_heap_pss": 5237,
+    "native_heap_allocated": 204419,
+    "total_swap_pss": 192054,
+    "note": "One post-set snapshot only; it does not establish absence of growth or a leak."
+  },
+  "first_process_request": {
+    "trace_id": 1,
+    "pcm_duration_ms": 6459,
+    "stop_to_app_state_published_ms": 1234,
+    "asset_verification_ms": 211.8,
+    "model_load_ms": 365.6,
+    "inference_ms": 594.9,
+    "resident_reuse_marker": false,
+    "classification": "First real trace in the new app process; model-load span present. OS/filesystem cache state is unknown."
+  },
+  "repeated_requests_ids_2_through_13": {
+    "n": 12,
+    "stop_to_app_state_published_ms": {
+      "median": 1073.5,
+      "min": 726,
+      "max": 1450,
+      "descriptive_nearest_rank_p95": 1450
+    },
+    "pcm_duration_ms": {"median": 9759, "min": 5959, "max": 14499},
+    "asset_verification_ms": {"median": 129.7, "min": 122.2, "max": 222.4},
+    "inference_ms": {"median": 873.6, "min": 549.3, "max": 1272.4},
+    "model_load_span": "Not observed in all 12 repeated rows; this is not a measured zero-duration load.",
+    "native_teardown_span": "Not observed in all 12 repeated rows; this is not a measured zero-duration teardown.",
+    "resident_reuse_marker": "Present in all 12 repeated rows.",
+    "all_audio_hashes_distinct": true
+  },
+  "prior_live_microphone_baseline_context_only": {
+    "evidence_file": "../2026-10-02-stop-to-text/repeated-mic-traces.json",
+    "n": 9,
+    "stop_to_app_state_published_ms": {"median": 1681, "min": 1098, "max": 1973},
+    "pcm_duration_ms": {"min": 5819, "max": 13059},
+    "comparison": "Distinct microphone takes and earlier capture/build/power state; descriptive context only, not matched PCM or a causal speedup estimate."
+  },
+  "decision": {
+    "observed": "The signed app wrote and retained one request-load trace followed by twelve complete resident-reuse-marked traces. The app-side journal survives process restart and was retrieved by scoped adb pull.",
+    "not_established": [
+      "Matched-PCM paired performance gain or transcript equivalence",
+      "Causal percentage improvement versus the earlier baseline",
+      "Second-day finalist repeat",
+      "20-30 second and 60-90 second duration behavior",
+      "Model-switch, cancellation/drain/retry, shutdown, or real memory-pressure eviction behavior on device",
+      "Long-term retained-memory stability or leak freedom",
+      "Visible-render completion (endpoint is in-app result state publication)"
+    ],
+    "next_gate": "Keep #1 and #5 open; the reuse markers make the implementation path observable, but remaining duration, lifecycle, memory-stability, and second-day checks are outstanding."
+  }
+}
