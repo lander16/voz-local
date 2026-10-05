@@ -25,3 +25,6 @@ dependencyResolutionManagement {
 rootProject.name = "VozLocal"
 
 include(":app")
+if (providers.gradleProperty("fastConformerValidation").orNull == "true") {
+  include(":fastconformer-validation")
+}

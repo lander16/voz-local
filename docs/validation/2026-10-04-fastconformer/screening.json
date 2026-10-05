@@ -1,0 +1,121 @@
+{
+  "schema": "fastconformer-vs-moonshine-screening-v1",
+  "date_local": "2026-10-04",
+  "purpose": "same-input runtime and punctuation smoke only; not accuracy or end-to-end dictation validation",
+  "fixture": {
+    "source": "app/src/test/resources/test_audio_2min.ogg, first 10 seconds",
+    "source_sha256": "19d015c3c78fe806134ddffbe144d216263b4d195b27cd7799ea667a3c575ba1",
+    "pcm_sha256": "23b8db3cdc813839c01bc4d7f7920a780de5f078a91a1fd67184c8acea81f25a",
+    "sample_rate_hz": 16000,
+    "channels": 1,
+    "format": "little-endian float32",
+    "sample_count": 160000,
+    "redistribution_permission": "undocumented; used locally only; no audio or transcript retained"
+  },
+  "device": {
+    "model": "Pixel 8 Pro (husky)",
+    "android_release": "17",
+    "build_fingerprint": "google/husky/husky:17/CP3A.260905.009/16091614:user/release-keys"
+  },
+  "source_provenance": {
+    "base_commit": "b63374148be592f94c48a68aa51b5799a316ba23",
+    "working_tree_dirty_during_validation": true,
+    "note": "The dirty changes were the isolated sidecar/scripts/docs; installed artifact identities are recorded below."
+  },
+  "fastconformer": {
+    "package": "dev.sebastian.vozlocal.fastconformer.validation",
+    "app_apk_sha256": "8f79a20c2680929bd3957d18d8ad611890a1a1b020815514876648ec50b6fe3f",
+    "test_apk_sha256": "bca72e1528ebd5e9ce75bff48c69c2c1edf6686683977503709bd1aadaaaa4eb",
+    "model_id": "nvidia/stt_es_fastconformer_hybrid_large_pc",
+    "derivative": "krut42/voice-fastconformer-es-ctc-int8",
+    "hf_revision": "d7694ab533e189621361a30deb701f189abc7568",
+    "license": "CC-BY-4.0",
+    "model_sha256": "592d3342057253a342aa19cec9937f46645d35d30f52ac427a4ddc72c395a769",
+    "tokens_sha256": "556118db7946e6636018ef59c9e0537b05660b0398e995d60825081e77625e6a",
+    "runtime": "sherpa-onnx v1.13.8 static-link ONNX Runtime AAR",
+    "runtime_aar_sha256": "b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471",
+    "threads": 2,
+    "successful_instrumentation_runs": 3,
+    "runs": [
+      {
+        "order": 1,
+        "run_id": "d72f4b1f-06e5-4bd0-9a6a-268d98364d78",
+        "bundle_verify_and_native_init_ms": 1393.673056,
+        "first_inference_ms": 452.795736,
+        "warm_inference_ms": [276.186238, 268.057780, 269.288900],
+        "punctuation_counts": {"period": 0, "comma": 2, "inverted_question": 0, "question": 1, "text_length_chars": 133},
+        "system_before_after": {"battery_percent": 51, "plugged": false, "battery_temp_tenths_c": 305, "battery_saver": false, "thermal_status": 0}
+      },
+      {
+        "order": 4,
+        "run_id": "4fe5ec1c-0f4b-4b53-aea5-ca58d0991853",
+        "bundle_verify_and_native_init_ms": 1350.539632,
+        "first_inference_ms": 463.599528,
+        "warm_inference_ms": [285.023804, 276.745320, 276.102987],
+        "punctuation_counts": {"period": 0, "comma": 2, "inverted_question": 0, "question": 1, "text_length_chars": 133},
+        "system_before_after": {"battery_percent": 49, "plugged": false, "battery_temp_tenths_c": 331, "battery_saver": false, "thermal_status": 0}
+      },
+      {
+        "order": 5,
+        "run_id": "73113d3a-00f9-4c2b-95f3-b7207efa7f3f",
+        "bundle_verify_and_native_init_ms": 1350.066326,
+        "first_inference_ms": 464.154215,
+        "warm_inference_ms": [281.320597, 276.992960, 272.336304],
+        "punctuation_counts": {"period": 0, "comma": 2, "inverted_question": 0, "question": 1, "text_length_chars": 133},
+        "system_before_after": {"battery_percent": 49, "plugged": false, "battery_temp_tenths_c": 330, "battery_saver": false, "thermal_status": 0}
+      }
+    ],
+    "aggregate_warm_inference_ms": {"n": 9, "median": 276.186238, "min": 268.057780, "max": 285.023804},
+    "aggregate_bundle_verify_and_native_init_ms": {"n": 3, "median": 1350.539632, "min": 1350.066326, "max": 1393.673056}
+  },
+  "moonshine_small": {
+    "package": "dev.sebastian.vozlocal.validation",
+    "app_apk_sha256": "191f14bb2e52c5756f64f0cb07f1653ad46f78bf615735848cdaf2575dfcdf05",
+    "test_apk_sha256": "2c0a2dc31751fe9f8e1adc4df89c5c6488cd3851b73a4355f35a4564a29cda38",
+    "runtime": "Moonshine SDK v0.1.5",
+    "runtime_aar_sha256": "ee2d95c21150683c743db8f3aef66281fd5408bcefc94be3ca1d2545ada1f571",
+    "model": "small-es / Small Spanish Streaming",
+    "upstream_revision": "234f60faa0eb388b01cdf7e60aca232af37aefda",
+    "manifest_sha256": "c1206c016b82b8795b6bbd1a88a4b23726e56b77fc839d597b7330a6f5b98932",
+    "asset_sha256_pins_match_app_source": true,
+    "threads": "SDK default; exact count not reported",
+    "successful_instrumentation_runs": 2,
+    "runs": [
+      {
+        "order": 2,
+        "timestamp_epoch_ms": 1791152357020,
+        "cold_load_ms": 1227,
+        "warmup_ms": 3318,
+        "warm_inference_ms": [1723, 1834, 1891],
+        "hypothesis_sha256": ["6ced623dbdb059cbca9e8e171fe03b75729dfebbf0b9eccc0d7dccac0be0775d", "223108408f97c22ee22736df1ee6105992b293d9c3b5db3475cc8f512231cedd", "223108408f97c22ee22736df1ee6105992b293d9c3b5db3475cc8f512231cedd"],
+        "hypothesis_lengths": [135, 135, 135],
+        "punctuation_counts": [{"period": 4, "comma": 0, "inverted_question": 0, "question": 0}, {"period": 1, "comma": 0, "inverted_question": 0, "question": 0}, {"period": 1, "comma": 0, "inverted_question": 0, "question": 0}],
+        "system": {"battery_saver": false, "thermal_status": 0, "charging": false}
+      },
+      {
+        "order": 3,
+        "timestamp_epoch_ms": 1791152554370,
+        "cold_load_ms": 625,
+        "warmup_ms": 2473,
+        "warm_inference_ms": [1880, 1809, 2191],
+        "hypothesis_sha256": ["6ced623dbdb059cbca9e8e171fe03b75729dfebbf0b9eccc0d7dccac0be0775d", "223108408f97c22ee22736df1ee6105992b293d9c3b5db3475cc8f512231cedd", "223108408f97c22ee22736df1ee6105992b293d9c3b5db3475cc8f512231cedd"],
+        "hypothesis_lengths": [135, 135, 135],
+        "punctuation_counts": [{"period": 4, "comma": 0, "inverted_question": 0, "question": 0}, {"period": 1, "comma": 0, "inverted_question": 0, "question": 0}, {"period": 1, "comma": 0, "inverted_question": 0, "question": 0}],
+        "system": {"battery_saver": false, "thermal_status": 0, "charging": false}
+      }
+    ],
+    "aggregate_warm_inference_ms": {"n": 6, "median": 1857, "min": 1723, "max": 2191},
+    "aggregate_cold_load_ms": {"n": 2, "median": 926, "min": 625, "max": 1227},
+    "aggregate_warmup_ms": {"n": 2, "median": 2895.5, "min": 2473, "max": 3318}
+  },
+  "limitations": [
+    "The fixture is an unknown-reference generic validation clip, not a licensed accuracy corpus; no WER or correctness claim is supported.",
+    "This is an offline validation-only adapter smoke, not the in-app stop-to-text endpoint or a user-visible dictation measurement.",
+    "FastConformer reports bundle verification plus native initialization; Moonshine's loadFromFiles timing has different boundaries and follows manifest verification.",
+    "Android filesystem caching may affect each load; neither model's run is established as physically cold.",
+    "FastConformer used two threads while Moonshine used SDK defaults; temperature rose between FastConformer and Moonshine runs were not measured by the Moonshine harness.",
+    "No claim of speedup, punctuation correctness, default/model promotion, long-clip stability, or production coexistence is made.",
+    "One preliminary FastConformer smoke before host-requested run-ID correlation is excluded from the aggregate because host-side freshness was not verified."
+  ],
+  "transcript_persisted_in_repository": false
+}

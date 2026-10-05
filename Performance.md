@@ -383,6 +383,23 @@ ends in a letter or digit; it does not estimate pauses, interior commas or
 sentence boundaries. This formatting change is not evidence of model accuracy,
 and representative punctuation quality still needs the #2 corpus.
 
+### FastConformer Spanish feasibility screen (2026-10-04)
+
+Issue #20 adds an opt-in validation-only FastConformer sidecar; ordinary Gradle
+builds still include only `:app`, and the production chooser/default is unchanged.
+On the existing, unknown-reference 10-second PCM fixture, three sidecar runs
+(9 warm calls) had a 276.186 ms median (268.058–285.024 ms); two sequential
+Moonshine Small control runs (6 warm calls) had a 1,857 ms median
+(1,723–2,191 ms). The execution order was FastConformer, Moonshine,
+Moonshine, FastConformer, FastConformer. These small, unmatched-thread samples
+with changing battery temperature are descriptive smoke timings only—not a
+speedup, end-to-end latency, or accuracy claim. FastConformer emitted commas and
+a question mark on this clip but no period or opening inverted question mark;
+without a reference this says nothing about correctness. See the [retained
+screening metadata](docs/validation/2026-10-04-fastconformer/README.md) and
+[issue #20](https://github.com/lander16/voz-local/issues/20) for provenance and
+remaining validation gates.
+
 Sources: [pinned model catalog](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-model-catalog.cpp),
 [model metadata](https://github.com/moonshine-ai/moonshine/blob/234f60faa0eb388b01cdf7e60aca232af37aefda/core/moonshine-model-file-metadata.generated.cpp),
 [models and licenses](https://moonshine-voice.readthedocs.io/en/latest/models/available-models/).
