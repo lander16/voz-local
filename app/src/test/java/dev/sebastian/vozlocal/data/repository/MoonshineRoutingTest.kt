@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import dev.sebastian.vozlocal.asr.MoonshineAdapter
 import dev.sebastian.vozlocal.asr.MoonshineAdapterFactory
 import dev.sebastian.vozlocal.asr.MoonshineEngine
+import dev.sebastian.vozlocal.fastconformer.FastConformerModels
 import dev.sebastian.vozlocal.data.local.AppDatabase
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
@@ -51,7 +52,34 @@ class MoonshineRoutingTest {
         val candidates = models.filter { it.id.startsWith("moonshine_") }
         assertEquals(2, candidates.size)
         assertTrue(candidates.none { it.isSelected })
+        val fastConformer = models.single { it.id == FastConformerModels.ID }
+        assertFalse(fastConformer.isSelected)
         assertEquals("whisper_base", models.single { it.isSelected }.id)
+    }
+
+    @Test fun fastConformerIsNotAWhisperFallbackAndRequiresSpanish() {
+        val repository = DictationRepository(context)
+        repository.saveLanguage("en")
+        assertNotNull(repository.liveModelError(FastConformerModels.ID))
+        assertFalse(FastConformerModels.isWhisperModel(FastConformerModels.ID))
+        assertFalse(FastConformerModels.isWhisperModel("moonshine_small_es"))
+        assertTrue(FastConformerModels.isWhisperModel("whisper_base"))
+        repository.saveLanguage("es")
+        assertNull(repository.liveModelError(FastConformerModels.ID))
+    }
+
+    @Test fun fileAndCalibrationRoutesRejectFastConformerBeforeWhisper() = runBlocking {
+        val repository = DictationRepository(context)
+        var progressCalled = false
+        try {
+            repository.transcribeSharedFile(Uri.parse("content://nonexistent"), FastConformerModels.ID) { _, _ -> progressCalled = true }
+            fail("Expected file-workflow rejection")
+        } catch (_: IllegalStateException) { }
+        assertFalse(progressCalled)
+        try {
+            repository.withBenchmarkModelLease(FastConformerModels.ID) { fail("Must not access Whisper engine") }
+            fail("Expected calibration rejection")
+        } catch (_: IllegalStateException) { }
     }
 
     @Test fun missingExperimentalModelCannotBecomeSelected() = runBlocking {

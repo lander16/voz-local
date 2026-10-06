@@ -118,6 +118,8 @@ internal class StopToTextTrace private constructor(
             "moonshine_pcm_request_copy", "moonshine_coroutine_dispatch", "moonshine_native_worker_queue",
             "moonshine_inference", "moonshine_pcm_clear", "moonshine_adapter_create", "moonshine_model_load",
             "moonshine_native_teardown", "recorder_stop_total", "text_postprocess", "history_and_stats_persistence",
+            "fastconformer_asset_verification", "fastconformer_native_init", "fastconformer_inference",
+            "fastconformer_native_teardown",
             "overlay_delivery_and_insertion", "recorder_hardware_release", "recorder_reader_drain",
             "recorder_pcm_snapshot_copy", "recorder_buffer_reset_and_shrink", "audio_silence_trim",
             "model_operation_lock_wait", "engine_operation_lock_wait", "moonshine_asset_verification",

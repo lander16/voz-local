@@ -325,13 +325,16 @@ specifies Tiny/Small screening against Whisper Small q8_0, verified multi-file
 assets, real-time streaming versus offline timing, and P02 accuracy gates. Moonshine
 Spanish Small is the primary candidate for the current Stop-to-text latency goal;
 Tiny remains an optional comparison and neither model is promoted to default.
-Explicitly selected experimental Spanish models use a serialized CPU adapter and
-verified bundles. The former 30-second complete-clip cap was removed in `40f12c7`.
+An explicitly selected NVIDIA FastConformer Spanish CTC export is now available as
+a separate experimental CPU adapter with pinned, hash-verified assets; it is not a
+replacement or default. Its user-approved integration proceeds despite the missing
+representative accuracy corpus, so model promotion remains blocked on P02 and its
+quality, latency, lifecycle and resource gates. See [issue #21](https://github.com/lander16/voz-local/issues/21).
+The former 30-second complete-clip cap was removed in `40f12c7`.
 Whisper stays default; shared files,
-incremental previews and calibration remain unavailable for Moonshine. Broader
-recommendation/default promotion still requires latency, accuracy, lifecycle and
-resource gates; experimental availability does not establish those results. Track progress
-in [#11](https://github.com/lander16/voz-local/issues/11); missing representative
+incremental previews and calibration remain unavailable for Moonshine and
+FastConformer. Track alternative-model feasibility in
+[#11](https://github.com/lander16/voz-local/issues/11); missing representative
 corpus evidence in [#2](https://github.com/lander16/voz-local/issues/2) blocks promotion.
 
 ## Definition of done

@@ -170,14 +170,24 @@ Whisper models are downloaded on-demand from Hugging Face to app-private storage
 Moonshine options: **Moonshine Tiny Spanish** (~32.3 MB) and **Moonshine Small
 Spanish** (~121.8 MB) can be downloaded and selected in Models. Their
 eight-file bundles come from the official Moonshine CDN; every file is checked
-against pinned size and SHA-256 before activation and loading. Whisper remains the
-default and is never automatically replaced by a Moonshine download.
+against pinned size and SHA-256 before activation and loading. A selected Moonshine
+instance is reused across sequential requests and released on model switch or memory
+pressure. Whisper remains the default and is never automatically replaced by an
+experimental model download.
+
+**FastConformer Spanish (Experimental)** (~174 MB) is an explicit Spanish-only
+option based on NVIDIA's `stt_es_fastconformer_hybrid_large_pc`, exported to ONNX by
+OpenVoiceOS and distributed as an int8 CTC derivative by krut42. The model option
+shows attribution and the [CC BY 4.0 license](https://creativecommons.org/licenses/by/4.0/).
+It runs locally through the pinned sherpa-onnx runtime. Quality and latency remain
+experimental; no accuracy or speed advantage is claimed, and it is never selected
+automatically. See [issue #21](https://github.com/lander16/voz-local/issues/21).
 
 Choose Spanish explicitly (not automatic language detection). This integration
 supports complete-clip live dictation without incremental
 previews, shared-file transcription or Whisper calibration. Cancelling discards the result; because the SDK has no native
 abort, another request may need to wait for the background computation to finish.
-Models are closed after each request. No extra accessibility permissions are added.
+No extra accessibility permissions are added.
 With Smart Punctuation enabled, Moonshine dictation adds a final period when its
 output ends in a word or number, while preserving any punctuation the model
 already supplied. It also pairs an explicit Spanish closing question mark with
@@ -201,6 +211,7 @@ and real-time streaming remain unverified. See the [integration plan](docs/moons
 | `whisper_medium` | `ggml-medium-q8_0.bin` | ~823 MB | Multilingual | q8_0 | Largest download in the catalog; benchmark sustained performance before selecting. |
 | `moonshine_tiny_es` | 8-file bundle | ~32.3 MB | Spanish only | int8 | Fast and memory-efficient offline Spanish dictation. |
 | `moonshine_small_es` | 8-file bundle | ~121.8 MB | Spanish only | int8 | Higher-accuracy offline Spanish dictation checkpoint. |
+| `fastconformer_es_experimental` | ONNX + tokens | ~174 MB | Spanish only | int8 | Explicit experimental CTC option; quality and performance are not yet established on representative speech. |
 
 
 The sizes above are approximate download sizes, not RAM estimates. VozLocal does not publish universal accuracy percentages or speed multipliers: meaningful results require a named corpus, device, native backend, thread count, thermal state, and decoding configuration.
@@ -256,9 +267,16 @@ For the next controlled evaluation, use multiple clean/noisy Spanish clips and a
 git clone https://github.com/lander16/voz-local.git
 cd voz-local
 cp .env.example .env          # optional, only if you override build config
+bash scripts/fetch_fastconformer_runtime.sh
 ./gradlew assembleDebug
 ./gradlew installDebug
 ```
+
+The app's Sherpa runtime AAR is intentionally not committed. Before any Gradle
+build, fetch its pinned official release artifact; the script verifies size and
+SHA-256 and caches it under the ignored `fastconformer-validation/libs/` directory.
+
+The signed-release installer runs this verification/fetch step automatically.
 
 Release builds enable R8 minification + resource shrinking. The `proguard-rules.pro` keeps the JNI bridge, Room entities/DAOs, the `AccessibilityService`, and the Compose runtime intact. Release credentials are never stored in the repository: provide `KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_ALIAS` (optional; defaults to `upload`), and `KEY_PASSWORD` through CI or your local environment. Without them, Gradle builds an unsigned release for validation only.
 

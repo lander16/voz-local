@@ -2,6 +2,9 @@
 -keep class com.whispercpp.whisper.** { *; }
 # Moonshine JNI accesses transcript fields and bridge classes by their Java names.
 -keep class ai.moonshine.voice.** { *; }
+# Sherpa JNI binds native methods by class/method name; its pinned AAR has no
+# consumer rules, so preserve the bridge in minified release builds.
+-keep class com.k2fsa.sherpa.onnx.** { *; }
 
 # Room
 -keep class dev.sebastian.vozlocal.data.model.** { *; }

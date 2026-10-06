@@ -9,6 +9,9 @@ import dev.sebastian.vozlocal.moonshine.MoonshineModels
 import dev.sebastian.vozlocal.moonshine.MoonshineModelDownloader
 import dev.sebastian.vozlocal.asr.MoonshineEngine
 import dev.sebastian.vozlocal.asr.MoonshineBusyException
+import dev.sebastian.vozlocal.asr.FastConformerEngine
+import dev.sebastian.vozlocal.fastconformer.FastConformerModels
+import dev.sebastian.vozlocal.fastconformer.FastConformerModelDownloader
 import dev.sebastian.vozlocal.performance.StopToTextTrace
 import dev.sebastian.vozlocal.audio.AudioDecoder
 import dev.sebastian.vozlocal.audio.AudioSilenceTrimmer
@@ -160,6 +163,7 @@ class DictationRepository(
     val audioDecoder: AudioDecoder = AudioDecoder(context),
     val textPolishEngine: TextPolishEngine = TextPolishEngine(),
     private val moonshineEngine: MoonshineEngine = MoonshineEngine(context),
+    private val fastConformerEngine: FastConformerEngine = FastConformerEngine(context),
 ) {
     private val database = AppDatabase.getDatabase(context)
     private val modelDao = database.modelDao()
@@ -174,15 +178,20 @@ class DictationRepository(
     private val modelOperationLocks = ConcurrentHashMap<String, Mutex>()
     private val engineOperationMutex = Mutex()
     private val moonshineDownloader = MoonshineModelDownloader(context)
+    private val fastConformerDownloader = FastConformerModelDownloader(context)
 
-    private fun downloaded(modelId: String): Boolean = if (MoonshineModels.isMoonshine(modelId))
-        MoonshineModels.isDownloaded(context, modelId) else ModelUrls.isModelDownloaded(context, modelId)
+    private fun downloaded(modelId: String): Boolean = when {
+        MoonshineModels.isMoonshine(modelId) -> MoonshineModels.isDownloaded(context, modelId)
+        FastConformerModels.isFastConformer(modelId) -> fastConformerDownloader.verifiedDirectory(modelId) != null
+        else -> ModelUrls.isModelDownloaded(context, modelId)
+    }
 
     /** Experimental models require explicit selection and Spanish input. */
     fun liveModelError(modelId: String, sampleCount: Int = 0): String? = when {
-        !MoonshineModels.isMoonshine(modelId) -> null
-        getLanguage() != "es" -> context.getString(R.string.moonshine_language_error)
-        moonshineEngine.isBusy() -> context.getString(R.string.moonshine_busy_error)
+        MoonshineModels.isMoonshine(modelId) && getLanguage() != "es" -> context.getString(R.string.moonshine_language_error)
+        FastConformerModels.isFastConformer(modelId) && getLanguage() != "es" -> context.getString(R.string.fastconformer_language_error)
+        MoonshineModels.isMoonshine(modelId) && moonshineEngine.isBusy() -> context.getString(R.string.moonshine_busy_error)
+        FastConformerModels.isFastConformer(modelId) && fastConformerEngine.isBusy() -> context.getString(R.string.fastconformer_busy_error)
         else -> null
     }
 
@@ -249,7 +258,8 @@ class DictationRepository(
             "whisper_medium" -> 7
             "moonshine_tiny_es" -> 8
             "moonshine_small_es" -> 9
-            else -> 10
+            FastConformerModels.ID -> 10
+            else -> 11
         } }
     }
     val allHistory: Flow<List<TranscriptionHistory>> = historyDao.getAllHistory()
@@ -423,6 +433,7 @@ class DictationRepository(
 
     suspend fun shutdown() {
         engineOperationMutex.withLock {
+            fastConformerEngine.release()
             moonshineEngine.release()
             whisperEngine.release()
         }
@@ -506,7 +517,7 @@ class DictationRepository(
             ensureModelCatalogInitialized()
             val models = modelDao.getModelsList()
             val candidates = models.filter { it.isDownloaded && it.isSelected } +
-                models.filter { it.isDownloaded && !it.isSelected && !MoonshineModels.isMoonshine(it.id) }
+                models.filter { it.isDownloaded && !it.isSelected && FastConformerModels.isWhisperModel(it.id) }
             val loaded = candidates.firstOrNull { preloadModel(it.id) }
             val ok = loaded != null
             Log.i(TAG, "Preload of selected downloaded model '${loaded?.id}' -> loaded=$ok")
@@ -527,7 +538,7 @@ class DictationRepository(
 
     suspend fun preloadModel(modelId: String): Boolean = withContext(Dispatchers.IO) {
         // First experimental release loads Moonshine on demand, never on field focus.
-        if (MoonshineModels.isMoonshine(modelId)) {
+        if (MoonshineModels.isMoonshine(modelId) || FastConformerModels.isFastConformer(modelId)) {
             ensureModelCatalogInitialized()
             return@withContext modelDao.getModelsList().any { it.id == modelId && it.isDownloaded }
         }
@@ -560,6 +571,7 @@ class DictationRepository(
                     false
                 } else {
                     engineOperationMutex.withLock {
+                        fastConformerEngine.release()
                         moonshineEngine.release()
                         whisperEngine.loadModel(verified.modelId)
                     }
@@ -585,13 +597,15 @@ class DictationRepository(
     }
 
     fun isMoonshineBusy(): Boolean = moonshineEngine.isBusy()
+    fun isFastConformerBusy(): Boolean = fastConformerEngine.isBusy()
 
     /** Release either resident engine under the same lock used by transcription. */
     suspend fun releaseIdleEnginesForMemoryPressure(): Boolean = engineOperationMutex.withLock {
+        val fastConformerReleased = fastConformerEngine.releaseIfIdle()
         val moonshineReleased = moonshineEngine.releaseIfIdle()
         val whisperReleased = whisperEngine.releaseIfIdle()
-        if (moonshineReleased || whisperReleased) _modelLoaded.value = false
-        moonshineReleased && whisperReleased
+        if (fastConformerReleased || moonshineReleased || whisperReleased) _modelLoaded.value = false
+        fastConformerReleased && moonshineReleased && whisperReleased
     }
 
     suspend fun preloadSelectedDownloadedModel(): Boolean = withContext(Dispatchers.IO) {
@@ -618,7 +632,7 @@ class DictationRepository(
             ensureModelCatalogInitialized()
             val models = modelDao.getModelsList()
             val selected = models.find { it.isSelected && it.isDownloaded }
-                ?: models.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
+                ?: models.firstOrNull { it.isDownloaded && FastConformerModels.isWhisperModel(it.id) }
             val result = selected?.let { preloadModel(it.id) } ?: false
             myDeferred?.complete(result)
             result
@@ -743,7 +757,11 @@ class DictationRepository(
                     isDownloaded = downloaded("moonshine_tiny_es"), isSelected = false),
                 DictationModel(id = "moonshine_small_es", name = "Moonshine Small Spanish (Experimental)",
                     sizeMb = 121.8f, accuracySpanish = 0, accuracyEnglish = 0, speedMultiplier = 0f,
-                    isDownloaded = downloaded("moonshine_small_es"), isSelected = false)
+                    isDownloaded = downloaded("moonshine_small_es"), isSelected = false),
+                DictationModel(id = FastConformerModels.ID, name = "FastConformer Spanish (Experimental)",
+                    sizeMb = FastConformerModels.spec.sizeBytes / 1_000_000f,
+                    accuracySpanish = 0, accuracyEnglish = 0, speedMultiplier = 0f,
+                    isDownloaded = downloaded(FastConformerModels.ID), isSelected = false)
             )
 
             val current = allModels.first()
@@ -793,7 +811,7 @@ class DictationRepository(
                 val finalList = allModels.first()
                 val activeSelected = finalList.find { it.isSelected }
                 if (activeSelected == null || !activeSelected.isDownloaded) {
-                    finalList.find { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }?.let { modelDao.selectModel(it.id) }
+                    finalList.find { it.isDownloaded && FastConformerModels.isWhisperModel(it.id) }?.let { modelDao.selectModel(it.id) }
                 }
             }
             } catch (e: Exception) {
@@ -820,12 +838,14 @@ class DictationRepository(
                 if (model == null) false else {
                     val previousId = currentModels.firstOrNull { it.isSelected }?.id
                     if (previousId != modelId) {
-                        // Selection invalidates the selected-only Moonshine resident.
-                        // Drain/close it before publishing the new selection. Selecting
-                        // Moonshine also releases Whisper so both large engines are never
-                        // retained together.
+                        // Model selection drains all inactive native runtimes before
+                        // publishing the new selection; retain no pair of large models.
+                        fastConformerEngine.release()
                         moonshineEngine.release()
-                        if (MoonshineModels.isMoonshine(modelId)) whisperEngine.release()
+                        // Preserve established Whisper→Whisper selection behavior: that engine
+                        // drains/changes its context after selection publishes. A switch to either
+                        // experimental runtime still drains the Whisper context here.
+                        if (!FastConformerModels.isWhisperModel(modelId)) whisperEngine.release()
                         _modelLoaded.value = false
                     }
                     database.withTransaction {
@@ -865,7 +885,10 @@ class DictationRepository(
                     }
                     onProgress(0.01f)
 
-                    val success = if (MoonshineModels.isMoonshine(modelId)) {
+                    val success = if (FastConformerModels.isFastConformer(modelId)) {
+                        fastConformerDownloader.download(modelId, onProgress = onProgress,
+                            beforePromote = { engineOperationMutex.withLock { fastConformerEngine.release() } })
+                    } else if (MoonshineModels.isMoonshine(modelId)) {
                         moonshineDownloader.download(modelId, onProgress = onProgress,
                             beforePromote = { engineOperationMutex.withLock { moonshineEngine.release() } })
                     } else modelDownloader.downloadModel(
@@ -881,7 +904,7 @@ class DictationRepository(
                         if (success) {
                             modelDao.setDownloadState(modelId, downloaded = true, downloading = false, progress = 1f)
                             val selected = modelDao.getModelsList().find { it.isSelected }
-                            if ((selected == null || !selected.isDownloaded) && !MoonshineModels.isMoonshine(modelId)) modelDao.selectModel(modelId)
+                            if ((selected == null || !selected.isDownloaded) && FastConformerModels.isWhisperModel(modelId)) modelDao.selectModel(modelId)
                         } else {
                             // A failed replacement retains its previously verified file
                             // and its downloaded/selected state.
@@ -941,7 +964,25 @@ class DictationRepository(
                 database.withTransaction {
                     if (model.isSelected) {
                         val fallback = modelDao.getModelsList().firstOrNull {
-                            it.id != modelId && it.isDownloaded && !MoonshineModels.isMoonshine(it.id)
+                            it.id != modelId && it.isDownloaded && FastConformerModels.isWhisperModel(it.id)
+                        }
+                        if (fallback != null) modelDao.selectModel(fallback.id) else modelDao.clearSelection()
+                    }
+                    modelDao.setDownloadState(modelId, false, false, 0f)
+                }
+                _modelLoaded.value = false
+                return@withLock true
+            }
+            if (FastConformerModels.isFastConformer(modelId)) {
+                val deleted = engineOperationMutex.withLock {
+                    fastConformerEngine.release()
+                    fastConformerDownloader.delete(modelId)
+                }
+                if (!deleted) return@withLock false
+                database.withTransaction {
+                    if (model.isSelected) {
+                        val fallback = modelDao.getModelsList().firstOrNull {
+                            it.id != modelId && it.isDownloaded && FastConformerModels.isWhisperModel(it.id)
                         }
                         if (fallback != null) modelDao.selectModel(fallback.id) else modelDao.clearSelection()
                     }
@@ -964,7 +1005,7 @@ class DictationRepository(
             database.withTransaction {
                 if (modelDao.getModelsList().find { it.id == modelId }?.isSelected == true) {
                     val fallback = modelDao.getModelsList()
-                        .firstOrNull { it.id != modelId && it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
+                        .firstOrNull { it.id != modelId && it.isDownloaded && FastConformerModels.isWhisperModel(it.id) }
                     if (fallback != null) modelDao.selectModel(fallback.id) else modelDao.clearSelection()
                 }
                 modelDao.setDownloadState(modelId, downloaded = false, downloading = false, progress = 0f)
@@ -1037,10 +1078,13 @@ class DictationRepository(
     internal suspend fun <T> withBenchmarkModelLease(
         modelId: String, action: suspend (WhisperEngine) -> T
     ): T = modelOperationLock(modelId).withLock {
-        check(!MoonshineModels.isMoonshine(modelId)) { context.getString(R.string.moonshine_calibration_error) }
+        check(FastConformerModels.isWhisperModel(modelId)) {
+            context.getString(if (MoonshineModels.isMoonshine(modelId)) R.string.moonshine_calibration_error else R.string.fastconformer_calibration_error)
+        }
         ensureModelCatalogInitialized()
         check(modelDownloader.verifiedModelFile(modelId) != null) { "Benchmark requires a verified model" }
         engineOperationMutex.withLock {
+            fastConformerEngine.release()
             moonshineEngine.release()
             action(whisperEngine)
         }
@@ -1072,6 +1116,20 @@ class DictationRepository(
           val engineLockWait = trace?.begin("engine_operation_lock_wait")
           engineOperationMutex.withLock inference@{
             trace?.end(engineLockWait)
+            if (FastConformerModels.isFastConformer(modelId)) {
+                val verify = trace?.begin("fastconformer_asset_verification")
+                val directory = try {
+                    fastConformerDownloader.verifiedDirectory(modelId)
+                } finally {
+                    trace?.end(verify)
+                } ?: throw IllegalStateException(context.getString(R.string.fastconformer_model_missing))
+                moonshineEngine.release()
+                whisperEngine.release()
+                _modelLoaded.value = false
+                val result = fastConformerEngine.transcribe(directory, activeSamples, trace)
+                _modelLoaded.value = true
+                return@inference result
+            }
             if (MoonshineModels.isMoonshine(modelId)) {
                 val verify = trace?.begin("moonshine_asset_verification")
                 val directory = try {
@@ -1080,7 +1138,10 @@ class DictationRepository(
                     trace?.end(verify)
                 } ?: throw IllegalStateException(context.getString(R.string.moonshine_model_missing))
                 val releaseWhisper = trace?.begin("whisper_engine_release")
-                try { whisperEngine.release() } finally { trace?.end(releaseWhisper) }
+                try {
+                    fastConformerEngine.release()
+                    whisperEngine.release()
+                } finally { trace?.end(releaseWhisper) }
                 _modelLoaded.value = false
                 return@inference try {
                     moonshineEngine.transcribe(directory, modelId, activeSamples, trace)
@@ -1088,6 +1149,7 @@ class DictationRepository(
                     throw IllegalStateException(context.getString(R.string.moonshine_busy_error))
                 }
             }
+            fastConformerEngine.release()
             moonshineEngine.release()
             // Verification and native use share the file-lifecycle lock, so a
             // delete/replacement cannot slip in between the two operations.
@@ -1117,7 +1179,9 @@ class DictationRepository(
         modelId: String,
         onProgress: (Float, String) -> Unit
     ): String = withContext(Dispatchers.Default) {
-        check(!MoonshineModels.isMoonshine(modelId)) { context.getString(R.string.moonshine_file_error) }
+        check(FastConformerModels.isWhisperModel(modelId)) {
+            context.getString(if (MoonshineModels.isMoonshine(modelId)) R.string.moonshine_file_error else R.string.fastconformer_file_error)
+        }
         onProgress(0.05f, "Decoding audio file...")
         val decodedSamples = audioDecoder.decodeToPcm16k(uri) { prog ->
             onProgress(0.05f + prog * 0.23f, "Decoding audio file...")
@@ -1138,6 +1202,7 @@ class DictationRepository(
         onProgress(0.30f, "Preparing local Whisper model...")
         modelOperationLock(modelId).withLock {
         engineOperationMutex.withLock inference@{
+        fastConformerEngine.release()
         moonshineEngine.release()
         if (modelDownloader.verifiedModelFile(modelId) == null) {
             _modelLoaded.value = false

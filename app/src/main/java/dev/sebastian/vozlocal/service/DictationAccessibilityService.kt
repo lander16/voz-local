@@ -42,6 +42,7 @@ import dev.sebastian.vozlocal.BuildConfig
 import dev.sebastian.vozlocal.data.repository.DictationRepository
 import dev.sebastian.vozlocal.data.model.DictationModel
 import dev.sebastian.vozlocal.moonshine.MoonshineModels
+import dev.sebastian.vozlocal.fastconformer.FastConformerModels
 import dev.sebastian.vozlocal.performance.StopToTextTrace
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -287,7 +288,7 @@ class DictationAccessibilityService : AccessibilityService() {
             repository.allModels.collect { models ->
                 availableModels = models
                 val active = models.find { it.isSelected && it.isDownloaded }
-                    ?: models.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
+                    ?: models.firstOrNull { it.isDownloaded && FastConformerModels.isWhisperModel(it.id) }
                 if (active?.id != lastWarmedModelId) {
                     lastWarmedModelId = null
                 }
@@ -618,7 +619,7 @@ class DictationAccessibilityService : AccessibilityService() {
             val target = focusedEligibleTarget() ?: return
             val models = availableModels.ifEmpty { kotlinx.coroutines.runBlocking { repository.allModels.first() } }
             val model = models.find { it.isSelected && it.isDownloaded }
-                ?: models.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
+                ?: models.firstOrNull { it.isDownloaded && FastConformerModels.isWhisperModel(it.id) }
             if (model == null) {
                 Toast.makeText(this, getString(dev.sebastian.vozlocal.R.string.speech_model_missing), Toast.LENGTH_SHORT).show()
                 return
@@ -969,7 +970,7 @@ class DictationAccessibilityService : AccessibilityService() {
             try {
                 val models = repository.allModels.first()
                 val selected = models.find { it.isSelected && it.isDownloaded }
-                    ?: models.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
+                    ?: models.firstOrNull { it.isDownloaded && FastConformerModels.isWhisperModel(it.id) }
                 val modelId = selected?.id ?: return@launch
 
                 if (lastWarmedModelId == modelId && repository.modelLoaded.value) {

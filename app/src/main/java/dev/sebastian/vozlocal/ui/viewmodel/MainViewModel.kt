@@ -21,6 +21,7 @@ import dev.sebastian.vozlocal.polish.TextPolishEngine.CleanupMode
 import dev.sebastian.vozlocal.whisper.CpuBackendManager
 import dev.sebastian.vozlocal.whisper.CpuBackendMode
 import dev.sebastian.vozlocal.moonshine.MoonshineModels
+import dev.sebastian.vozlocal.fastconformer.FastConformerModels
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import java.util.ArrayList
@@ -111,7 +112,7 @@ class MainViewModel(
     val selectedModel: StateFlow<DictationModel?> = repository.allModels
         .map { list ->
             list.find { it.isSelected && it.isDownloaded }
-                ?: list.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
+                ?: list.firstOrNull { it.isDownloaded && FastConformerModels.isWhisperModel(it.id) }
                 ?: list.find { it.isSelected }
                 ?: list.firstOrNull()
         }
@@ -212,8 +213,9 @@ class MainViewModel(
         cpuCalibrationRunning.value = true
         cpuCalibrationJob = viewModelScope.launch {
             try {
-                check(!MoonshineModels.isMoonshine(selectedModel.value?.id.orEmpty())) {
-                    appContext.getString(dev.sebastian.vozlocal.R.string.moonshine_calibration_error)
+                val selectedId = selectedModel.value?.id.orEmpty()
+                check(FastConformerModels.isWhisperModel(selectedId)) {
+                    appContext.getString(if (MoonshineModels.isMoonshine(selectedId)) dev.sebastian.vozlocal.R.string.moonshine_calibration_error else dev.sebastian.vozlocal.R.string.fastconformer_calibration_error)
                 }
                 cpuCalibrationProgress.value = appContext.getString(dev.sebastian.vozlocal.R.string.cpu_calibration_loading)
                 val samples = dev.sebastian.vozlocal.audio.AudioDecoder(appContext).decodeToPcm16k(uri)
@@ -535,7 +537,7 @@ class MainViewModel(
         if (selected != null && selected.isDownloaded) return selected
         val list = repository.allModels.first()
         return list.find { it.isSelected && it.isDownloaded }
-            ?: list.firstOrNull { it.isDownloaded && !MoonshineModels.isMoonshine(it.id) }
+            ?: list.firstOrNull { it.isDownloaded && FastConformerModels.isWhisperModel(it.id) }
     }
 
     private fun startRecording() {

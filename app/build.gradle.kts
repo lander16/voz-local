@@ -1,4 +1,32 @@
 import java.util.zip.ZipFile
+import java.security.MessageDigest
+import org.gradle.api.DefaultTask
+import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.InputFile
+import org.gradle.api.tasks.Optional
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
+
+abstract class VerifyPinnedFastConformerAar : DefaultTask() {
+  @get:InputFile
+  @get:Optional
+  @get:PathSensitive(PathSensitivity.NONE)
+  abstract val aarFile: RegularFileProperty
+
+  @TaskAction
+  fun verify() {
+    val file = aarFile.orNull?.asFile
+    check(file?.isFile == true && file.length() == 38_691_998L) {
+      "Run bash scripts/fetch_fastconformer_runtime.sh to stage the pinned sherpa AAR before building."
+    }
+    val digest = MessageDigest.getInstance("SHA-256").digest(file!!.readBytes())
+      .joinToString("") { "%02x".format(it) }
+    check(digest == "b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471") {
+      "Pinned sherpa AAR SHA-256 mismatch: $digest"
+    }
+  }
+}
 
 // import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy // unused: google-services plugin disabled (no Firebase SDK)
 
@@ -100,6 +128,13 @@ android {
       applicationIdSuffix = ".validation"
       versionNameSuffix = "-validation"
       matchingFallbacks += listOf("debug")
+      isMinifyEnabled = true
+      isShrinkResources = true
+      proguardFiles(
+        getDefaultProguardFile("proguard-android-optimize.txt"),
+        "proguard-rules.pro",
+        "proguard-validation-rules.pro",
+      )
     }
   }
   testBuildType = providers.gradleProperty("deviceTestBuildType").orElse("debug").get()
@@ -138,6 +173,9 @@ ksp {
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
 dependencies {
+  // Official static-link Sherpa runtime. The ignored AAR is staged and checked by
+  // verifyPinnedFastConformerAar; never resolve a second ONNX runtime with pickFirst.
+  implementation(files("../fastconformer-validation/libs/sherpa-onnx-static-link-onnxruntime-1.13.8.aar"))
   implementation(platform(libs.androidx.compose.bom))
   // implementation(platform(libs.firebase.bom)) // unused / offline build
   implementation(libs.accompanist.permissions)
@@ -196,6 +234,7 @@ dependencies {
   androidTestImplementation(libs.androidx.espresso.core)
   androidTestImplementation(libs.androidx.junit)
   androidTestImplementation(libs.androidx.runner)
+  androidTestImplementation(kotlin("stdlib"))
   // Explicit experimental Spanish dictation; Whisper stays the default engine.
   implementation("ai.moonshine:moonshine-voice:0.1.5")
   debugImplementation(libs.androidx.compose.ui.test.manifest)
@@ -203,6 +242,14 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   // "ksp"(libs.moshi.kotlin.codegen) // unused / offline build
 }
+
+val pinnedFastConformerAar = layout.projectDirectory.file(
+  "../fastconformer-validation/libs/sherpa-onnx-static-link-onnxruntime-1.13.8.aar"
+)
+val verifyPinnedFastConformerAar = tasks.register<VerifyPinnedFastConformerAar>("verifyPinnedFastConformerAar") {
+  aarFile.set(pinnedFastConformerAar)
+}
+tasks.named("preBuild").configure { dependsOn(verifyPinnedFastConformerAar) }
 
 val debugApkForBackendVerification = layout.buildDirectory.file("outputs/apk/debug/app-debug.apk")
 

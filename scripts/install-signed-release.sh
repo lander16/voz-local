@@ -124,6 +124,7 @@ KEY_SECRET="$(/usr/bin/security find-generic-password -a "$KEYCHAIN_ACCOUNT" -s 
 }
 
 cd "$REPO_ROOT"
+bash "$REPO_ROOT/scripts/fetch_fastconformer_runtime.sh"
 GRADLE_TASKS=(assembleRelease)
 if [[ "$SKIP_TESTS" == false ]]; then
   GRADLE_TASKS=(testDebugUnitTest assembleRelease)

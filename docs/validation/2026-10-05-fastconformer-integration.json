@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "validation": "experimental FastConformer repository smoke",
+  "date": "2026-10-05",
+  "issue": "https://github.com/lander16/voz-local/issues/21",
+  "source_base_commit": "15763a9682064c7013162c117875b16df8c6e60e",
+  "source_was_dirty_at_build": true,
+  "app_package": "dev.sebastian.vozlocal.validation",
+  "test_package": "dev.sebastian.vozlocal.validation.test",
+  "build_type": "validation (debuggable; AGP reports optimizations/obfuscation disabled for this build type despite minify being configured)",
+  "validation_only_keep_rules": "Kotlin runtime and DictationRepository.shutdown are retained for the instrumentation harness; this does not represent production release R8 behavior",
+  "app_apk_sha256": "a2187593c27df04082e53c18182ac09c1ba46feab33cf716e97bd2fa47c14629",
+  "instrumentation_apk_sha256": "258991b42a192685b27edb1f4e3f47dc1a27879fd3f51cbe21ee2afdfb9bf846",
+  "test": "FastConformerRepositoryValidationTest#verifiedExperimentalModelUsesRepositoryRouteWithoutChangingSelection",
+  "result": "passed",
+  "instrumentation_wall_time_seconds": 6.505,
+  "assertions": [
+    "package is the isolated validation application",
+    "pinned ONNX model and token bundle verifies",
+    "existing local PCM fixture SHA-256 verifies",
+    "two consecutive repository transcriptions return non-empty results",
+    "previous selected-model ID remains unchanged"
+  ],
+  "privacy": {
+    "microphone_started": false,
+    "transcript_retained": false,
+    "transcript_logged": false,
+    "audio_uploaded_or_committed": false,
+    "fixture_pcm_sha256": "23b8db3cdc813839c01bc4d7f7920a780de5f078a91a1fd67184c8acea81f25a",
+    "fixture_permission": "redistribution permission undocumented; local smoke only"
+  },
+  "device": {
+    "model": "Pixel 8 Pro",
+    "build_id": "CP3A.260905.009",
+    "android_release": "17",
+    "api_level": 37,
+    "abi": "arm64-v8a"
+  },
+  "configuration": {
+    "language": "es",
+    "selection_changed": false,
+    "runtime_threads": 2,
+    "battery_thermal_state": "not captured; this was a functional smoke, not a performance measurement"
+  },
+  "models": {
+    "fastconformer_id": "fastconformer_es_experimental",
+    "fastconformer_revision": "d7694ab533e189621361a30deb701f189abc7568",
+    "fastconformer_model_sha256": "592d3342057253a342aa19cec9937f46645d35d30f52ac427a4ddc72c395a769",
+    "fastconformer_tokens_sha256": "556118db7946e6636018ef59c9e0537b05660b0398e995d60825081e77625e6a",
+    "sherpa_onnx_version": "1.13.8",
+    "sherpa_onnx_static_aar_sha256": "b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471"
+  },
+  "limitations": [
+    "6.505 seconds is instrumentation wall time, not model latency",
+    "the earlier same-process Moonshine→FastConformer→Moonshine native coexistence test is separate from this repository smoke",
+    "production minified release was assembled on host but not installed or executed on device",
+    "non-empty outputs do not establish transcription accuracy or punctuation quality",
+    "no matched alternating performance screen, representative accuracy corpus, cold/warm latency distribution, or end-to-end Stop-to-text measurement was performed"
+  ]
+}

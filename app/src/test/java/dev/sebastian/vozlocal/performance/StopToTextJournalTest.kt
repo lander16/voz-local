@@ -57,6 +57,23 @@ class StopToTextJournalTest {
         assertTrue(file.baseFile.length() <= 256 * 1024)
     }
 
+    @Test fun fastConformerStageNamesSurviveJournalAllowlist() {
+        val file = AtomicFile(File(RuntimeEnvironment.getApplication().cacheDir, "journal-fc-${UUID.randomUUID()}.json"))
+        StopToTextJournal.appendCommitted(file, record().copy(
+            modelId = "fastconformer_es_experimental",
+            spans = listOf(
+                TraceSpan("fastconformer_asset_verification", 1, 2),
+                TraceSpan("fastconformer_native_init", 2, 3),
+                TraceSpan("fastconformer_inference", 3, 4),
+                TraceSpan("fastconformer_native_teardown", 4, 5),
+            ),
+        ))
+        val spans = JSONObject(file.baseFile.readText()).getJSONArray("records")
+            .getJSONObject(0).getJSONArray("spans")
+        assertEquals(4, spans.length())
+        assertEquals("fastconformer_native_init", spans.getJSONObject(1).getString("name"))
+    }
+
     @Test fun invalidOrOversizedRecordDoesNotReplacePreviousJournal() {
         val file = AtomicFile(File(RuntimeEnvironment.getApplication().cacheDir, "journal-${UUID.randomUUID()}.json"))
         StopToTextJournal.appendCommitted(file, record(traceId = 7))

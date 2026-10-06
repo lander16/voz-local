@@ -1,5 +1,6 @@
 package dev.sebastian.vozlocal.ui
 
+import dev.sebastian.vozlocal.fastconformer.FastConformerModels
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
@@ -65,6 +66,10 @@ fun modelPresentation(modelId: String): ModelPresentation = when (modelId) {
     "moonshine_small_es" -> ModelPresentation(
         R.string.model_name_moonshine_small_es, R.string.model_badge_experimental,
         R.string.model_language_spanish_only, "—", R.string.model_description_moonshine_small_es,
+    )
+    FastConformerModels.ID -> ModelPresentation(
+        R.string.model_name_fastconformer_es, R.string.model_badge_experimental,
+        R.string.model_language_spanish_only, "int8", R.string.model_description_fastconformer_es,
     )
     "whisper_tiny" -> ModelPresentation(
         R.string.model_name_tiny_q8, R.string.model_badge_smallest_download,

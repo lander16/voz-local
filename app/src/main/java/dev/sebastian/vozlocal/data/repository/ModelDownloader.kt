@@ -95,7 +95,10 @@ open class ModelDownloader(private val context: Context) {
     internal val sha256Map: Map<String, String>
         get() = ModelDownloader.sha256Map
 
-    fun verificationLabel(modelId: String): String = if (dev.sebastian.vozlocal.moonshine.MoonshineModels.isMoonshine(modelId)) {
+    fun verificationLabel(modelId: String): String = if (
+        dev.sebastian.vozlocal.moonshine.MoonshineModels.isMoonshine(modelId) ||
+        dev.sebastian.vozlocal.fastconformer.FastConformerModels.isFastConformer(modelId)
+    ) {
         "Verified (SHA-256)"
     } else if (sha256Map[modelId].isNullOrBlank()) {
         "Verified (Transport & Size)"

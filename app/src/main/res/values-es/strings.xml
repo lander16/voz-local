@@ -85,6 +85,7 @@
     <string name="model_name_local">Modelo local</string>
     <string name="model_name_moonshine_tiny_es">Moonshine Tiny Español (Experimental)</string>
     <string name="model_name_moonshine_small_es">Moonshine Small Español (Experimental)</string>
+    <string name="model_name_fastconformer_es">FastConformer Español (Experimental)</string>
     <string name="model_badge_smallest_download">Descarga más pequeña</string>
     <string name="model_badge_default">Predeterminado</string>
     <string name="model_badge_english_only">Solo inglés</string>
@@ -105,6 +106,7 @@
     <string name="model_language_spanish_only">Solo español</string>
     <string name="model_description_moonshine_tiny_es">Modelo en español para dictado sin conexión. Aproximadamente 32 MB. Rápido y ligero.</string>
     <string name="model_description_moonshine_small_es">Modelo en español para dictado sin conexión. Aproximadamente 122 MB. Mayor precisión que Tiny.</string>
+    <string name="model_description_fastconformer_es">Exportación CTC de NVIDIA FastConformer solo para español (~174 MB), convertida por OpenVoiceOS y cuantizada por krut42. CC BY 4.0. Experimental; compárala localmente antes de usarla.</string>
     <string name="model_delete_description">Eliminar %1$s</string>
     <string name="model_redownload_description">Volver a descargar %1$s</string>
     <string name="model_delete_title">¿Eliminar modelo?</string>
@@ -125,6 +127,11 @@
     <string name="moonshine_calibration_error">La calibración de CPU requiere actualmente un modelo Whisper.</string>
     <string name="moonshine_busy_error">La transcripción anterior está terminando. Vuelve a intentarlo en unos instantes.</string>
     <string name="moonshine_model_missing">Vuelve a descargar este modelo Moonshine antes de dictar.</string>
+    <string name="fastconformer_language_error">Este modelo experimental solo admite español. Cambia el idioma a español o selecciona Whisper.</string>
+    <string name="fastconformer_busy_error">La transcripción anterior de FastConformer está terminando. Vuelve a intentarlo en unos instantes.</string>
+    <string name="fastconformer_model_missing">Descarga y verifica de nuevo el modelo FastConformer antes de dictar.</string>
+    <string name="fastconformer_calibration_error">La calibración de CPU requiere actualmente un modelo Whisper.</string>
+    <string name="fastconformer_file_error">La transcripción de archivos requiere actualmente un modelo Whisper.</string>
     <string name="speech_model_missing">Descarga un modelo de voz antes de dictar.</string>
     <string name="inference_running_generic">Transcribiendo en el dispositivo…</string>
     <string name="setup_model_downloaded">El modelo “%1$s” (%2$d MB) está guardado localmente y listo para transcribir sin conexión.</string>
